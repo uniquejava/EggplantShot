@@ -1,0 +1,312 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B10000000000000000000001 /* EggplantShotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000001 /* EggplantShotApp.swift */; };
+		B10000000000000000000002 /* HotkeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000002 /* HotkeyMonitor.swift */; };
+		B10000000000000000000003 /* HotkeyShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000003 /* HotkeyShortcut.swift */; };
+		B10000000000000000000004 /* ScreenPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000004 /* ScreenPermissions.swift */; };
+		B10000000000000000000005 /* ScreenCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000005 /* ScreenCapturer.swift */; };
+		B10000000000000000000006 /* SelectionOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000006 /* SelectionOverlayController.swift */; };
+		B10000000000000000000007 /* PinBoardController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000007 /* PinBoardController.swift */; };
+		B10000000000000000000008 /* SnipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000008 /* SnipController.swift */; };
+		B10000000000000000000009 /* StatusMenuContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000009 /* StatusMenuContent.swift */; };
+		B1000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* SettingsView.swift */; };
+		B1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000B /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A30000000000000000000001 /* EggplantShot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EggplantShot.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C10000000000000000000001 /* EggplantShotApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EggplantShotApp.swift; sourceTree = "<group>"; };
+		C10000000000000000000002 /* HotkeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyMonitor.swift; sourceTree = "<group>"; };
+		C10000000000000000000003 /* HotkeyShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyShortcut.swift; sourceTree = "<group>"; };
+		C10000000000000000000004 /* ScreenPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPermissions.swift; sourceTree = "<group>"; };
+		C10000000000000000000005 /* ScreenCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCapturer.swift; sourceTree = "<group>"; };
+		C10000000000000000000006 /* SelectionOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOverlayController.swift; sourceTree = "<group>"; };
+		C10000000000000000000007 /* PinBoardController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinBoardController.swift; sourceTree = "<group>"; };
+		C10000000000000000000008 /* SnipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipController.swift; sourceTree = "<group>"; };
+		C10000000000000000000009 /* StatusMenuContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMenuContent.swift; sourceTree = "<group>"; };
+		C1000000000000000000000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		C1000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C1000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C1000000000000000000000D /* EggplantShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = EggplantShot.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A40000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A50000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A50000000000000000000002 /* EggplantShot */,
+				A50000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A50000000000000000000002 /* EggplantShot */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000001 /* EggplantShotApp.swift */,
+				A50000000000000000000004 /* Hotkey */,
+				A50000000000000000000005 /* Capture */,
+				A50000000000000000000006 /* Controllers */,
+				A50000000000000000000007 /* UI */,
+				C1000000000000000000000B /* Assets.xcassets */,
+				C1000000000000000000000C /* Info.plist */,
+				C1000000000000000000000D /* EggplantShot.entitlements */,
+			);
+			path = EggplantShot;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A30000000000000000000001 /* EggplantShot.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000004 /* Hotkey */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000002 /* HotkeyMonitor.swift */,
+				C10000000000000000000003 /* HotkeyShortcut.swift */,
+			);
+			path = Hotkey;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000005 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000004 /* ScreenPermissions.swift */,
+				C10000000000000000000005 /* ScreenCapturer.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000006 /* Controllers */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000006 /* SelectionOverlayController.swift */,
+				C10000000000000000000007 /* PinBoardController.swift */,
+				C10000000000000000000008 /* SnipController.swift */,
+			);
+			path = Controllers;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000007 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000009 /* StatusMenuContent.swift */,
+				C1000000000000000000000A /* SettingsView.swift */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A60000000000000000000001 /* EggplantShot */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A70000000000000000000003 /* Build configuration list for PBXNativeTarget "EggplantShot" */;
+			buildPhases = (
+				A80000000000000000000001 /* Sources */,
+				A40000000000000000000001 /* Frameworks */,
+				A80000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = EggplantShot;
+			productName = EggplantShot;
+			productReference = A30000000000000000000001 /* EggplantShot.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A90000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					A60000000000000000000001 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+				};
+			};
+			buildConfigurationList = A70000000000000000000001 /* Build configuration list for PBXProject "EggplantShot" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A50000000000000000000001;
+			productRefGroup = A50000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A60000000000000000000001 /* EggplantShot */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A80000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1000000000000000000000B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A80000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* EggplantShotApp.swift in Sources */,
+				B10000000000000000000002 /* HotkeyMonitor.swift in Sources */,
+				B10000000000000000000003 /* HotkeyShortcut.swift in Sources */,
+				B10000000000000000000004 /* ScreenPermissions.swift in Sources */,
+				B10000000000000000000005 /* ScreenCapturer.swift in Sources */,
+				B10000000000000000000006 /* SelectionOverlayController.swift in Sources */,
+				B10000000000000000000007 /* PinBoardController.swift in Sources */,
+				B10000000000000000000008 /* SnipController.swift in Sources */,
+				B10000000000000000000009 /* StatusMenuContent.swift in Sources */,
+				B1000000000000000000000A /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D10000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		D10000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		D10000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = EggplantShot/EggplantShot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M5J7K9HVYB;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EggplantShot/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = click.yinsb.EggplantShot;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D10000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = EggplantShot/EggplantShot.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = M5J7K9HVYB;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = EggplantShot/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = click.yinsb.EggplantShot;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A70000000000000000000001 /* Build configuration list for PBXProject "EggplantShot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D10000000000000000000001 /* Debug */,
+				D10000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A70000000000000000000003 /* Build configuration list for PBXNativeTarget "EggplantShot" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D10000000000000000000003 /* Debug */,
+				D10000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A90000000000000000000001 /* Project object */;
+}
