@@ -30,7 +30,7 @@ Xcode: `EggplantShot.xcodeproj` (scheme `EggplantShot`)
 EggplantShot/
   EggplantShotApp.swift
   Hotkey/HotkeyMonitor.swift + HotkeyShortcut.swift
-  Capture/ScreenPermissions.swift + ScreenCapturer.swift
+  Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift
   Controllers/PinBoardController.swift
@@ -53,7 +53,7 @@ EggplantShot/
 
 ## Next (not done yet)
 
-→ Wire toolbar stubs: annotate, save, OCR, undo/redo, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md).
+→ Annotate tools, OCR, undo/redo, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Split overlay only when annotation needs its own canvas.
 
 ## Prefer
 

@@ -6,6 +6,7 @@ final class SelectionOverlayController {
     enum ConfirmAction {
         case pin
         case copy
+        case save
     }
 
     enum Outcome {
@@ -460,6 +461,8 @@ final class SelectionOverlayController {
                 self.confirm(.pin)
             case .copy:
                 self.confirm(.copy)
+            case .save:
+                self.confirm(.save)
             case .cancel:
                 self.tearDownOverlays()
                 self.finish(.cancelled)
@@ -486,6 +489,7 @@ private final class RefineToolbarController: NSObject {
     enum Action {
         case pin
         case copy
+        case save
         case cancel
     }
 
@@ -539,11 +543,17 @@ private final class RefineToolbarController: NSObject {
 
         let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
         let pin = iconButton(systemName: "pin.fill", tooltip: "Pin", enabled: true, action: #selector(pinTapped))
-        let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save", enabled: false, action: nil)
+        let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save", enabled: true, action: #selector(saveTapped))
         let copy = iconButton(systemName: "doc.on.doc", tooltip: "Copy", enabled: true, action: #selector(copyTapped))
         let more = iconButton(systemName: "ellipsis", tooltip: "More", enabled: false, action: nil)
 
-        let primary = primaryAction == .pin ? pin : copy
+        let primary: NSButton
+        switch primaryAction {
+        case .pin, .save:
+            primary = pin
+        case .copy:
+            primary = copy
+        }
         primary.keyEquivalent = "\r"
 
         let actionViews: [NSView] = [cancel, pin, save, copy, more]
@@ -640,6 +650,7 @@ private final class RefineToolbarController: NSObject {
 
     @objc private func pinTapped() { onAction(.pin) }
     @objc private func copyTapped() { onAction(.copy) }
+    @objc private func saveTapped() { onAction(.save) }
     @objc private func cancelTapped() { onAction(.cancel) }
 
     func orderFront() {

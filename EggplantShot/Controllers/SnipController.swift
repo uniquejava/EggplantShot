@@ -6,7 +6,7 @@ enum SnipMode {
     case copy
 }
 
-/// Coordinates selection → capture → pin / clipboard.
+/// Coordinates selection → capture → pin / clipboard / save.
 @MainActor
 final class SnipController {
     let overlay = SelectionOverlayController()
@@ -43,6 +43,8 @@ final class SnipController {
                     pinBoard.pin(image, near: rect)
                 case .copy:
                     copyToClipboard(image)
+                case .save:
+                    ImageFileSaver.saveInteractive(image)
                 }
             }
         }
