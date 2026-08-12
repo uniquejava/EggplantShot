@@ -30,8 +30,9 @@ On first launch, grant Accessibility and Screen Recording when prompted.
 ## Features (MVP)
 
 - Menu bar extra (LSUIElement) with Snipaste-like menu
-- **Snip** / **F1** — area select → refine (handles + toolbar) → pin floating image
+- **Snip** / **F1** — area select → refine (handles + Snipaste-style toolbar) → pin with soft glow
 - **Snip and copy** / **⌘F1** — same refine UX; primary action copies to clipboard
+- Pinned images: drag, Esc / double-click to close, stay above other windows
 - **Hide/Show all images** / **⇧F3**
 - Disable hotkeys
 - Preferences: permission status + hotkey list

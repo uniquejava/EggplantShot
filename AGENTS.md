@@ -42,18 +42,18 @@ EggplantShot/
 
 ## Product behaviour to preserve
 
-1. **Snip (F1)** → drag region → **refine** (blue rect, 8 handles, toolbar) → Pin (or Copy) → floating image with focus ring (blue glow when key, gray when not; Esc / double-click closes).
-2. **Snip and copy (⌘F1)** → same refine UX; toolbar primary is Copy (Pin still available).
-3. Capture only after toolbar confirm / Return; overlay must be torn down before capture so it is not in the image.
-4. **Esc** during drag or refine cancels the snip (no pin / clipboard). Esc on a pinned image closes that pin only.
-5. Pinned images use a high window level (`.statusBar`) so they stay above ordinary app windows; still below the snip overlay.
+1. **Snip (F1)** → drag → refine (blue rect, circular handles, Snipaste-style icon toolbar right-aligned under selection) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; Esc / double-click closes).
+2. **Snip and copy (⌘F1)** → same refine UX; Return primary is Copy.
+3. Capture only after toolbar confirm / Return; overlay torn down first.
+4. **Esc** during drag/refine cancels the snip. Esc on a pin closes that pin only.
+5. Pins use `.statusBar` level (above ordinary windows; below snip overlay).
 6. **Disable hotkeys** pauses the event tap (persisted).
 7. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
 8. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
 
 ## Next (not done yet)
 
-→ Annotate / save / magnifier stubs — see deferred list in [`docs/selection-refine.md`](docs/selection-refine.md).
+→ Wire toolbar stubs: annotate, save, OCR, undo/redo, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md).
 
 ## Prefer
 
