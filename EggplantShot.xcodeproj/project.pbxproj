@@ -12,6 +12,7 @@
 		B10000000000000000000003 /* HotkeyShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000003 /* HotkeyShortcut.swift */; };
 		B10000000000000000000004 /* ScreenPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000004 /* ScreenPermissions.swift */; };
 		B10000000000000000000005 /* ScreenCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000005 /* ScreenCapturer.swift */; };
+		B1000000000000000000000E /* WindowHitTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000E /* WindowHitTester.swift */; };
 		B10000000000000000000006 /* SelectionOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000006 /* SelectionOverlayController.swift */; };
 		B10000000000000000000007 /* PinBoardController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000007 /* PinBoardController.swift */; };
 		B10000000000000000000008 /* SnipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000008 /* SnipController.swift */; };
@@ -27,6 +28,7 @@
 		C10000000000000000000003 /* HotkeyShortcut.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyShortcut.swift; sourceTree = "<group>"; };
 		C10000000000000000000004 /* ScreenPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPermissions.swift; sourceTree = "<group>"; };
 		C10000000000000000000005 /* ScreenCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCapturer.swift; sourceTree = "<group>"; };
+		C1000000000000000000000E /* WindowHitTester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowHitTester.swift; sourceTree = "<group>"; };
 		C10000000000000000000006 /* SelectionOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOverlayController.swift; sourceTree = "<group>"; };
 		C10000000000000000000007 /* PinBoardController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinBoardController.swift; sourceTree = "<group>"; };
 		C10000000000000000000008 /* SnipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipController.swift; sourceTree = "<group>"; };
@@ -93,6 +95,7 @@
 			children = (
 				C10000000000000000000004 /* ScreenPermissions.swift */,
 				C10000000000000000000005 /* ScreenCapturer.swift */,
+				C1000000000000000000000E /* WindowHitTester.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -190,6 +193,7 @@
 				B10000000000000000000003 /* HotkeyShortcut.swift in Sources */,
 				B10000000000000000000004 /* ScreenPermissions.swift in Sources */,
 				B10000000000000000000005 /* ScreenCapturer.swift in Sources */,
+				B1000000000000000000000E /* WindowHitTester.swift in Sources */,
 				B10000000000000000000006 /* SelectionOverlayController.swift in Sources */,
 				B10000000000000000000007 /* PinBoardController.swift in Sources */,
 				B10000000000000000000008 /* SnipController.swift in Sources */,

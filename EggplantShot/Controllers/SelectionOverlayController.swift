@@ -40,9 +40,18 @@ final class SelectionOverlayController {
     private var primaryAction: ConfirmAction = .pin
     private var eventMonitors: [Any] = []
 
+    /// Snapshot of app windows taken before overlays cover the screen.
+    private var windowHitTester = WindowHitTester.snapshot()
+    /// Window frame under the cursor while idle (Cocoa global coords).
+    private var hoveredWindowRect: CGRect?
+    /// On mouse-down over a window: wait to see if this is a click-lock or a free drag.
+    private var pendingWindowPick: (start: CGPoint, frame: CGRect)?
+
     private let handleVisualSize: CGFloat = 8
     private let handleHitSize: CGFloat = 12
     private let minSelection: CGFloat = 2
+    /// Movement past this distance abandons window pick and starts free drag.
+    private let windowPickDragThreshold: CGFloat = 4
 
     var isActive: Bool { continuation != nil }
 
@@ -87,6 +96,8 @@ final class SelectionOverlayController {
 
     private func showOverlays() {
         tearDownOverlays()
+        // Capture window list before our dimmed panels cover everything.
+        windowHitTester = WindowHitTester.snapshot()
         for screen in NSScreen.screens {
             let panel = SelectionPanel(screen: screen)
             panels.append(panel)
@@ -98,6 +109,7 @@ final class SelectionOverlayController {
         }
         NSApp.activate(ignoringOtherApps: true)
         installMonitors()
+        updateHoverHighlight(at: mouse)
     }
 
     private func tearDownOverlays() {
@@ -111,13 +123,15 @@ final class SelectionOverlayController {
         panels.removeAll()
         dragKind = nil
         currentRect = .null
+        hoveredWindowRect = nil
+        pendingWindowPick = nil
         phase = .idle
     }
 
     private func installMonitors() {
         removeMonitors()
 
-        let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+        let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved]
         if let mon = NSEvent.addLocalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             guard let self else { return event }
             // Pass through so the floating toolbar can receive clicks.
@@ -169,6 +183,8 @@ final class SelectionOverlayController {
         let point = NSEvent.mouseLocation
 
         switch event.type {
+        case .mouseMoved:
+            handleMouseMoved(at: point)
         case .leftMouseDown:
             handleMouseDown(at: point)
         case .leftMouseDragged:
@@ -180,13 +196,51 @@ final class SelectionOverlayController {
         }
     }
 
+    private func handleMouseMoved(at point: CGPoint) {
+        guard phase == .idle, pendingWindowPick == nil else { return }
+        updateHoverHighlight(at: point)
+    }
+
+    private func updateHoverHighlight(at point: CGPoint) {
+        let frame = windowHitTester.windowFrame(at: point)
+        hoveredWindowRect = frame
+        if let frame {
+            currentRect = frame
+        } else {
+            currentRect = .null
+        }
+        updateHighlight(showHandles: false)
+    }
+
+    private func lockWindowSelection(_ frame: CGRect) {
+        pendingWindowPick = nil
+        hoveredWindowRect = nil
+        currentRect = frame
+        phase = .refining
+        updateHighlight(showHandles: true)
+        showToolbar()
+    }
+
+    private func beginFreeDraw(from start: CGPoint) {
+        pendingWindowPick = nil
+        hoveredWindowRect = nil
+        phase = .drawing
+        dragKind = .draw(start: start)
+        currentRect = CGRect(origin: start, size: .zero)
+        updateHighlight(showHandles: false)
+    }
+
     private func handleMouseDown(at point: CGPoint) {
         switch phase {
         case .idle:
-            phase = .drawing
-            dragKind = .draw(start: point)
-            currentRect = CGRect(origin: point, size: .zero)
-            updateHighlight(showHandles: false)
+            if let frame = hoveredWindowRect ?? windowHitTester.windowFrame(at: point) {
+                // Defer lock until mouse-up so a drag can still start free selection.
+                pendingWindowPick = (start: point, frame: frame)
+                currentRect = frame
+                updateHighlight(showHandles: false)
+            } else {
+                beginFreeDraw(from: point)
+            }
 
         case .drawing:
             dragKind = .draw(start: point)
@@ -199,18 +253,35 @@ final class SelectionOverlayController {
             } else if currentRect.contains(point) {
                 dragKind = .move(startRect: currentRect, startPoint: point)
             } else {
-                // Start a new rough selection.
-                phase = .drawing
-                dragKind = .draw(start: point)
-                currentRect = CGRect(origin: point, size: .zero)
+                // Start a new rough selection (or window pick again).
                 toolbar?.close()
                 toolbar = nil
-                updateHighlight(showHandles: false)
+                phase = .idle
+                dragKind = nil
+                if let frame = windowHitTester.windowFrame(at: point) {
+                    pendingWindowPick = (start: point, frame: frame)
+                    hoveredWindowRect = frame
+                    currentRect = frame
+                    updateHighlight(showHandles: false)
+                } else {
+                    beginFreeDraw(from: point)
+                }
             }
         }
     }
 
     private func handleMouseDragged(at point: CGPoint) {
+        if let pending = pendingWindowPick {
+            let dx = point.x - pending.start.x
+            let dy = point.y - pending.start.y
+            if hypot(dx, dy) >= windowPickDragThreshold {
+                beginFreeDraw(from: pending.start)
+                // Fall through with draw drag using the original start.
+            } else {
+                return
+            }
+        }
+
         guard let dragKind else { return }
 
         switch dragKind {
@@ -239,7 +310,15 @@ final class SelectionOverlayController {
     }
 
     private func handleMouseUp(at point: CGPoint) {
-        defer { dragKind = nil }
+        defer {
+            dragKind = nil
+            pendingWindowPick = nil
+        }
+
+        if let pending = pendingWindowPick, phase == .idle {
+            lockWindowSelection(pending.frame)
+            return
+        }
 
         switch phase {
         case .idle:
@@ -256,7 +335,7 @@ final class SelectionOverlayController {
             if rect.width < minSelection || rect.height < minSelection {
                 currentRect = .null
                 phase = .idle
-                updateHighlight(showHandles: false)
+                updateHoverHighlight(at: point)
                 return
             }
             currentRect = rect
@@ -628,6 +707,7 @@ private final class SelectionPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         ignoresMouseEvents = false
+        acceptsMouseMovedEvents = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isReleasedWhenClosed = false
         hidesOnDeactivate = false

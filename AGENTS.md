@@ -42,7 +42,7 @@ EggplantShot/
 
 ## Product behaviour to preserve
 
-1. **Snip (F1)** → drag → refine (blue rect, circular handles, Snipaste-style icon toolbar right-aligned under selection) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; Esc / double-click closes).
+1. **Snip (F1)** → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; Esc / double-click closes).
 2. **Snip and copy (⌘F1)** → same refine UX; Return primary is Copy.
 3. Capture only after toolbar confirm / Return; overlay torn down first.
 4. **Esc** during drag/refine cancels the snip. Esc on a pin closes that pin only.
