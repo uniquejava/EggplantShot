@@ -31,13 +31,14 @@ final class SnipController {
             switch outcome {
             case .cancelled:
                 return
-            case .confirmed(let rect, let action):
+            case .confirmed(let rect, let action, let annotations):
                 // Tiny delay so overlay panels are fully torn down before capture.
                 try? await Task.sleep(nanoseconds: 30_000_000)
-                guard let image = ScreenCapturer.capture(rectInScreenPoints: rect) else {
+                guard let captured = ScreenCapturer.capture(rectInScreenPoints: rect) else {
                     NSLog("EggplantShot: capture failed for rect \(rect)")
                     return
                 }
+                let image = AnnotationCompositor.composite(annotations, onto: captured)
                 switch action {
                 case .pin:
                     pinBoard.pin(image, near: rect)

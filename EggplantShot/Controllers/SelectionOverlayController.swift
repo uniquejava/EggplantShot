@@ -1,6 +1,6 @@
 import AppKit
 
-/// Full-screen dimmed overlay: drag a region, then refine (handles + toolbar) before capture.
+/// Full-screen dimmed overlay: drag a region, refine, optionally annotate, then capture.
 @MainActor
 final class SelectionOverlayController {
     enum ConfirmAction {
@@ -11,7 +11,7 @@ final class SelectionOverlayController {
 
     enum Outcome {
         case cancelled
-        case confirmed(CGRect, action: ConfirmAction)
+        case confirmed(CGRect, action: ConfirmAction, annotations: [Annotation])
     }
 
     private enum Phase {
@@ -24,6 +24,9 @@ final class SelectionOverlayController {
         case draw(start: CGPoint)
         case move(startRect: CGRect, startPoint: CGPoint)
         case resize(handle: Handle, startRect: CGRect, startPoint: CGPoint)
+        case annotateDraw(startLocal: CGPoint)
+        case annotateMove(id: UUID, startRect: CGRect, startPoint: CGPoint)
+        case annotateResize(id: UUID, handle: Handle, startRect: CGRect, startPoint: CGPoint)
     }
 
     private enum Handle: CaseIterable {
@@ -48,11 +51,32 @@ final class SelectionOverlayController {
     /// On mouse-down over a window: wait to see if this is a click-lock or a free drag.
     private var pendingWindowPick: (start: CGPoint, frame: CGRect)?
 
+    // MARK: Annotation state
+
+    private var annotateTool: AnnotateTool = .none
+    private var annotationStyle: AnnotationStyle = .default
+    private var annotations: [Annotation] = []
+    private var selectedAnnotationID: UUID?
+    /// In-progress rectangle while dragging (selection-local).
+    private var draftAnnotationRect: CGRect?
+
     private let handleVisualSize: CGFloat = 8
+    private let annotationHandleVisualSize: CGFloat = 7
     private let handleHitSize: CGFloat = 12
     private let minSelection: CGFloat = 2
+    private let minAnnotation: CGFloat = 4
     /// Movement past this distance abandons window pick and starts free drag.
     private let windowPickDragThreshold: CGFloat = 4
+    /// Half-width of the annotation border hit corridor (beyond stroke).
+    private let annotationBorderHitSlop: CGFloat = 5
+
+    /// Where the pointer sits relative to annotations while the shape tool is active.
+    private enum AnnotationPointerTarget {
+        case handle(id: UUID, handle: Handle)
+        case border(id: UUID)
+        case draw
+        case outside
+    }
 
     var isActive: Bool { continuation != nil }
 
@@ -91,8 +115,9 @@ final class SelectionOverlayController {
             return
         }
         let rect = currentRect
+        let marks = annotations
         tearDownOverlays()
-        finish(.confirmed(rect, action: action))
+        finish(.confirmed(rect, action: action, annotations: marks))
     }
 
     private func showOverlays() {
@@ -126,7 +151,13 @@ final class SelectionOverlayController {
         currentRect = .null
         hoveredWindowRect = nil
         pendingWindowPick = nil
+        annotateTool = .none
+        annotationStyle = .default
+        annotations = []
+        selectedAnnotationID = nil
+        draftAnnotationRect = nil
         phase = .idle
+        NSCursor.arrow.set()
     }
 
     private func installMonitors() {
@@ -137,6 +168,7 @@ final class SelectionOverlayController {
             guard let self else { return event }
             // Pass through so the floating toolbar can receive clicks.
             if let toolbar = self.toolbar, toolbar.containsGlobalPoint(NSEvent.mouseLocation) {
+                NSCursor.arrow.set()
                 return event
             }
             self.handleMouse(event)
@@ -148,6 +180,7 @@ final class SelectionOverlayController {
         if let mon = NSEvent.addGlobalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             guard let self else { return }
             if let toolbar = self.toolbar, toolbar.containsGlobalPoint(NSEvent.mouseLocation) {
+                NSCursor.arrow.set()
                 return
             }
             self.handleMouse(event)
@@ -160,6 +193,13 @@ final class SelectionOverlayController {
             if event.keyCode == 53 { // Esc
                 self.tearDownOverlays()
                 self.finish(.cancelled)
+                return nil
+            }
+            // Delete / Forward Delete removes the selected annotation.
+            if self.phase == .refining,
+               (event.keyCode == 51 || event.keyCode == 117),
+               self.selectedAnnotationID != nil {
+                self.deleteSelectedAnnotation()
                 return nil
             }
             // Return / keypad Enter confirms primary action while refining.
@@ -198,8 +238,13 @@ final class SelectionOverlayController {
     }
 
     private func handleMouseMoved(at point: CGPoint) {
-        guard phase == .idle, pendingWindowPick == nil else { return }
-        updateHoverHighlight(at: point)
+        if phase == .idle, pendingWindowPick == nil {
+            updateHoverHighlight(at: point)
+            return
+        }
+        if phase == .refining, dragKind == nil {
+            updateAnnotateCursor(at: point)
+        }
     }
 
     private func updateHoverHighlight(at point: CGPoint) {
@@ -249,24 +294,74 @@ final class SelectionOverlayController {
             updateHighlight(showHandles: false)
 
         case .refining:
-            if let handle = hitTestHandle(at: point) {
-                dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
-            } else if currentRect.contains(point) {
-                dragKind = .move(startRect: currentRect, startPoint: point)
+            handleRefineMouseDown(at: point)
+        }
+    }
+
+    private func handleRefineMouseDown(at point: CGPoint) {
+        // Shape tool: handle → resize; border → move; interior / empty → draw (nested OK).
+        if annotateTool != .none {
+            switch annotationPointerTarget(at: point) {
+            case .handle(let id, let handle):
+                guard let ann = annotations.first(where: { $0.id == id }) else { return }
+                selectedAnnotationID = id
+                dragKind = .annotateResize(
+                    id: id,
+                    handle: handle,
+                    startRect: ann.rect,
+                    startPoint: point
+                )
+                resizeCursor(for: handle).set()
+
+            case .border(let id):
+                guard let ann = annotations.first(where: { $0.id == id }) else { return }
+                selectedAnnotationID = id
+                annotationStyle = ann.style
+                toolbar?.syncStyle(ann.style)
+                dragKind = .annotateMove(id: id, startRect: ann.rect, startPoint: point)
+                NSCursor.closedHand.set()
+                updateHighlight(showHandles: true)
+
+            case .draw:
+                selectedAnnotationID = nil
+                let local = toLocal(point)
+                dragKind = .annotateDraw(startLocal: local)
+                draftAnnotationRect = CGRect(origin: local, size: .zero)
+                AnnotationCursors.whitePlus.set()
+                updateHighlight(showHandles: true)
+
+            case .outside:
+                // Keep selection + annotations; ignore clicks in the dimmed area while annotating.
+                break
+            }
+            return
+        }
+
+        // Selection refine (no annotate tool).
+        if let handle = hitTestHandle(at: point) {
+            selectedAnnotationID = nil
+            dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
+        } else if currentRect.contains(point) {
+            selectedAnnotationID = nil
+            dragKind = .move(startRect: currentRect, startPoint: point)
+        } else {
+            // Start a new rough selection (or window pick again). Clears annotations.
+            toolbar?.close()
+            toolbar = nil
+            phase = .idle
+            dragKind = nil
+            annotations = []
+            selectedAnnotationID = nil
+            draftAnnotationRect = nil
+            annotateTool = .none
+            NSCursor.arrow.set()
+            if let frame = windowHitTester.windowFrame(at: point) {
+                pendingWindowPick = (start: point, frame: frame)
+                hoveredWindowRect = frame
+                currentRect = frame
+                updateHighlight(showHandles: false)
             } else {
-                // Start a new rough selection (or window pick again).
-                toolbar?.close()
-                toolbar = nil
-                phase = .idle
-                dragKind = nil
-                if let frame = windowHitTester.windowFrame(at: point) {
-                    pendingWindowPick = (start: point, frame: frame)
-                    hoveredWindowRect = frame
-                    currentRect = frame
-                    updateHighlight(showHandles: false)
-                } else {
-                    beginFreeDraw(from: point)
-                }
+                beginFreeDraw(from: point)
             }
         }
     }
@@ -307,6 +402,40 @@ final class SelectionOverlayController {
             currentRect = resizedRect(handle: handle, startRect: startRect, startPoint: startPoint, point: point)
             updateHighlight(showHandles: true)
             repositionToolbar()
+
+        case .annotateDraw(let startLocal):
+            let end = clampLocal(toLocal(point))
+            let start = clampLocal(startLocal)
+            draftAnnotationRect = CGRect(
+                x: min(start.x, end.x),
+                y: min(start.y, end.y),
+                width: abs(end.x - start.x),
+                height: abs(end.y - start.y)
+            )
+            updateHighlight(showHandles: true)
+
+        case .annotateMove(let id, let startRect, let startPoint):
+            let dx = point.x - startPoint.x
+            let dy = point.y - startPoint.y
+            var next = startRect.offsetBy(dx: dx, dy: dy)
+            next = clampAnnotationRect(next)
+            updateAnnotation(id: id) { $0.rect = next }
+            updateHighlight(showHandles: true)
+
+        case .annotateResize(let id, let handle, let startRect, let startPoint):
+            // Resize in global space, then convert back to local.
+            let startGlobal = toGlobal(startRect)
+            let resizedGlobal = resizedRect(
+                handle: handle,
+                startRect: startGlobal,
+                startPoint: startPoint,
+                point: point,
+                minSize: minAnnotation
+            )
+            var local = toLocal(resizedGlobal)
+            local = clampAnnotationRect(local)
+            updateAnnotation(id: id) { $0.rect = local }
+            updateHighlight(showHandles: true)
         }
     }
 
@@ -345,8 +474,175 @@ final class SelectionOverlayController {
             showToolbar()
 
         case .refining:
+            if case .annotateDraw = dragKind, let draft = draftAnnotationRect {
+                draftAnnotationRect = nil
+                if draft.width >= minAnnotation, draft.height >= minAnnotation {
+                    let ann = Annotation(rect: clampAnnotationRect(draft), style: annotationStyle)
+                    annotations.append(ann)
+                    selectedAnnotationID = ann.id
+                }
+            }
             updateHighlight(showHandles: true)
             repositionToolbar()
+            updateAnnotateCursor(at: point)
+        }
+    }
+
+    // MARK: - Annotation helpers
+
+    private func toLocal(_ global: CGPoint) -> CGPoint {
+        CGPoint(x: global.x - currentRect.minX, y: global.y - currentRect.minY)
+    }
+
+    private func toLocal(_ global: CGRect) -> CGRect {
+        CGRect(
+            x: global.origin.x - currentRect.minX,
+            y: global.origin.y - currentRect.minY,
+            width: global.width,
+            height: global.height
+        )
+    }
+
+    private func toGlobal(_ local: CGRect) -> CGRect {
+        local.offsetBy(dx: currentRect.minX, dy: currentRect.minY)
+    }
+
+    private func clampLocal(_ p: CGPoint) -> CGPoint {
+        CGPoint(
+            x: min(max(p.x, 0), currentRect.width),
+            y: min(max(p.y, 0), currentRect.height)
+        )
+    }
+
+    private func clampAnnotationRect(_ rect: CGRect) -> CGRect {
+        var r = rect
+        r.size.width = max(r.width, minAnnotation)
+        r.size.height = max(r.height, minAnnotation)
+        r.origin.x = min(max(r.origin.x, 0), max(0, currentRect.width - r.width))
+        r.origin.y = min(max(r.origin.y, 0), max(0, currentRect.height - r.height))
+        if r.maxX > currentRect.width { r.size.width = currentRect.width - r.origin.x }
+        if r.maxY > currentRect.height { r.size.height = currentRect.height - r.origin.y }
+        return r
+    }
+
+    private func updateAnnotation(id: UUID, mutate: (inout Annotation) -> Void) {
+        guard let idx = annotations.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&annotations[idx])
+    }
+
+    private func deleteSelectedAnnotation() {
+        guard let id = selectedAnnotationID else { return }
+        annotations.removeAll { $0.id == id }
+        selectedAnnotationID = nil
+        updateHighlight(showHandles: true)
+        updateAnnotateCursor(at: NSEvent.mouseLocation)
+    }
+
+    /// Priority: selected handles → any border (topmost) → draw zone inside selection.
+    private func annotationPointerTarget(at point: CGPoint) -> AnnotationPointerTarget {
+        guard annotateTool != .none else { return .outside }
+        guard currentRect.contains(point) else { return .outside }
+
+        if let id = selectedAnnotationID,
+           let ann = annotations.first(where: { $0.id == id }),
+           let handle = hitTestAnnotationHandle(at: point, annotation: ann) {
+            return .handle(id: id, handle: handle)
+        }
+
+        for ann in annotations.reversed() {
+            if isOnAnnotationBorder(ann, at: point) {
+                return .border(id: ann.id)
+            }
+        }
+
+        return .draw
+    }
+
+    private func isOnAnnotationBorder(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
+        let rect = toGlobal(annotation.rect)
+        let tolerance = max(annotation.style.strokeWidth / 2 + 2, annotationBorderHitSlop)
+        let outer = rect.insetBy(dx: -tolerance, dy: -tolerance)
+        guard outer.contains(globalPoint) else { return false }
+
+        // Too small for a hollow ring — treat the whole footprint as border.
+        if rect.width <= tolerance * 2 || rect.height <= tolerance * 2 {
+            return rect.insetBy(dx: -tolerance, dy: -tolerance).contains(globalPoint)
+        }
+
+        let inner = rect.insetBy(dx: tolerance, dy: tolerance)
+        return !inner.contains(globalPoint)
+    }
+
+    private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
+        let global = toGlobal(annotation.rect)
+        for handle in Handle.allCases {
+            if handleHitRect(handle, in: global).contains(point) {
+                return handle
+            }
+        }
+        return nil
+    }
+
+    private func updateAnnotateCursor(at point: CGPoint) {
+        guard phase == .refining, annotateTool != .none else {
+            NSCursor.arrow.set()
+            return
+        }
+        if let toolbar, toolbar.containsGlobalPoint(point) {
+            NSCursor.arrow.set()
+            return
+        }
+
+        switch annotationPointerTarget(at: point) {
+        case .handle(_, let handle):
+            resizeCursor(for: handle).set()
+        case .border:
+            NSCursor.openHand.set()
+        case .draw:
+            AnnotationCursors.whitePlus.set()
+        case .outside:
+            NSCursor.arrow.set()
+        }
+    }
+
+    private func resizeCursor(for handle: Handle) -> NSCursor {
+        switch handle {
+        case .top, .bottom:
+            return .resizeUpDown
+        case .left, .right:
+            return .resizeLeftRight
+        case .topLeft, .bottomRight:
+            if #available(macOS 15.0, *) {
+                return NSCursor.frameResize(position: .topLeft, directions: .all)
+            }
+            return .crosshair
+        case .topRight, .bottomLeft:
+            if #available(macOS 15.0, *) {
+                return NSCursor.frameResize(position: .topRight, directions: .all)
+            }
+            return .crosshair
+        }
+    }
+
+    private func setAnnotateTool(_ tool: AnnotateTool) {
+        annotateTool = tool
+        if tool == .none {
+            selectedAnnotationID = nil
+            NSCursor.arrow.set()
+        }
+        toolbar?.setAnnotateTool(tool)
+        updateHighlight(showHandles: true)
+        repositionToolbar()
+        if tool != .none {
+            updateAnnotateCursor(at: NSEvent.mouseLocation)
+        }
+    }
+
+    private func applyStyle(_ style: AnnotationStyle) {
+        annotationStyle = style
+        if let id = selectedAnnotationID {
+            updateAnnotation(id: id) { $0.style = style }
+            updateHighlight(showHandles: true)
         }
     }
 
@@ -388,8 +684,10 @@ final class SelectionOverlayController {
         handle: Handle,
         startRect: CGRect,
         startPoint: CGPoint,
-        point: CGPoint
+        point: CGPoint,
+        minSize: CGFloat? = nil
     ) -> CGRect {
+        let floor = minSize ?? minSelection
         var minX = startRect.minX
         var maxX = startRect.maxX
         var minY = startRect.minY
@@ -424,8 +722,8 @@ final class SelectionOverlayController {
         if minY > maxY { swap(&minY, &maxY) }
 
         var rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
-        if rect.width < minSelection { rect.size.width = minSelection }
-        if rect.height < minSelection { rect.size.height = minSelection }
+        if rect.width < floor { rect.size.width = floor }
+        if rect.height < floor { rect.size.height = floor }
         return rect
     }
 
@@ -443,29 +741,43 @@ final class SelectionOverlayController {
     // MARK: - Drawing / toolbar
 
     private func updateHighlight(showHandles: Bool) {
+        let selected = selectedAnnotationID.flatMap { id in annotations.first(where: { $0.id == id }) }
         for panel in panels {
             panel.setSelection(
                 currentRect,
-                showHandles: showHandles,
-                handleVisualSize: handleVisualSize
+                showHandles: showHandles && annotateTool == .none,
+                handleVisualSize: handleVisualSize,
+                annotations: annotations,
+                draftRect: draftAnnotationRect,
+                draftStyle: annotationStyle,
+                selectedAnnotation: selected,
+                annotationHandleSize: annotationHandleVisualSize
             )
         }
     }
 
     private func showToolbar() {
         toolbar?.close()
-        let bar = RefineToolbarController(primaryAction: primaryAction) { [weak self] action in
+        let bar = RefineToolbarController(
+            primaryAction: primaryAction,
+            initialTool: annotateTool,
+            initialStyle: annotationStyle
+        ) { [weak self] event in
             guard let self else { return }
-            switch action {
-            case .pin:
-                self.confirm(.pin)
-            case .copy:
-                self.confirm(.copy)
-            case .save:
-                self.confirm(.save)
-            case .cancel:
-                self.tearDownOverlays()
-                self.finish(.cancelled)
+            switch event {
+            case .confirm(let action):
+                switch action {
+                case .pin: self.confirm(.pin)
+                case .copy: self.confirm(.copy)
+                case .save: self.confirm(.save)
+                case .cancel:
+                    self.tearDownOverlays()
+                    self.finish(.cancelled)
+                }
+            case .selectTool(let tool):
+                self.setAnnotateTool(tool)
+            case .styleChanged(let style):
+                self.applyStyle(style)
             }
         }
         toolbar = bar
@@ -486,18 +798,40 @@ final class SelectionOverlayController {
 
 @MainActor
 private final class RefineToolbarController: NSObject {
-    enum Action {
+    enum ConfirmAction {
         case pin
         case copy
         case save
         case cancel
     }
 
-    private let panel: NSPanel
-    private let onAction: (Action) -> Void
+    enum Event {
+        case confirm(ConfirmAction)
+        case selectTool(AnnotateTool)
+        case styleChanged(AnnotationStyle)
+    }
 
-    init(primaryAction: SelectionOverlayController.ConfirmAction, onAction: @escaping (Action) -> Void) {
-        self.onAction = onAction
+    private let panel: NSPanel
+    private let onEvent: (Event) -> Void
+    private var style: AnnotationStyle
+    private var tool: AnnotateTool
+
+    private let rootStack = NSStackView()
+    private var shapeButton: NSButton!
+    private var subToolbarContainer: NSView!
+    private var strokeButtons: [NSButton] = []
+    private var colorButtons: [NSButton] = []
+    private var colorPreview: NSView!
+
+    init(
+        primaryAction: SelectionOverlayController.ConfirmAction,
+        initialTool: AnnotateTool,
+        initialStyle: AnnotationStyle,
+        onEvent: @escaping (Event) -> Void
+    ) {
+        self.onEvent = onEvent
+        self.style = initialStyle
+        self.tool = initialTool
         self.panel = NSPanel(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -516,30 +850,64 @@ private final class RefineToolbarController: NSObject {
         content.layer?.shadowRadius = 8
         content.layer?.shadowOffset = CGSize(width: 0, height: -1)
 
-        // Snipaste-like icon groups (annotate stubs | edit stubs | confirm actions).
-        let annotate: [(String, String)] = [
-            ("rectangle", "Shape"),
-            ("arrow.up.right", "Arrow"),
-            ("pencil", "Pen"),
-            ("paintbrush.pointed", "Marker"),
-            ("square.grid.3x3", "Mosaic"),
-            ("textformat", "Text"),
-            ("1.circle", "Step"),
-            ("magnifyingglass", "Magnifier"),
-            ("eraser", "Eraser"),
-        ]
-        let edit: [(String, String)] = [
-            ("doc.text.viewfinder", "OCR"),
-            ("arrow.uturn.backward", "Undo"),
-            ("arrow.uturn.forward", "Redo"),
-        ]
+        rootStack.orientation = .vertical
+        rootStack.alignment = .leading
+        rootStack.spacing = 0
+        rootStack.translatesAutoresizingMaskIntoConstraints = false
 
-        let annotateViews: [NSView] = annotate.map { symbol, tip in
-            iconButton(systemName: symbol, tooltip: tip, enabled: false, action: nil)
-        }
-        let editViews: [NSView] = edit.map { symbol, tip in
-            iconButton(systemName: symbol, tooltip: tip, enabled: false, action: nil)
-        }
+        let mainRow = buildMainRow(primaryAction: primaryAction)
+        subToolbarContainer = buildSubToolbar()
+        subToolbarContainer.isHidden = (initialTool == .none)
+
+        rootStack.addArrangedSubview(mainRow)
+        rootStack.addArrangedSubview(subToolbarContainer)
+
+        content.addSubview(rootStack)
+        NSLayoutConstraint.activate([
+            rootStack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            rootStack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            rootStack.topAnchor.constraint(equalTo: content.topAnchor),
+            rootStack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+        ])
+
+        refreshSelectionChrome()
+        layoutPanel(content: content)
+
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.contentView = content
+    }
+
+    private func buildMainRow(primaryAction: SelectionOverlayController.ConfirmAction) -> NSView {
+        shapeButton = iconButton(
+            systemName: "rectangle",
+            tooltip: "Rectangle",
+            enabled: true,
+            action: #selector(shapeTapped)
+        )
+
+        let annotateViews: [NSView] = [
+            shapeButton,
+            iconButton(systemName: "arrow.up.right", tooltip: "Arrow", enabled: false, action: nil),
+            iconButton(systemName: "pencil", tooltip: "Pen", enabled: false, action: nil),
+            iconButton(systemName: "paintbrush.pointed", tooltip: "Marker", enabled: false, action: nil),
+            iconButton(systemName: "square.grid.3x3", tooltip: "Mosaic", enabled: false, action: nil),
+            iconButton(systemName: "textformat", tooltip: "Text", enabled: false, action: nil),
+            iconButton(systemName: "1.circle", tooltip: "Step", enabled: false, action: nil),
+            iconButton(systemName: "magnifyingglass", tooltip: "Magnifier", enabled: false, action: nil),
+            iconButton(systemName: "eraser", tooltip: "Eraser", enabled: false, action: nil),
+        ]
+        let editViews: [NSView] = [
+            iconButton(systemName: "doc.text.viewfinder", tooltip: "OCR", enabled: false, action: nil),
+            iconButton(systemName: "arrow.uturn.backward", tooltip: "Undo", enabled: false, action: nil),
+            iconButton(systemName: "arrow.uturn.forward", tooltip: "Redo", enabled: false, action: nil),
+        ]
 
         let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
         let pin = iconButton(systemName: "pin.fill", tooltip: "Pin", enabled: true, action: #selector(pinTapped))
@@ -555,8 +923,7 @@ private final class RefineToolbarController: NSObject {
             primary = copy
         }
         primary.keyEquivalent = "\r"
-
-        let actionViews: [NSView] = [cancel, pin, save, copy, more]
+        panel.defaultButtonCell = primary.cell as? NSButtonCell
 
         let stack = NSStackView(views: [])
         stack.orientation = .horizontal
@@ -568,32 +935,160 @@ private final class RefineToolbarController: NSObject {
         stack.addArrangedSubview(divider())
         for v in editViews { stack.addArrangedSubview(v) }
         stack.addArrangedSubview(divider())
-        for v in actionViews { stack.addArrangedSubview(v) }
+        for v in [cancel, pin, save, copy, more] { stack.addArrangedSubview(v) }
+        return stack
+    }
 
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(stack)
+    private func buildSubToolbar() -> NSView {
+        let stack = NSStackView(views: [])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 4, right: 8)
+
+        // Stroke width dots
+        strokeButtons = StrokeWidthOption.allCases.map { option in
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.setButtonType(.momentaryChange)
+            button.imagePosition = .imageOnly
+            button.toolTip = "Stroke"
+            button.target = self
+            button.action = #selector(strokeTapped(_:))
+            button.tag = option.rawValue
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 22),
+                button.heightAnchor.constraint(equalToConstant: 22),
+            ])
+            button.image = strokeDotImage(diameter: option.previewDiameter, selected: false)
+            return button
+        }
+        for b in strokeButtons { stack.addArrangedSubview(b) }
+
+        stack.addArrangedSubview(miniDivider())
+
+        // Shape kinds: rectangle selected; oval/line stubs
+        let rectKind = iconButton(systemName: "rectangle", tooltip: "Rectangle", enabled: true, action: nil)
+        tintSelected(rectKind, selected: true)
+        stack.addArrangedSubview(rectKind)
+        stack.addArrangedSubview(iconButton(systemName: "oval", tooltip: "Ellipse", enabled: false, action: nil))
+        stack.addArrangedSubview(iconButton(systemName: "line.diagonal", tooltip: "Line", enabled: false, action: nil))
+
+        stack.addArrangedSubview(miniDivider())
+
+        // Color preview + swatches
+        let preview = NSView(frame: .zero)
+        preview.wantsLayer = true
+        preview.layer?.cornerRadius = 3
+        preview.layer?.borderWidth = 1
+        preview.layer?.borderColor = NSColor(calibratedWhite: 0.75, alpha: 1).cgColor
+        preview.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: content.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            preview.widthAnchor.constraint(equalToConstant: 22),
+            preview.heightAnchor.constraint(equalToConstant: 22),
         ])
+        colorPreview = preview
+        stack.addArrangedSubview(preview)
 
-        let fitting = stack.fittingSize
+        let swatchStack = NSStackView(views: [])
+        swatchStack.orientation = .horizontal
+        swatchStack.spacing = 2
+        colorButtons = PaletteColor.allCases.map { swatch in
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.setButtonType(.momentaryChange)
+            button.imagePosition = .imageOnly
+            button.target = self
+            button.action = #selector(colorTapped(_:))
+            button.tag = swatch.rawValue
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 14),
+                button.heightAnchor.constraint(equalToConstant: 14),
+            ])
+            button.wantsLayer = true
+            button.layer?.backgroundColor = swatch.color.cgColor
+            button.layer?.cornerRadius = 2
+            button.layer?.borderWidth = 1
+            button.layer?.borderColor = NSColor(calibratedWhite: 0.7, alpha: 1).cgColor
+            return button
+        }
+        for b in colorButtons { swatchStack.addArrangedSubview(b) }
+        stack.addArrangedSubview(swatchStack)
+
+        // Top hairline above sub-toolbar
+        let wrap = NSView(frame: .zero)
+        wrap.translatesAutoresizingMaskIntoConstraints = false
+        let line = NSView(frame: .zero)
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor(calibratedWhite: 0.88, alpha: 1).cgColor
+        line.translatesAutoresizingMaskIntoConstraints = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        wrap.addSubview(line)
+        wrap.addSubview(stack)
+        NSLayoutConstraint.activate([
+            line.heightAnchor.constraint(equalToConstant: 1),
+            line.topAnchor.constraint(equalTo: wrap.topAnchor),
+            line.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
+            line.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: line.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: wrap.bottomAnchor),
+        ])
+        return wrap
+    }
+
+    private func layoutPanel(content: NSView) {
+        content.layoutSubtreeIfNeeded()
+        let fitting = rootStack.fittingSize
         let size = CGSize(width: max(fitting.width, 280), height: max(fitting.height, 28))
         content.frame = CGRect(origin: .zero, size: size)
-
         panel.setContentSize(size)
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false // custom layer shadow on the pill
-        panel.ignoresMouseEvents = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        panel.contentView = content
-        panel.defaultButtonCell = primary.cell as? NSButtonCell
+    }
+
+    private func refreshSelectionChrome() {
+        tintSelected(shapeButton, selected: tool == .rectangle)
+        colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
+
+        let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
+        for button in strokeButtons {
+            let option = StrokeWidthOption(rawValue: button.tag) ?? .medium
+            let on = option == selectedStroke
+            button.image = strokeDotImage(diameter: option.previewDiameter, selected: on)
+        }
+    }
+
+    private func tintSelected(_ button: NSButton, selected: Bool) {
+        button.contentTintColor = selected
+            ? NSColor.systemBlue
+            : NSColor(calibratedWhite: 0.22, alpha: 1)
+        if selected {
+            button.wantsLayer = true
+            button.layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.12).cgColor
+            button.layer?.cornerRadius = 4
+        } else {
+            button.layer?.backgroundColor = nil
+        }
+    }
+
+    private func strokeDotImage(diameter: CGFloat, selected: Bool) -> NSImage {
+        let size = CGSize(width: 18, height: 18)
+        return NSImage(size: size, flipped: false) { rect in
+            let color = selected ? NSColor.systemBlue : NSColor(calibratedWhite: 0.25, alpha: 1)
+            color.setFill()
+            let r = CGRect(
+                x: (rect.width - diameter) / 2,
+                y: (rect.height - diameter) / 2,
+                width: diameter,
+                height: diameter
+            )
+            NSBezierPath(ovalIn: r).fill()
+            return true
+        }
     }
 
     private func iconButton(
@@ -648,10 +1143,70 @@ private final class RefineToolbarController: NSObject {
         return wrap
     }
 
-    @objc private func pinTapped() { onAction(.pin) }
-    @objc private func copyTapped() { onAction(.copy) }
-    @objc private func saveTapped() { onAction(.save) }
-    @objc private func cancelTapped() { onAction(.cancel) }
+    private func miniDivider() -> NSView {
+        let wrap = NSView(frame: .zero)
+        wrap.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            wrap.widthAnchor.constraint(equalToConstant: 6),
+            wrap.heightAnchor.constraint(equalToConstant: 20),
+        ])
+        let line = NSView(frame: .zero)
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor(calibratedWhite: 0.82, alpha: 1).cgColor
+        line.translatesAutoresizingMaskIntoConstraints = false
+        wrap.addSubview(line)
+        NSLayoutConstraint.activate([
+            line.widthAnchor.constraint(equalToConstant: 1),
+            line.heightAnchor.constraint(equalToConstant: 12),
+            line.centerXAnchor.constraint(equalTo: wrap.centerXAnchor),
+            line.centerYAnchor.constraint(equalTo: wrap.centerYAnchor),
+        ])
+        return wrap
+    }
+
+    @objc private func shapeTapped() {
+        let next: AnnotateTool = (tool == .rectangle) ? .none : .rectangle
+        tool = next
+        subToolbarContainer.isHidden = (next == .none)
+        refreshSelectionChrome()
+        if let content = panel.contentView {
+            layoutPanel(content: content)
+        }
+        onEvent(.selectTool(next))
+    }
+
+    @objc private func strokeTapped(_ sender: NSButton) {
+        let option = StrokeWidthOption(rawValue: sender.tag) ?? .medium
+        style.strokeWidth = option.points
+        refreshSelectionChrome()
+        onEvent(.styleChanged(style))
+    }
+
+    @objc private func colorTapped(_ sender: NSButton) {
+        let swatch = PaletteColor(rawValue: sender.tag) ?? .sky
+        style.strokeColor = swatch.color
+        refreshSelectionChrome()
+        onEvent(.styleChanged(style))
+    }
+
+    @objc private func pinTapped() { onEvent(.confirm(.pin)) }
+    @objc private func copyTapped() { onEvent(.confirm(.copy)) }
+    @objc private func saveTapped() { onEvent(.confirm(.save)) }
+    @objc private func cancelTapped() { onEvent(.confirm(.cancel)) }
+
+    func setAnnotateTool(_ tool: AnnotateTool) {
+        self.tool = tool
+        subToolbarContainer.isHidden = (tool == .none)
+        refreshSelectionChrome()
+        if let content = panel.contentView {
+            layoutPanel(content: content)
+        }
+    }
+
+    func syncStyle(_ style: AnnotationStyle) {
+        self.style = style
+        refreshSelectionChrome()
+    }
 
     func orderFront() {
         panel.orderFrontRegardless()
@@ -725,7 +1280,16 @@ private final class SelectionPanel: NSPanel {
         contentView = overlayView
     }
 
-    func setSelection(_ globalRect: CGRect, showHandles: Bool, handleVisualSize: CGFloat) {
+    func setSelection(
+        _ globalRect: CGRect,
+        showHandles: Bool,
+        handleVisualSize: CGFloat,
+        annotations: [Annotation],
+        draftRect: CGRect?,
+        draftStyle: AnnotationStyle,
+        selectedAnnotation: Annotation?,
+        annotationHandleSize: CGFloat
+    ) {
         let local: CGRect
         if globalRect.isNull {
             local = .null
@@ -740,6 +1304,11 @@ private final class SelectionPanel: NSPanel {
         overlayView.selectionRect = local
         overlayView.showHandles = showHandles
         overlayView.handleVisualSize = handleVisualSize
+        overlayView.annotations = annotations
+        overlayView.draftRect = draftRect
+        overlayView.draftStyle = draftStyle
+        overlayView.selectedAnnotation = selectedAnnotation
+        overlayView.annotationHandleSize = annotationHandleSize
         overlayView.needsDisplay = true
     }
 
@@ -751,6 +1320,11 @@ private final class SelectionOverlayNSView: NSView {
     var selectionRect: CGRect = .null
     var showHandles = false
     var handleVisualSize: CGFloat = 8
+    var annotations: [Annotation] = []
+    var draftRect: CGRect?
+    var draftStyle: AnnotationStyle = .default
+    var selectedAnnotation: Annotation?
+    var annotationHandleSize: CGFloat = 7
 
     private let accent = NSColor.systemBlue
 
@@ -772,8 +1346,10 @@ private final class SelectionOverlayNSView: NSView {
         accent.setStroke()
         border.stroke()
 
+        drawAnnotations()
+
         if showHandles {
-            drawHandles()
+            drawSelectionHandles()
         }
 
         let w = Int(selectionRect.width.rounded())
@@ -797,7 +1373,29 @@ private final class SelectionOverlayNSView: NSView {
         label.draw(at: labelOrigin, withAttributes: attrs)
     }
 
-    private func drawHandles() {
+    private func drawAnnotations() {
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: selectionRect).addClip()
+
+        for ann in annotations {
+            let r = ann.rect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
+            AnnotationDrawing.stroke(ann, in: r)
+        }
+
+        if let draft = draftRect, draft.width > 0, draft.height > 0 {
+            let r = draft.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
+            AnnotationDrawing.stroke(Annotation(rect: draft, style: draftStyle), in: r)
+        }
+
+        if let selected = selectedAnnotation {
+            let r = selected.rect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
+            AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+        }
+
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func drawSelectionHandles() {
         let centers: [CGPoint] = [
             CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
             CGPoint(x: selectionRect.midX, y: selectionRect.maxY),

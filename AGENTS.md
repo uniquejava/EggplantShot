@@ -34,6 +34,7 @@ EggplantShot/
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift
   Controllers/PinBoardController.swift
+  Annotation/AnnotationModels.swift + AnnotationCompositor.swift
   UI/StatusMenuContent.swift + SettingsView.swift
   Assets.xcassets/
   Info.plist                 # LSUIElement = true
@@ -53,7 +54,7 @@ EggplantShot/
 
 ## Next (not done yet)
 
-→ Annotate tools, OCR, undo/redo, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Split overlay only when annotation needs its own canvas.
+→ Remaining annotate tools (arrow / pen / marker / mosaic / text / step), OCR, undo/redo, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Rectangle annotate is in. Split overlay only when annotation needs its own canvas.
 
 ## Prefer
 

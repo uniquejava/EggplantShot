@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
-Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome).  
-Deferred: annotate / save / OCR / undo etc. are **UI stubs only** (greyed out).
+Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
+Annotate: **rectangle tool** (stroke width / color, draw / move / resize). Other annotate / OCR / undo remain stubs.
 
 ## Behaviour
 
@@ -12,8 +12,17 @@ Deferred: annotate / save / OCR / undo etc. are **UI stubs only** (greyed out).
    - Size label near the rect (`W × H`).
    - **Toolbar**: white rounded-rect (≈6pt corner radius), icon row with dividers, **right-aligned** to the selection, **≈4pt** gap below (flips above if near screen bottom).
 3. Working toolbar actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** (+ Esc / Return for primary).
-4. On confirm → tear down overlay → capture final rect → pin, clipboard, or save panel.
-5. Esc in refine cancels the whole snip.
+4. **Rectangle annotate**:
+   - Click the rectangle tool → sub-toolbar (stroke widths + palette); selection handles hide while the tool is active.
+   - Pointer zones on an existing rectangle:
+     - **Interior** → white “＋” cursor; drag draws a new rectangle (nesting allowed); does **not** move.
+     - **Border** → open-hand cursor; drag moves the rectangle.
+     - **Handles** → resize cursors; drag adjusts size.
+   - Stroke / color changes apply to the selected rectangle (or the next one drawn).
+   - Delete removes the selected mark.
+   - Confirm composites annotations onto the capture before pin / copy / save.
+5. On confirm → tear down overlay → capture final rect → (optional annotate bake) → pin, clipboard, or save panel.
+6. Esc in refine cancels the whole snip.
 
 ### Snip vs Snip and copy
 
@@ -32,16 +41,18 @@ Deferred: annotate / save / OCR / undo etc. are **UI stubs only** (greyed out).
 ## Toolbar layout (parity with Snipaste)
 
 ```
-[ shape | arrow | pen | marker | mosaic | T | step | magnifier | eraser ]
+[ shape† | arrow | pen | marker | mosaic | T | step | magnifier | eraser ]
 | [ OCR | undo | redo ]
-| [ ✕ | pin | save | copy | …† ]
-```
+| [ ✕ | pin | save | copy | …‡ ]
 
-† More is stub / disabled today.
+† Rectangle only for now; expands a stroke/color sub-row when active.
+‡ More is stub / disabled today.
+```
 
 ## Code
 
 - Overlay + toolbar: [`SelectionOverlayController.swift`](../EggplantShot/Controllers/SelectionOverlayController.swift)
+- Annotation model / bake: [`Annotation/`](../EggplantShot/Annotation/)
 - Capture after confirm: [`SnipController.swift`](../EggplantShot/Controllers/SnipController.swift)
 - Save panel: [`ImageFileSaver.swift`](../EggplantShot/Capture/ImageFileSaver.swift)
 - Pin glow / drag: [`PinBoardController.swift`](../EggplantShot/Controllers/PinBoardController.swift)
@@ -55,4 +66,5 @@ Deferred: annotate / save / OCR / undo etc. are **UI stubs only** (greyed out).
 - [x] Confirm tears down overlay, then captures final rect
 - [x] ⌘F1 entry; primary action matches mode
 - [x] Pin soft glow + drag
+- [x] Rectangle tool: sub-toolbar, draw / move / resize, bake into capture
 - [x] Debug build succeeds
