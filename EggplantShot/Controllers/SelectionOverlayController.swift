@@ -425,27 +425,62 @@ private final class RefineToolbarController: NSObject {
 
         let content = RefineToolbarView(frame: .zero)
         content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.92).cgColor
-        content.layer?.cornerRadius = 8
-        content.layer?.borderWidth = 1
-        content.layer?.borderColor = NSColor.separatorColor.cgColor
+        content.layer?.backgroundColor = NSColor.white.cgColor
+        content.layer?.cornerRadius = 6
+        content.layer?.masksToBounds = false
+        content.layer?.shadowColor = NSColor.black.cgColor
+        content.layer?.shadowOpacity = 0.18
+        content.layer?.shadowRadius = 8
+        content.layer?.shadowOffset = CGSize(width: 0, height: -1)
 
-        let pin = NSButton(title: "Pin", target: self, action: #selector(pinTapped))
-        let copy = NSButton(title: "Copy", target: self, action: #selector(copyTapped))
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancelTapped))
-        for button in [pin, copy, cancel] {
-            button.bezelStyle = .rounded
-            button.setButtonType(.momentaryPushIn)
-            button.controlSize = .small
+        // Snipaste-like icon groups (annotate stubs | edit stubs | confirm actions).
+        let annotate: [(String, String)] = [
+            ("rectangle", "Shape"),
+            ("arrow.up.right", "Arrow"),
+            ("pencil", "Pen"),
+            ("paintbrush.pointed", "Marker"),
+            ("square.grid.3x3", "Mosaic"),
+            ("textformat", "Text"),
+            ("1.circle", "Step"),
+            ("magnifyingglass", "Magnifier"),
+            ("eraser", "Eraser"),
+        ]
+        let edit: [(String, String)] = [
+            ("doc.text.viewfinder", "OCR"),
+            ("arrow.uturn.backward", "Undo"),
+            ("arrow.uturn.forward", "Redo"),
+        ]
+
+        let annotateViews: [NSView] = annotate.map { symbol, tip in
+            iconButton(systemName: symbol, tooltip: tip, enabled: false, action: nil)
         }
+        let editViews: [NSView] = edit.map { symbol, tip in
+            iconButton(systemName: symbol, tooltip: tip, enabled: false, action: nil)
+        }
+
+        let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
+        let pin = iconButton(systemName: "pin.fill", tooltip: "Pin", enabled: true, action: #selector(pinTapped))
+        let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save", enabled: false, action: nil)
+        let copy = iconButton(systemName: "doc.on.doc", tooltip: "Copy", enabled: true, action: #selector(copyTapped))
+        let more = iconButton(systemName: "ellipsis", tooltip: "More", enabled: false, action: nil)
 
         let primary = primaryAction == .pin ? pin : copy
         primary.keyEquivalent = "\r"
 
-        let stack = NSStackView(views: [pin, copy, cancel])
+        let actionViews: [NSView] = [cancel, pin, save, copy, more]
+
+        let stack = NSStackView(views: [])
         stack.orientation = .horizontal
-        stack.spacing = 8
-        stack.edgeInsets = NSEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
+        stack.alignment = .centerY
+        stack.spacing = 2
+        stack.edgeInsets = NSEdgeInsets(top: 3, left: 6, bottom: 3, right: 6)
+
+        for v in annotateViews { stack.addArrangedSubview(v) }
+        stack.addArrangedSubview(divider())
+        for v in editViews { stack.addArrangedSubview(v) }
+        stack.addArrangedSubview(divider())
+        for v in actionViews { stack.addArrangedSubview(v) }
+
         stack.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -456,21 +491,72 @@ private final class RefineToolbarController: NSObject {
         ])
 
         let fitting = stack.fittingSize
-        let size = CGSize(width: max(fitting.width, 200), height: max(fitting.height, 36))
+        let size = CGSize(width: max(fitting.width, 280), height: max(fitting.height, 28))
         content.frame = CGRect(origin: .zero, size: size)
 
         panel.setContentSize(size)
-        // Above SelectionPanel (.screenSaver) so resize/move never buries the bar under the dim mask.
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false // custom layer shadow on the pill
         panel.ignoresMouseEvents = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.contentView = content
         panel.defaultButtonCell = primary.cell as? NSButtonCell
+    }
+
+    private func iconButton(
+        systemName: String,
+        tooltip: String,
+        enabled: Bool,
+        action: Selector?
+    ) -> NSButton {
+        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.setButtonType(.momentaryChange)
+        button.imagePosition = .imageOnly
+        button.toolTip = tooltip
+        button.isEnabled = enabled
+        button.target = action == nil ? nil : self
+        button.action = action
+        button.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 24),
+            button.heightAnchor.constraint(equalToConstant: 24),
+        ])
+
+        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        let image = NSImage(systemSymbolName: systemName, accessibilityDescription: tooltip)?
+            .withSymbolConfiguration(config)
+        button.image = image
+        button.contentTintColor = enabled
+            ? NSColor(calibratedWhite: 0.22, alpha: 1)
+            : NSColor(calibratedWhite: 0.55, alpha: 1)
+        return button
+    }
+
+    private func divider() -> NSView {
+        let wrap = NSView(frame: .zero)
+        wrap.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            wrap.widthAnchor.constraint(equalToConstant: 7),
+            wrap.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        let line = NSView(frame: .zero)
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor(calibratedWhite: 0.82, alpha: 1).cgColor
+        line.translatesAutoresizingMaskIntoConstraints = false
+        wrap.addSubview(line)
+        NSLayoutConstraint.activate([
+            line.widthAnchor.constraint(equalToConstant: 1),
+            line.heightAnchor.constraint(equalToConstant: 14),
+            line.centerXAnchor.constraint(equalTo: wrap.centerXAnchor),
+            line.centerYAnchor.constraint(equalTo: wrap.centerYAnchor),
+        ])
+        return wrap
     }
 
     @objc private func pinTapped() { onAction(.pin) }
@@ -492,15 +578,15 @@ private final class RefineToolbarController: NSObject {
 
     func reposition(around selection: CGRect) {
         let size = panel.frame.size
-        let gap: CGFloat = 10
+        let gap: CGFloat = 4
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(selection) })
             ?? NSScreen.main
             ?? NSScreen.screens.first
         guard let screen else { return }
 
-        // Prefer below the selection; flip above if near the bottom.
+        // Prefer below the selection, right-aligned to the selection’s trailing edge.
         var origin = CGPoint(
-            x: selection.midX - size.width / 2,
+            x: selection.maxX - size.width,
             y: selection.minY - size.height - gap
         )
         if origin.y < screen.frame.minY + 4 {
@@ -517,6 +603,7 @@ private final class RefineToolbarController: NSObject {
 
 private final class RefineToolbarView: NSView {
     override var acceptsFirstResponder: Bool { true }
+    override var isOpaque: Bool { false }
 }
 
 // MARK: - Overlay panels
@@ -590,7 +677,7 @@ private final class SelectionOverlayNSView: NSView {
         NSGraphicsContext.current?.compositingOperation = .sourceOver
 
         let border = NSBezierPath(rect: selectionRect.insetBy(dx: 0.5, dy: 0.5))
-        border.lineWidth = 2
+        border.lineWidth = 1.5
         accent.setStroke()
         border.stroke()
 
@@ -602,19 +689,19 @@ private final class SelectionOverlayNSView: NSView {
         let h = Int(selectionRect.height.rounded())
         let label = "\(w) × \(h)" as NSString
         let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
             .foregroundColor: NSColor.white,
         ]
         let size = label.size(withAttributes: attrs)
         var labelOrigin = CGPoint(
-            x: selectionRect.midX - size.width / 2,
-            y: selectionRect.maxY + 6
+            x: selectionRect.minX,
+            y: selectionRect.maxY + 8
         )
         if labelOrigin.y + size.height + 4 > bounds.maxY {
-            labelOrigin.y = selectionRect.minY - size.height - 6
+            labelOrigin.y = selectionRect.minY - size.height - 8
         }
         let bg = CGRect(origin: labelOrigin, size: size).insetBy(dx: -6, dy: -3)
-        NSColor.black.withAlphaComponent(0.7).setFill()
+        NSColor.black.withAlphaComponent(0.72).setFill()
         NSBezierPath(roundedRect: bg, xRadius: 4, yRadius: 4).fill()
         label.draw(at: labelOrigin, withAttributes: attrs)
     }
@@ -634,10 +721,10 @@ private final class SelectionOverlayNSView: NSView {
         for c in centers {
             let r = CGRect(x: c.x - s / 2, y: c.y - s / 2, width: s, height: s)
             NSColor.white.setFill()
-            NSBezierPath(rect: r).fill()
+            NSBezierPath(ovalIn: r).fill()
             accent.setStroke()
-            let stroke = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
-            stroke.lineWidth = 1
+            let stroke = NSBezierPath(ovalIn: r.insetBy(dx: 0.5, dy: 0.5))
+            stroke.lineWidth = 1.5
             stroke.stroke()
         }
     }
