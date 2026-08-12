@@ -26,18 +26,19 @@ final class SnipController {
                 return
             }
 
-            let outcome = await overlay.beginSelection()
+            let primary: SelectionOverlayController.ConfirmAction = (mode == .pin) ? .pin : .copy
+            let outcome = await overlay.beginSelection(primaryAction: primary)
             switch outcome {
             case .cancelled:
                 return
-            case .selected(let rect):
+            case .confirmed(let rect, let action):
                 // Tiny delay so overlay panels are fully torn down before capture.
                 try? await Task.sleep(nanoseconds: 30_000_000)
                 guard let image = ScreenCapturer.capture(rectInScreenPoints: rect) else {
                     NSLog("EggplantShot: capture failed for rect \(rect)")
                     return
                 }
-                switch mode {
+                switch action {
                 case .pin:
                     pinBoard.pin(image, near: rect)
                 case .copy:

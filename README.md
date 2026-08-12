@@ -7,6 +7,7 @@ Native **macOS 14+** Snipaste-style screenshot tool — menu bar only, SwiftUI +
 | Doc | Contents |
 |-----|----------|
 | [AGENTS.md](./AGENTS.md) | Architecture & agent notes |
+| [docs/selection-refine.md](./docs/selection-refine.md) | Selection refine: blue rect, handles, toolbar |
 
 ## Requirements
 
@@ -29,8 +30,8 @@ On first launch, grant Accessibility and Screen Recording when prompted.
 ## Features (MVP)
 
 - Menu bar extra (LSUIElement) with Snipaste-like menu
-- **Snip** / **F1** — area select → pin floating image
-- **Snip and copy** / **⌘F1** — area select → clipboard
+- **Snip** / **F1** — area select → refine (handles + toolbar) → pin floating image
+- **Snip and copy** / **⌘F1** — same refine UX; primary action copies to clipboard
 - **Hide/Show all images** / **⇧F3**
 - Disable hotkeys
 - Preferences: permission status + hotkey list
