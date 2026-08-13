@@ -351,7 +351,7 @@ How to try: Pin a snip with shapes → F1 again → press `,` → edit → Pin (
 
 New tools add a `AnnotationPayload` case + draw/hit-test; history / store / confirm paths stay unchanged.
 
-Pencil: `.pencil(points:style:)` — freehand polyline, Shift → straight any angle.
+Pencil: `.pencil(points:style:)` — freehand polyline (dense live sample + tip poll); Shift → straight any angle; no resize chrome / no auto-select after stroke.
 
 ## Relationship to current MVP
 

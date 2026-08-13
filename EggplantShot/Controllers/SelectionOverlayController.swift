@@ -26,6 +26,8 @@ final class SelectionOverlayController {
         case draw(start: CGPoint)
         case move(startRect: CGRect, startPoint: CGPoint)
         case resize(handle: Handle, startRect: CGRect, startPoint: CGPoint)
+        /// Outside the selection: opposite edges stay fixed; active edge(s) track the pointer absolutely.
+        case expand(handle: Handle, baseRect: CGRect)
         /// Shape or pencil in-progress stroke (tool decides payload).
         case annotateDraw(startLocal: CGPoint)
         case annotateMove(id: UUID, start: Annotation, startPoint: CGPoint)
@@ -84,6 +86,8 @@ final class SelectionOverlayController {
     private let handleVisualSize: CGFloat = 8
     private let annotationHandleVisualSize: CGFloat = 7
     private let handleHitSize: CGFloat = 12
+    /// Border strip + outside octants use this thickness for Snipaste-style resize hit/cursor.
+    private let selectionEdgeHit: CGFloat = 8
     private let minSelection: CGFloat = 2
     private let minAnnotation: CGFloat = 4
     /// Freehand sample distance (points). Dense enough to turn freely without
@@ -341,7 +345,7 @@ final class SelectionOverlayController {
             return
         }
         if phase == .refining, dragKind == nil {
-            updateAnnotateCursor(at: point)
+            updateOverlayCursor(at: point)
         }
     }
 
@@ -363,6 +367,7 @@ final class SelectionOverlayController {
         phase = .refining
         updateHighlight(showHandles: true)
         showToolbar()
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     private func beginFreeDraw(from start: CGPoint) {
@@ -438,38 +443,22 @@ final class SelectionOverlayController {
             return
         }
 
-        // Selection refine (no annotate tool).
-        if let handle = hitTestHandle(at: point) {
-            annotationHistory.select(nil)
-            dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
-        } else if currentRect.contains(point) {
-            annotationHistory.select(nil)
-            dragKind = .move(startRect: currentRect, startPoint: point)
-        } else {
-            // Start a new rough selection (or window pick again). Clears annotations + playback.
-            toolbar?.close()
-            toolbar = nil
-            phase = .idle
-            dragKind = nil
-            playbackBaseImage = nil
-            annotationHistory.commit { doc in
-                doc.marks = []
-                doc.selectedID = nil
-            }
-            draftAnnotation = nil
-            annotateTool = .none
-            let prefs = AnnotationPrefs.load()
-            annotationStyle = prefs.style
-            annotationKind = prefs.kind
-            NSCursor.arrow.set()
-            if let frame = windowHitTester.windowFrame(at: point) {
-                pendingWindowPick = (start: point, frame: frame)
-                hoveredWindowRect = frame
-                currentRect = frame
-                updateHighlight(showHandles: false)
+        // Selection refine (no annotate tool): interior moves; border resize; outside expands to point.
+        annotationHistory.select(nil)
+        if let handle = refineResizeHandle(at: point) {
+            if currentRect.contains(point) {
+                dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
             } else {
-                beginFreeDraw(from: point)
+                // Snipaste: click outside → that edge jumps to the pointer, then follows while dragged.
+                dragKind = .expand(handle: handle, baseRect: currentRect)
+                currentRect = expandedRect(handle: handle, baseRect: currentRect, to: point)
+                updateHighlight(showHandles: true)
+                repositionToolbar()
             }
+            resizeCursor(for: handle).set()
+        } else if currentRect.contains(point) {
+            dragKind = .move(startRect: currentRect, startPoint: point)
+            NSCursor.closedHand.set()
         }
     }
 
@@ -507,6 +496,11 @@ final class SelectionOverlayController {
 
         case .resize(let handle, let startRect, let startPoint):
             currentRect = resizedRect(handle: handle, startRect: startRect, startPoint: startPoint, point: point)
+            updateHighlight(showHandles: true)
+            repositionToolbar()
+
+        case .expand(let handle, let baseRect):
+            currentRect = expandedRect(handle: handle, baseRect: baseRect, to: point)
             updateHighlight(showHandles: true)
             repositionToolbar()
 
@@ -572,6 +566,7 @@ final class SelectionOverlayController {
             phase = .refining
             updateHighlight(showHandles: true)
             showToolbar()
+            updateOverlayCursor(at: point)
 
         case .refining:
             switch dragKind {
@@ -597,7 +592,7 @@ final class SelectionOverlayController {
             }
             updateHighlight(showHandles: true)
             repositionToolbar()
-            updateAnnotateCursor(at: point)
+            updateOverlayCursor(at: point)
         }
     }
 
@@ -798,7 +793,7 @@ final class SelectionOverlayController {
         }
         updateHighlight(showHandles: true)
         refreshHistoryChrome()
-        updateAnnotateCursor(at: NSEvent.mouseLocation)
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     /// Priority: selected handles → any stroke/border (topmost) → draw zone inside selection.
@@ -884,6 +879,33 @@ final class SelectionOverlayController {
         return outer <= 1 && inner >= 1
     }
 
+    private func updateOverlayCursor(at point: CGPoint) {
+        guard phase == .refining else {
+            NSCursor.arrow.set()
+            return
+        }
+        if annotateTool != .none {
+            updateAnnotateCursor(at: point)
+        } else {
+            updateRefineCursor(at: point)
+        }
+    }
+
+    /// Selection-only refine: open hand to move; resize arrows on border / outside octants.
+    private func updateRefineCursor(at point: CGPoint) {
+        if let toolbar, toolbar.containsGlobalPoint(point) {
+            NSCursor.arrow.set()
+            return
+        }
+        if let handle = refineResizeHandle(at: point) {
+            resizeCursor(for: handle).set()
+        } else if currentRect.contains(point) {
+            NSCursor.openHand.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+    }
+
     private func updateAnnotateCursor(at point: CGPoint) {
         guard phase == .refining, annotateTool != .none else {
             NSCursor.arrow.set()
@@ -911,29 +933,24 @@ final class SelectionOverlayController {
     }
 
     private func resizeCursor(for handle: Handle) -> NSCursor {
+        let position: NSCursor.FrameResizePosition
         switch handle {
-        case .top, .bottom:
-            return .resizeUpDown
-        case .left, .right:
-            return .resizeLeftRight
-        case .topLeft, .bottomRight:
-            if #available(macOS 15.0, *) {
-                return NSCursor.frameResize(position: .topLeft, directions: .all)
-            }
-            return .crosshair
-        case .topRight, .bottomLeft:
-            if #available(macOS 15.0, *) {
-                return NSCursor.frameResize(position: .topRight, directions: .all)
-            }
-            return .crosshair
+        case .top: position = .top
+        case .bottom: position = .bottom
+        case .left: position = .left
+        case .right: position = .right
+        case .topLeft: position = .topLeft
+        case .topRight: position = .topRight
+        case .bottomLeft: position = .bottomLeft
+        case .bottomRight: position = .bottomRight
         }
+        return NSCursor.frameResize(position: position, directions: .all)
     }
 
     private func setAnnotateTool(_ tool: AnnotateTool) {
         annotateTool = tool
         if tool == .none {
             annotationHistory.select(nil)
-            NSCursor.arrow.set()
         } else if tool == .pencil, annotationStyle.isFilled {
             // Pencil has no fill; fall back to last stroke width.
             annotationStyle.isFilled = false
@@ -942,9 +959,7 @@ final class SelectionOverlayController {
         toolbar?.setAnnotateTool(tool)
         updateHighlight(showHandles: true)
         repositionToolbar()
-        if tool != .none {
-            updateAnnotateCursor(at: NSEvent.mouseLocation)
-        }
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     private func applyStyle(_ style: AnnotationStyle) {
@@ -968,7 +983,7 @@ final class SelectionOverlayController {
             updateHighlight(showHandles: true)
             refreshHistoryChrome()
         }
-        updateAnnotateCursor(at: NSEvent.mouseLocation)
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     private func applyKind(_ kind: ShapeKind) {
@@ -1005,7 +1020,7 @@ final class SelectionOverlayController {
         }
         updateHighlight(showHandles: true)
         refreshHistoryChrome()
-        updateAnnotateCursor(at: NSEvent.mouseLocation)
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     private func refreshHistoryChrome() {
@@ -1017,12 +1032,31 @@ final class SelectionOverlayController {
 
     // MARK: - Geometry
 
-    private func hitTestHandle(at point: CGPoint) -> Handle? {
-        for handle in Handle.allCases {
-            if handleHitRect(handle, in: currentRect).contains(point) {
-                return handle
-            }
+    /// Snipaste-style zones: deep interior → `nil` (move); border strip and outside
+    /// octants (N/S/E/W + corners) → the resize handle for that direction.
+    private func refineResizeHandle(at point: CGPoint) -> Handle? {
+        guard !currentRect.isNull, currentRect.width > 0, currentRect.height > 0 else { return nil }
+        let r = currentRect
+        let t = selectionEdgeHit
+
+        let inner = r.insetBy(dx: t, dy: t)
+        if inner.width > 0, inner.height > 0, inner.contains(point) {
+            return nil
         }
+
+        let onLeft = point.x < r.minX + t
+        let onRight = point.x > r.maxX - t
+        let onBottom = point.y < r.minY + t
+        let onTop = point.y > r.maxY - t
+
+        if onTop && onLeft { return .topLeft }
+        if onTop && onRight { return .topRight }
+        if onBottom && onLeft { return .bottomLeft }
+        if onBottom && onRight { return .bottomRight }
+        if onTop { return .top }
+        if onBottom { return .bottom }
+        if onLeft { return .left }
+        if onRight { return .right }
         return nil
     }
 
@@ -1085,6 +1119,46 @@ final class SelectionOverlayController {
         case .bottomRight:
             maxX += dx
             minY += dy
+        }
+
+        if minX > maxX { swap(&minX, &maxX) }
+        if minY > maxY { swap(&minY, &maxY) }
+
+        var rect = CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        if rect.width < floor { rect.size.width = floor }
+        if rect.height < floor { rect.size.height = floor }
+        return rect
+    }
+
+    /// Absolute edge placement for outside-click expand (opposite edges stay on `baseRect`).
+    private func expandedRect(handle: Handle, baseRect: CGRect, to point: CGPoint, minSize: CGFloat? = nil) -> CGRect {
+        let floor = minSize ?? minSelection
+        var minX = baseRect.minX
+        var maxX = baseRect.maxX
+        var minY = baseRect.minY
+        var maxY = baseRect.maxY
+
+        switch handle {
+        case .topLeft:
+            minX = point.x
+            maxY = point.y
+        case .top:
+            maxY = point.y
+        case .topRight:
+            maxX = point.x
+            maxY = point.y
+        case .left:
+            minX = point.x
+        case .right:
+            maxX = point.x
+        case .bottomLeft:
+            minX = point.x
+            minY = point.y
+        case .bottom:
+            minY = point.y
+        case .bottomRight:
+            maxX = point.x
+            minY = point.y
         }
 
         if minX > maxX { swap(&minX, &maxX) }

@@ -1,11 +1,12 @@
 import AppKit
 import CoreGraphics
+import Darwin
 import Foundation
 
 enum ScreenCapturer {
     /// Full-display snapshot in pixels (for freeze overlay). Call before showing overlay windows.
     static func captureDisplay(_ screen: NSScreen) -> CGImage? {
-        CGDisplayCreateImage(screen.displayID)
+        LegacyCG.displayImage(screen.displayID)
     }
 
     /// Crop a frozen display image using a Cocoa global rect (points, bottom-left origin).
@@ -44,7 +45,7 @@ enum ScreenCapturer {
             width: pixelRect.width,
             height: pixelRect.height
         )
-        guard let image = CGWindowListCreateImage(
+        guard let image = LegacyCG.windowListImage(
             globalQuartz,
             .optionOnScreenBelowWindow,
             kCGNullWindowID,
@@ -81,6 +82,45 @@ enum ScreenCapturer {
 
 extension NSScreen {
     var displayID: CGDirectDisplayID {
-        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? CGMainDisplayID()
+        (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
+    }
+}
+
+// MARK: - Legacy CG capture (symbols still present; SDK marks them unavailable at macOS 15+)
+
+/// `CGDisplayCreateImage` / `CGWindowListCreateImage` were obsoleted in the macOS 15 SDK
+/// (unavailable when deployment target ≥ 15). Resolve them at runtime until ScreenCaptureKit.
+private enum LegacyCG {
+    private static let coreGraphics = dlopen(
+        "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
+        RTLD_LAZY
+    )
+
+    private static let displayImageFn: (@convention(c) (CGDirectDisplayID) -> Unmanaged<CGImage>?)? = {
+        guard let handle = coreGraphics, let sym = dlsym(handle, "CGDisplayCreateImage") else { return nil }
+        return unsafeBitCast(sym, to: (@convention(c) (CGDirectDisplayID) -> Unmanaged<CGImage>?).self)
+    }()
+
+    private static let windowListImageFn: (
+        @convention(c) (CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption) -> Unmanaged<CGImage>?
+    )? = {
+        guard let handle = coreGraphics, let sym = dlsym(handle, "CGWindowListCreateImage") else { return nil }
+        return unsafeBitCast(
+            sym,
+            to: (@convention(c) (CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption) -> Unmanaged<CGImage>?).self
+        )
+    }()
+
+    static func displayImage(_ displayID: CGDirectDisplayID) -> CGImage? {
+        displayImageFn?(displayID)?.takeRetainedValue()
+    }
+
+    static func windowListImage(
+        _ bounds: CGRect,
+        _ listOption: CGWindowListOption,
+        _ windowID: CGWindowID,
+        _ imageOption: CGWindowImageOption
+    ) -> CGImage? {
+        windowListImageFn?(bounds, listOption, windowID, imageOption)?.takeRetainedValue()
     }
 }

@@ -2,7 +2,7 @@
 
 ## What this is
 
-Native **macOS 14+** Snipaste-style screenshot utility (MVP).
+Native **macOS 15+** Snipaste-style screenshot utility (MVP).
 
 - Menu bar only (`LSUIElement`); Dock icon only while Preferences is open
 - Global hotkeys via `CGEvent` tap (Accessibility required)

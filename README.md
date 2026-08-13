@@ -1,6 +1,6 @@
 # EggplantShot
 
-Native **macOS 14+** Snipaste-style screenshot tool — menu bar only, SwiftUI + AppKit.
+Native **macOS 15+** Snipaste-style screenshot tool — menu bar only, SwiftUI + AppKit.
 
 ## Docs
 
@@ -11,8 +11,8 @@ Native **macOS 14+** Snipaste-style screenshot tool — menu bar only, SwiftUI +
 
 ## Requirements
 
-- macOS 14 or later
-- Xcode 15+ (sign with Apple Development team `M5J7K9HVYB`)
+- macOS 15 or later
+- Xcode 16+ (sign with Apple Development team `M5J7K9HVYB`)
 - **Accessibility** for global hotkeys (`CGEvent` tap)
 - **Screen Recording** for capture
 
