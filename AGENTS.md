@@ -87,6 +87,8 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 → Remaining annotate tools: magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + arrow + pencil + marker + mosaic + text + step + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
 
+→ Mosaic blur samples freeze/base only (not prior marks). Smearing over pencil/ink on a dark freeze paints opaque freeze pixels on top of the ink (looks “all black”). Need a cheap way to sample freeze **+ prior marks** without full-screen recomposite every tip — see deferred note under Mosaic in `docs/selection-refine.md`.
+
 
 ## Prefer
 

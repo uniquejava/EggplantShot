@@ -91,6 +91,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
 - Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
 - Effect: **gaussian blur** of freeze/base under the brush/region (`CIGaussianBlur`; linear intensity 3…24 → ~0.7…14 pt). Simple path: crop → blur → clip to stroke/region. **Vector** stroke/region data only (P4; never mutates `baseImage`).
+- Known gap / backlog: sample is freeze/base **only** (not prior marks). Blurring over existing ink on a dark freeze covers that ink with opaque freeze pixels. Fix later with a cheap freeze+marks sample (avoid full-screen recomposite per tip).
 - Hit: mosaic marks draw-through under any annotate tool (no move hand over blurred areas); hold **⌘** to move (region handles still work when selected).
 - No color palette.
 
