@@ -743,8 +743,8 @@ final class SelectionOverlayController {
                         let ann = finalizedDraft(draft)
                         annotationHistory.commit { doc in
                             doc.marks.append(ann)
-                            // Pencil / mosaic: keep drawing clean — no auto-select / resize chrome.
-                            doc.selectedID = (ann.isPencil || ann.isMosaic) ? nil : ann.id
+                            // Pencil / freehand mosaic: no auto-select. Region mosaic: select for resize chrome.
+                            doc.selectedID = (ann.isPencil || ann.isMosaicStroke) ? nil : ann.id
                         }
                         refreshHistoryChrome()
                     }
@@ -1259,8 +1259,9 @@ final class SelectionOverlayController {
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
-        // Pencil / mosaic / text / arrow: no 8-handle resize chrome.
-        guard !annotation.isPencil, !annotation.isMosaic, !annotation.isText, !annotation.isArrow else {
+        // Pencil / freehand mosaic / text / arrow: no 8-handle resize chrome.
+        // Mosaic region (rect/oval) uses the same 8 handles as shapes.
+        guard !annotation.isPencil, !annotation.isMosaicStroke, !annotation.isText, !annotation.isArrow else {
             return nil
         }
         let global = toGlobal(annotation.boundingRect)

@@ -194,11 +194,16 @@ final class SelectionOverlayNSView: NSView {
         }
         if let draft = draftAnnotation {
             AnnotationDrawing.draw(draft, origin: origin, sample: sample)
+            // Mosaic region drag: solid 1px contrast hairline (edit chrome only).
+            if case .mosaic(.region(let mode, let rect), _) = draft.payload {
+                let r = rect.offsetBy(dx: origin.x, dy: origin.y)
+                drawMosaicRegionChrome(in: r, mode: mode, dashed: false)
+            }
         }
 
         if let selected = selectedAnnotation,
            !selected.isPencil,
-           !selected.isMosaic,
+           !selected.isMosaicStroke,
            !selected.isText,
            selected.id != editingAnnotationID {
             if case .arrow(let start, let end, _, _) = selected.payload {
@@ -210,6 +215,11 @@ final class SelectionOverlayNSView: NSView {
                     size: annotationHandleSize,
                     accent: accent
                 )
+            } else if case .mosaic(.region(let mode, let rect), _) = selected.payload {
+                // After release: dashed hairline + resize handles.
+                let r = rect.offsetBy(dx: origin.x, dy: origin.y)
+                drawMosaicRegionChrome(in: r, mode: mode, dashed: true)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
             } else {
                 let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
                 AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
@@ -223,6 +233,64 @@ final class SelectionOverlayNSView: NSView {
             let r = hovered.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
             drawTextHoverOutline(in: r)
         }
+    }
+
+    /// Snipaste mosaic region: 1 device-pixel hairline; black on light / white on dark.
+    /// Solid while dragging; dashed once committed & selected.
+    private func drawMosaicRegionChrome(in rect: CGRect, mode: MosaicDrawMode, dashed: Bool) {
+        guard rect.width >= 1, rect.height >= 1 else { return }
+        let scale = window?.backingScaleFactor ?? 2
+        let w = 1 / max(scale, 1)
+        contrastChromeColor(around: CGPoint(x: rect.midX, y: rect.midY)).setStroke()
+        let path: NSBezierPath
+        switch mode {
+        case .ellipse:
+            path = NSBezierPath(ovalIn: rect.insetBy(dx: w / 2, dy: w / 2))
+        case .rectangle, .freehand:
+            path = NSBezierPath(rect: rect.insetBy(dx: w / 2, dy: w / 2))
+        }
+        path.lineWidth = w
+        if dashed {
+            let dash: [CGFloat] = [3, 2]
+            path.setLineDash(dash, count: dash.count, phase: 0)
+        }
+        path.stroke()
+    }
+
+    /// Sample freeze under `point` (view / image space); fall back to white on unknown dark.
+    private func contrastChromeColor(around point: CGPoint) -> NSColor {
+        guard let freezeImage,
+              let cg = freezeImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return .white }
+        let scaleX = CGFloat(cg.width) / freezeImage.size.width
+        let scaleY = CGFloat(cg.height) / freezeImage.size.height
+        let sample = CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4)
+        let pixel = CGRect(
+            x: sample.minX * scaleX,
+            y: (freezeImage.size.height - sample.maxY) * scaleY,
+            width: sample.width * scaleX,
+            height: sample.height * scaleY
+        ).integral
+        guard pixel.width >= 1, pixel.height >= 1,
+              let cropped = cg.cropping(to: pixel)
+        else { return .white }
+        let rep = NSBitmapImageRep(cgImage: cropped)
+        var sum: CGFloat = 0
+        var count: CGFloat = 0
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                guard let rgb = rep.colorAt(x: x, y: y)?.usingColorSpace(.genericRGB) else { continue }
+                sum += 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+                count += 1
+            }
+        }
+        guard count > 0 else { return .white }
+        // Outside the blue selection the overlay dims ~45% black.
+        var luminance = sum / count
+        if !selectionRect.isNull, !selectionRect.contains(point) {
+            luminance *= 0.55
+        }
+        return luminance < 0.55 ? .white : .black
     }
 
     /// 1px white dashed frame (Snipaste text mouse-over).

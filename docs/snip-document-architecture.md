@@ -360,7 +360,7 @@ Arrow: `.arrow(start:end:style:caps:)` — segment + Snipaste end-caps; Shift �
 
 Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
 
-Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions).
+Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
 ## Relationship to current MVP
 
