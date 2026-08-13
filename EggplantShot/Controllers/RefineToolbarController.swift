@@ -140,7 +140,7 @@ final class RefineToolbarController: NSObject {
             action: #selector(pencilTapped)
         )
         textButton = iconButton(
-            systemName: "textformat",
+            image: textToolIcon(),
             tooltip: "Text",
             enabled: true,
             action: #selector(textTapped)
@@ -609,6 +609,18 @@ final class RefineToolbarController: NSObject {
         enabled: Bool,
         action: Selector?
     ) -> NSButton {
+        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
+        let image = NSImage(systemSymbolName: systemName, accessibilityDescription: tooltip)?
+            .withSymbolConfiguration(config)
+        return iconButton(image: image, tooltip: tooltip, enabled: enabled, action: action)
+    }
+
+    private func iconButton(
+        image: NSImage?,
+        tooltip: String,
+        enabled: Bool,
+        action: Selector?
+    ) -> NSButton {
         let button = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
         button.bezelStyle = .inline
         button.isBordered = false
@@ -623,15 +635,40 @@ final class RefineToolbarController: NSObject {
             button.widthAnchor.constraint(equalToConstant: 24),
             button.heightAnchor.constraint(equalToConstant: 24),
         ])
-
-        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
-        let image = NSImage(systemSymbolName: systemName, accessibilityDescription: tooltip)?
-            .withSymbolConfiguration(config)
         button.image = image
         button.contentTintColor = enabled
             ? NSColor(calibratedWhite: 0.22, alpha: 1)
             : NSColor(calibratedWhite: 0.55, alpha: 1)
         return button
+    }
+
+    /// Lucide [`type`](https://lucide.dev/icons/type) (ISC) — capital T with top/bottom bars.
+    private func textToolIcon() -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        // `flipped: true` matches SVG’s y-down viewBox so the T is right-side up.
+        let image = NSImage(size: size, flipped: true) { rect in
+            let s = rect.width / 24
+            let path = NSBezierPath()
+            // <polyline points="4 7 4 4 20 4 20 7" />
+            path.move(to: NSPoint(x: 4 * s, y: 7 * s))
+            path.line(to: NSPoint(x: 4 * s, y: 4 * s))
+            path.line(to: NSPoint(x: 20 * s, y: 4 * s))
+            path.line(to: NSPoint(x: 20 * s, y: 7 * s))
+            // <line x1="9" x2="15" y1="20" y2="20" />
+            path.move(to: NSPoint(x: 9 * s, y: 20 * s))
+            path.line(to: NSPoint(x: 15 * s, y: 20 * s))
+            // <line x1="12" x2="12" y1="4" y2="20" />
+            path.move(to: NSPoint(x: 12 * s, y: 4 * s))
+            path.line(to: NSPoint(x: 12 * s, y: 20 * s))
+            path.lineWidth = 2 * s
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     private func divider() -> NSView {
