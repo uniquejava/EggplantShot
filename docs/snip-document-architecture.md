@@ -191,7 +191,7 @@ P0–P4 done:
 - `,` / `.` restore selection + base + document into the active overlay.
 - Marks use `AnnotationPayload` (`shape`, `arrow`, `pencil`, `mosaic`, `text`); disk `type` discriminator ready for new tools.
 
-Next product work: marker / step / … add payload cases + drawing + hit-testing only.
+Next product work: marker / magnifier / … add payload cases + drawing + hit-testing only.
 
 ## Coordinate conventions
 
@@ -362,6 +362,8 @@ Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Itali
 
 Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
+Step: `.step(number:center:style:)` — click-to-place auto-increment; filled / outline / plain; size + color; move only; disk `stepStyle` + `number` + center point.
+
 ## Relationship to current MVP
 
 | Area | Status |
@@ -370,6 +372,6 @@ Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; size
 | Confirm | Bake + disk `SnipRecord` |
 | `,` / `.` | History playback |
 | Pin window | Flat image (no layer reopen) |
-| Mark model | `AnnotationPayload` (`shape`, `arrow`, `pencil`, `mosaic`, `text`) |
+| Mark model | `AnnotationPayload` (`shape`, `arrow`, `pencil`, `mosaic`, `text`, `step`) |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

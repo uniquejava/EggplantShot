@@ -279,6 +279,7 @@ final class SelectionOverlayNSView: NSView {
            !selected.isPencil,
            !selected.isMosaicStroke,
            !selected.isText,
+           !selected.isStep,
            selected.id != editingAnnotationID {
             if case .arrow(let start, let end, _, _) = selected.payload {
                 let s = CGPoint(x: start.x + origin.x, y: start.y + origin.y)
@@ -298,6 +299,13 @@ final class SelectionOverlayNSView: NSView {
                 let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
                 AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
             }
+        }
+
+        if let selected = selectedAnnotation,
+           selected.isStep,
+           selected.id != editingAnnotationID {
+            let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
+            drawStepSelectionOutline(in: r)
         }
 
         if let hid = hoveredTextID,
@@ -362,6 +370,20 @@ final class SelectionOverlayNSView: NSView {
             )
         ).setStroke()
         let path = NSBezierPath(rect: rect.insetBy(dx: w / 2, dy: w / 2))
+        path.lineWidth = w
+        let dash: [CGFloat] = [3, 2]
+        path.setLineDash(dash, count: dash.count, phase: 0)
+        path.stroke()
+    }
+
+    /// Snipaste step selection: dashed contrast square around the badge.
+    private func drawStepSelectionOutline(in rect: CGRect) {
+        let pad: CGFloat = 3
+        let frame = rect.insetBy(dx: -pad, dy: -pad)
+        let scale = window?.backingScaleFactor ?? 2
+        let w = 1 / max(scale, 1)
+        contrastChromeColor(around: CGPoint(x: frame.midX, y: frame.midY)).setStroke()
+        let path = NSBezierPath(rect: frame.insetBy(dx: w / 2, dy: w / 2))
         path.lineWidth = w
         let dash: [CGFloat] = [3, 2]
         path.setLineDash(dash, count: dash.count, phase: 0)

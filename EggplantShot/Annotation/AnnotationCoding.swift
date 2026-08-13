@@ -43,6 +43,10 @@ enum AnnotationCoding {
         var endCap: Int?
         /// Mosaic brush style (type == "mosaic").
         var mosaicStyle: MosaicStyleDTO?
+        /// Step / numbering style (type == "step").
+        var stepStyle: StepStyleDTO?
+        /// Step number (type == "step").
+        var number: Int?
     }
 
     struct MosaicStyleDTO: Codable {
@@ -50,6 +54,12 @@ enum AnnotationCoding {
         var intensity: Double
         /// Legacy tip shape (0/1); ignored on decode for style (geometry carries region kind).
         var brushKind: Int?
+    }
+
+    struct StepStyleDTO: Codable {
+        var kind: Int
+        var size: Double
+        var color: ColorDTO
     }
 
     struct PointDTO: Codable {
@@ -156,7 +166,9 @@ enum AnnotationCoding {
                 textStyle: nil,
                 startCap: nil,
                 endCap: nil,
-                mosaicStyle: nil
+                mosaicStyle: nil,
+                stepStyle: nil,
+                number: nil
             )
         case .arrow(let start, let end, let style, let caps):
             return MarkDTO(
@@ -170,7 +182,9 @@ enum AnnotationCoding {
                 textStyle: nil,
                 startCap: caps.start.rawValue,
                 endCap: caps.end.rawValue,
-                mosaicStyle: nil
+                mosaicStyle: nil,
+                stepStyle: nil,
+                number: nil
             )
         case .pencil(let points, let style):
             return MarkDTO(
@@ -184,7 +198,9 @@ enum AnnotationCoding {
                 textStyle: nil,
                 startCap: nil,
                 endCap: nil,
-                mosaicStyle: nil
+                mosaicStyle: nil,
+                stepStyle: nil,
+                number: nil
             )
         case .mosaic(let geometry, let style):
             switch geometry {
@@ -200,7 +216,9 @@ enum AnnotationCoding {
                     textStyle: nil,
                     startCap: nil,
                     endCap: nil,
-                    mosaicStyle: encode(style)
+                    mosaicStyle: encode(style),
+                    stepStyle: nil,
+                    number: nil
                 )
             case .region(let mode, let rect):
                 return MarkDTO(
@@ -214,7 +232,9 @@ enum AnnotationCoding {
                     textStyle: nil,
                     startCap: nil,
                     endCap: nil,
-                    mosaicStyle: encode(style)
+                    mosaicStyle: encode(style),
+                    stepStyle: nil,
+                    number: nil
                 )
             }
         case .text(let string, let rect, let style):
@@ -229,7 +249,25 @@ enum AnnotationCoding {
                 textStyle: encode(style),
                 startCap: nil,
                 endCap: nil,
-                mosaicStyle: nil
+                mosaicStyle: nil,
+                stepStyle: nil,
+                number: nil
+            )
+        case .step(let number, let center, let style):
+            return MarkDTO(
+                id: annotation.id.uuidString,
+                type: "step",
+                kind: nil,
+                rect: RectDTO(style.bounds(around: center)),
+                points: [PointDTO(center)],
+                string: nil,
+                style: nil,
+                textStyle: nil,
+                startCap: nil,
+                endCap: nil,
+                mosaicStyle: nil,
+                stepStyle: encode(style),
+                number: number
             )
         }
     }
@@ -307,6 +345,26 @@ enum AnnotationCoding {
                 id: id,
                 payload: .text(string: dto.string ?? "", rect: rect, style: decode(textDTO))
             )
+        case "step":
+            guard let stepDTO = dto.stepStyle else {
+                NSLog("SnipHistory: skipping step mark without stepStyle")
+                return nil
+            }
+            let center: CGPoint
+            if let points = dto.points, let first = points.first {
+                center = first.cgPoint
+            } else if let rect = dto.rect?.cgRect {
+                center = CGPoint(x: rect.midX, y: rect.midY)
+            } else {
+                NSLog("SnipHistory: skipping step mark without center")
+                return nil
+            }
+            return Annotation(
+                id: id,
+                number: dto.number ?? 1,
+                center: center,
+                stepStyle: decode(stepDTO)
+            )
         default:
             NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
             return nil
@@ -366,6 +424,24 @@ enum AnnotationCoding {
             isItalic: dto.isItalic,
             hasBackground: dto.hasBackground
         )
+    }
+
+    static func encode(_ style: StepStyle) -> StepStyleDTO {
+        StepStyleDTO(
+            kind: style.kind.rawValue,
+            size: Double(style.size),
+            color: encode(style.color)
+        )
+    }
+
+    static func decode(_ dto: StepStyleDTO) -> StepStyle {
+        var style = StepStyle(
+            kind: StepChromeKind(rawValue: dto.kind) ?? .filled,
+            size: CGFloat(dto.size),
+            color: decode(dto.color)
+        )
+        style.clamp()
+        return style
     }
 
     static func encode(_ color: NSColor) -> ColorDTO {

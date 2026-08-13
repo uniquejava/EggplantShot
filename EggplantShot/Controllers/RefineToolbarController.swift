@@ -20,6 +20,7 @@ final class RefineToolbarController: NSObject {
         case textStyleChanged(TextStyle)
         case mosaicStyleChanged(MosaicStyle)
         case mosaicDrawModeChanged(MosaicDrawMode)
+        case stepStyleChanged(StepStyle)
         case kindChanged(ShapeKind)
         case arrowCapsChanged(ArrowCaps)
         case ocr
@@ -33,6 +34,7 @@ final class RefineToolbarController: NSObject {
     private var textStyle: TextStyle
     private var mosaicStyle: MosaicStyle
     private var mosaicDrawMode: MosaicDrawMode
+    private var stepStyle: StepStyle
     private var tool: AnnotateTool
     private var kind: ShapeKind
     private var arrowCaps: ArrowCaps
@@ -43,6 +45,7 @@ final class RefineToolbarController: NSObject {
     private var pencilButton: NSButton!
     private var mosaicButton: NSButton!
     private var textButton: NSButton!
+    private var stepButton: NSButton!
     private var undoButton: NSButton!
     private var redoButton: NSButton!
     private var subToolbarContainer: NSView!
@@ -52,6 +55,8 @@ final class RefineToolbarController: NSObject {
     private var textOptionsRow: NSView!
     /// Mosaic options row (brush / kind / intensity).
     private var mosaicOptionsRow: NSView!
+    /// Step options row (chrome kind / size / palette).
+    private var stepOptionsRow: NSView!
     /// Shape-only chrome (fill + rect/oval). Hidden for pencil / arrow.
     private var shapeOnlyViews: [NSView] = []
     /// Divider after shape kind group; visible for shape/pencil, hidden for arrow.
@@ -80,6 +85,9 @@ final class RefineToolbarController: NSObject {
     private var mosaicIntensityPreview: MosaicIntensityPreviewView!
     private var mosaicIntensitySlider: MosaicIntensitySlider!
     private var mosaicIntensityLabel: NSTextField!
+    private var stepKindButtons: [NSButton] = []
+    private var stepSizeButton: NSButton!
+    private var stepColorPreview: NSView!
 
     init(
         primaryAction: SelectionOverlayController.ConfirmAction,
@@ -90,6 +98,7 @@ final class RefineToolbarController: NSObject {
         initialTextStyle: TextStyle,
         initialMosaicStyle: MosaicStyle = .default,
         initialMosaicDrawMode: MosaicDrawMode = .rectangle,
+        initialStepStyle: StepStyle = .default,
         onEvent: @escaping (Event) -> Void
     ) {
         self.onEvent = onEvent
@@ -97,6 +106,7 @@ final class RefineToolbarController: NSObject {
         self.textStyle = initialTextStyle
         self.mosaicStyle = initialMosaicStyle
         self.mosaicDrawMode = initialMosaicDrawMode
+        self.stepStyle = initialStepStyle
         self.tool = initialTool
         self.kind = initialKind
         self.arrowCaps = initialArrowCaps
@@ -133,9 +143,11 @@ final class RefineToolbarController: NSObject {
         strokeOptionsRow = buildSubToolbar()
         textOptionsRow = buildTextSubToolbar()
         mosaicOptionsRow = buildMosaicSubToolbar()
+        stepOptionsRow = buildStepSubToolbar()
         optionsStack.addArrangedSubview(strokeOptionsRow)
         optionsStack.addArrangedSubview(textOptionsRow)
         optionsStack.addArrangedSubview(mosaicOptionsRow)
+        optionsStack.addArrangedSubview(stepOptionsRow)
         embed(optionsStack, in: optionsCard)
         subToolbarContainer = optionsCard
         subToolbarContainer.isHidden = (initialTool == .none)
@@ -197,6 +209,12 @@ final class RefineToolbarController: NSObject {
             enabled: true,
             action: #selector(textTapped)
         )
+        stepButton = iconButton(
+            image: stepToolIcon(),
+            tooltip: "Step",
+            enabled: true,
+            action: #selector(stepTapped)
+        )
 
         let annotateViews: [NSView] = [
             shapeButton,
@@ -205,7 +223,7 @@ final class RefineToolbarController: NSObject {
             iconButton(systemName: "paintbrush.pointed", tooltip: "Marker", enabled: false, action: nil),
             mosaicButton,
             textButton,
-            iconButton(systemName: "1.circle", tooltip: "Step", enabled: false, action: nil),
+            stepButton,
             iconButton(systemName: "magnifyingglass", tooltip: "Magnifier", enabled: false, action: nil),
             iconButton(systemName: "eraser", tooltip: "Eraser", enabled: false, action: nil),
         ]
@@ -615,6 +633,99 @@ final class RefineToolbarController: NSObject {
         return stack
     }
 
+    private func buildStepSubToolbar() -> NSView {
+        let stack = NSStackView(views: [])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+
+        stepKindButtons = StepChromeKind.allCases.map { kind in
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.setButtonType(.momentaryChange)
+            button.imagePosition = .imageOnly
+            button.toolTip = stepKindTooltip(kind)
+            button.target = self
+            button.action = #selector(stepKindTapped(_:))
+            button.tag = kind.rawValue
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 24),
+                button.heightAnchor.constraint(equalToConstant: 24),
+            ])
+            button.image = stepChromeIcon(kind: kind, selected: false)
+            return button
+        }
+        for button in stepKindButtons {
+            stack.addArrangedSubview(button)
+        }
+        stack.addArrangedSubview(miniDivider())
+
+        stepSizeButton = NSButton(frame: .zero)
+        stepSizeButton.bezelStyle = .inline
+        stepSizeButton.isBordered = false
+        stepSizeButton.setButtonType(.momentaryChange)
+        stepSizeButton.toolTip = "Size"
+        stepSizeButton.target = self
+        stepSizeButton.action = #selector(stepSizeTapped(_:))
+        stepSizeButton.translatesAutoresizingMaskIntoConstraints = false
+        stepSizeButton.wantsLayer = true
+        stepSizeButton.layer?.cornerRadius = 4
+        stepSizeButton.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1).cgColor
+        stepSizeButton.layer?.borderWidth = 1
+        stepSizeButton.layer?.borderColor = NSColor(calibratedWhite: 0.78, alpha: 1).cgColor
+        stepSizeButton.font = NSFont.systemFont(ofSize: 11)
+        NSLayoutConstraint.activate([
+            stepSizeButton.widthAnchor.constraint(equalToConstant: 44),
+            stepSizeButton.heightAnchor.constraint(equalToConstant: 22),
+        ])
+        stack.addArrangedSubview(stepSizeButton)
+        stack.addArrangedSubview(miniDivider())
+
+        let preview = NSView(frame: .zero)
+        preview.wantsLayer = true
+        preview.layer?.cornerRadius = 3
+        preview.layer?.borderWidth = 1
+        preview.layer?.borderColor = NSColor(calibratedWhite: 0.35, alpha: 1).cgColor
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            preview.widthAnchor.constraint(equalToConstant: 24),
+            preview.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        stepColorPreview = preview
+        stack.addArrangedSubview(preview)
+
+        let swatchGrid = NSStackView(views: [])
+        swatchGrid.orientation = .vertical
+        swatchGrid.spacing = 2
+        swatchGrid.alignment = .leading
+
+        let allSwatches = PaletteColor.allCases
+        let columns = 10
+        for rowStart in stride(from: 0, to: allSwatches.count, by: columns) {
+            let row = NSStackView(views: [])
+            row.orientation = .horizontal
+            row.spacing = 2
+            let end = min(rowStart + columns, allSwatches.count)
+            for swatch in allSwatches[rowStart..<end] {
+                let control = PaletteSwatchControl(swatch: swatch) { [weak self] picked in
+                    guard let self else { return }
+                    self.stepStyle.color = picked.color
+                    self.refreshSelectionChrome()
+                    self.onEvent(.stepStyleChanged(self.stepStyle))
+                }
+                row.addArrangedSubview(control)
+            }
+            swatchGrid.addArrangedSubview(row)
+        }
+        stack.addArrangedSubview(swatchGrid)
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
+
     private func textStyleToggleButton(title: String, tooltip: String, action: Selector) -> NSButton {
         let button = NSButton(frame: .zero)
         button.bezelStyle = .inline
@@ -654,21 +765,25 @@ final class RefineToolbarController: NSObject {
         tintSelected(pencilButton, selected: tool == .pencil)
         tintSelected(mosaicButton, selected: tool == .mosaic)
         tintSelected(textButton, selected: tool == .text)
+        tintSelected(stepButton, selected: tool == .step)
         colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
         textColorPreview.layer?.backgroundColor = textStyle.color.cgColor
+        stepColorPreview.layer?.backgroundColor = stepStyle.color.cgColor
 
         let isText = (tool == .text)
         let isMosaic = (tool == .mosaic)
-        strokeOptionsRow.isHidden = isText || isMosaic
+        let isStep = (tool == .step)
+        strokeOptionsRow.isHidden = isText || isMosaic || isStep
         textOptionsRow.isHidden = !isText
         mosaicOptionsRow.isHidden = !isMosaic
+        stepOptionsRow.isHidden = !isStep
 
         let isArrow = (tool == .arrow)
         let shapeExtrasVisible = (tool == .rectangle)
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
-        afterKindDivider.isHidden = isArrow || isText || isMosaic
+        afterKindDivider.isHidden = isArrow || isText || isMosaic || isStep
         for view in arrowOnlyViews {
             view.isHidden = !isArrow
         }
@@ -710,6 +825,7 @@ final class RefineToolbarController: NSObject {
         textSizeButton.title = sizeLabel
 
         refreshMosaicChrome()
+        refreshStepChrome()
     }
 
     private func refreshMosaicChrome() {
@@ -730,6 +846,17 @@ final class RefineToolbarController: NSObject {
         mosaicIntensityLabel.stringValue = "\(Int(mosaicStyle.intensity.rounded()))"
         mosaicIntensityPreview.intensity = mosaicStyle.intensity
         mosaicIntensityPreview.needsDisplay = true
+    }
+
+    private func refreshStepChrome() {
+        for button in stepKindButtons {
+            let kind = StepChromeKind(rawValue: button.tag) ?? .filled
+            let on = kind == stepStyle.kind
+            button.image = stepChromeIcon(kind: kind, selected: on)
+            tintSelected(button, selected: on)
+        }
+        stepSizeButton.title = "\(Int(stepStyle.size.rounded()))"
+        stepColorPreview.layer?.backgroundColor = stepStyle.color.cgColor
     }
 
     private func tintSelected(_ button: NSButton, selected: Bool) {
@@ -993,6 +1120,84 @@ final class RefineToolbarController: NSObject {
         return image
     }
 
+    /// Filled disk + punched “1” — same chrome as the first step-style option.
+    private func stepToolIcon() -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let oval = rect.insetBy(dx: 1.5, dy: 1.5)
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: oval).fill()
+            // Cut out the digit so tintSelected keeps a white-looking “1”.
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return true }
+            ctx.saveGState()
+            ctx.setBlendMode(.destinationOut)
+            AnnotationDrawing.drawCenteredDigit(
+                "1",
+                at: CGPoint(x: rect.midX, y: rect.midY),
+                font: NSFont.systemFont(ofSize: 9, weight: .bold),
+                color: .black
+            )
+            ctx.restoreGState()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    private func stepKindTooltip(_ kind: StepChromeKind) -> String {
+        switch kind {
+        case .filled: return "Filled"
+        case .outline: return "Outline"
+        case .plain: return "Number only"
+        }
+    }
+
+    /// Sub-toolbar chrome previews (filled / outline / plain).
+    private func stepChromeIcon(kind: StepChromeKind, selected: Bool) -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let accent = selected ? NSColor.systemBlue : NSColor(calibratedWhite: 0.28, alpha: 1)
+        return NSImage(size: size, flipped: false) { rect in
+            let d: CGFloat = 14
+            let disk = CGRect(
+                x: (rect.width - d) / 2,
+                y: (rect.height - d) / 2,
+                width: d,
+                height: d
+            )
+            let digitColor: NSColor
+            switch kind {
+            case .filled:
+                accent.setFill()
+                NSBezierPath(ovalIn: disk).fill()
+                digitColor = .white
+            case .outline:
+                let path = NSBezierPath(ovalIn: disk.insetBy(dx: 0.75, dy: 0.75))
+                path.lineWidth = 1.5
+                accent.setStroke()
+                path.stroke()
+                digitColor = accent
+            case .plain:
+                // Dashed rounded plate so a bare “1” still reads as a tool chip.
+                let plate = disk.insetBy(dx: 0.5, dy: 0.5)
+                let frame = NSBezierPath(roundedRect: plate, xRadius: 3, yRadius: 3)
+                frame.lineWidth = 1.25
+                let dash: [CGFloat] = [2.5, 1.5]
+                frame.setLineDash(dash, count: dash.count, phase: 0)
+                accent.setStroke()
+                frame.stroke()
+                digitColor = accent
+            }
+            let font = NSFont.systemFont(ofSize: 9, weight: .bold)
+            AnnotationDrawing.drawCenteredDigit(
+                "1",
+                at: CGPoint(x: rect.midX, y: rect.midY),
+                font: font,
+                color: digitColor
+            )
+            return true
+        }
+    }
+
     private func mosaicBrushKindIcon(kind: MosaicDrawMode) -> NSImage {
         let size = NSSize(width: 16, height: 16)
         let image = NSImage(size: size, flipped: false) { rect in
@@ -1076,6 +1281,10 @@ final class RefineToolbarController: NSObject {
         selectTool(tool == .text ? .none : .text)
     }
 
+    @objc private func stepTapped() {
+        selectTool(tool == .step ? .none : .step)
+    }
+
     private func selectTool(_ next: AnnotateTool) {
         tool = next
         if next == .pencil || next == .arrow {
@@ -1156,6 +1365,35 @@ final class RefineToolbarController: NSObject {
         textStyle.fontSize = CGFloat(sender.tag)
         refreshSelectionChrome()
         onEvent(.textStyleChanged(textStyle))
+    }
+
+    @objc private func stepKindTapped(_ sender: NSButton) {
+        stepStyle.kind = StepChromeKind(rawValue: sender.tag) ?? .filled
+        refreshSelectionChrome()
+        onEvent(.stepStyleChanged(stepStyle))
+    }
+
+    @objc private func stepSizeTapped(_ sender: NSButton) {
+        let menu = NSMenu()
+        for size in StepStyle.sizeChoices {
+            let item = NSMenuItem(
+                title: "\(Int(size))",
+                action: #selector(stepSizeMenuPicked(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = Int(size)
+            item.state = (abs(size - stepStyle.size) < 0.5) ? .on : .off
+            menu.addItem(item)
+        }
+        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
+        menu.popUp(positioning: nil, at: point, in: sender)
+    }
+
+    @objc private func stepSizeMenuPicked(_ sender: NSMenuItem) {
+        stepStyle.size = StepStyle.nearestSize(CGFloat(sender.tag))
+        refreshSelectionChrome()
+        onEvent(.stepStyleChanged(stepStyle))
     }
 
     @objc private func strokeTapped(_ sender: NSButton) {
@@ -1422,6 +1660,13 @@ final class RefineToolbarController: NSObject {
 
     func syncMosaicDrawMode(_ mode: MosaicDrawMode) {
         mosaicDrawMode = mode
+        refreshSelectionChrome()
+    }
+
+    func syncStepStyle(_ style: StepStyle) {
+        var next = style
+        next.clamp()
+        self.stepStyle = next
         refreshSelectionChrome()
     }
 

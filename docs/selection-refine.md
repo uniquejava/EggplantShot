@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate live: **shape**, **arrow**, **pencil**, **mosaic**, **text** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Marker / step / magnifier remain stubs.
+Annotate live: **shape**, **arrow**, **pencil**, **mosaic**, **text**, **step** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Marker / magnifier remain stubs.
 
 Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
@@ -34,9 +34,9 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ## Toolbar layout (Snipaste parity)
 
 ```
-[ shape† | arrow | pen† | marker | mosaic¶ | T‡ | step | magnifier | eraser ]
+[ shape† | arrow | pen† | marker | mosaic¶ | T‡ | step§ | magnifier | eraser ]
 | [ OCR | undo | redo ]
-| [ ✕ | pin | save | copy | …§ ]
+| [ ✕ | pin | save | copy | … ]
 
 † Shape: [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ preview 24 + palette 2×10 ]
   Arrow: [ thin | med | thick ] | [ start ▾≈32 | body ▾ | end ▾≈32 | caps Switch ] | [ preview 24 + palette 2×10 ]
@@ -44,7 +44,8 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
   Palette chips ≈11pt, gap ≈2pt
 ¶ Mosaic: [ · | ·· | ··· ] | [ rect region | oval region ] | [ preview | slider 3…24 | value ]  (sizes 14/18/24 freehand; rect/oval = area blur)
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
-§ More stub / disabled
+§ Step: [ filled | outline | plain ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
+  More stub / disabled
 ```
 
 ## Tools
@@ -96,6 +97,15 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Dismisses the overlay immediately after crop (no result UI). On non-empty text → pasteboard + short bubble-pop sound (`Resources/ocr-success.wav`). Empty / failure → silent, clipboard unchanged.
 - Does **not** append to snip history.
 
+### Step
+
+- Sub-toolbar: **filled** / **outline** / **plain** chrome | size ▾ | color grid.
+- Click anywhere on freeze → place next number (`max(existing)+1`, or `1`); auto-select; drag to move. No resize handles; no inline edit.
+- Styles: filled = color disk + white digit; outline = color ring + color digit; plain = color digit only.
+- Size levels map to diameter (`10 + size×3.2` pt). Style / size / color apply to selection (or next place).
+- Edit chrome: dashed contrast square around the badge (Snipaste).
+- Disk: `type: "step"` with `number`, `points: [center]`, `stepStyle` (`kind` / `size` / `color`).
+
 ## Pin chrome
 
 - Soft glow (`CALayer.shadowRadius`); no hard border. Active blue / inactive gray.
@@ -118,6 +128,6 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
 - [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
-- [x] Shape / arrow / pencil / mosaic / text: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] Shape / arrow / pencil / mosaic / text / step: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] OCR: recognize selection → clipboard + bubble-pop; dismiss overlay; no result UI
 - [x] Undo / redo; debug build succeeds

@@ -9,6 +9,7 @@ enum AnnotateTool: Equatable {
     case pencil
     case mosaic
     case text
+    case step
 }
 
 /// Mosaic / blur draw mode: freehand stroke, or drag a blurred region.
@@ -451,6 +452,98 @@ enum TextAnnotationPrefs {
     }
 }
 
+/// Chrome around a step / sequence number (Snipaste: filled · outline · plain).
+enum StepChromeKind: Int, CaseIterable {
+    /// Solid color disk, white digit.
+    case filled = 0
+    /// Color ring + color digit (transparent fill).
+    case outline = 1
+    /// Color digit only (no circle).
+    case plain = 2
+}
+
+/// Style for the step / numbering annotate tool.
+struct StepStyle: Equatable {
+    var kind: StepChromeKind
+    /// Discrete size level (toolbar dropdown); maps to diameter via `diameter`.
+    var size: CGFloat
+    var color: NSColor
+
+    static let `default` = StepStyle(
+        kind: .filled,
+        size: 4,
+        color: PaletteColor.cyan.color
+    )
+
+    /// Snipaste-like size picker values.
+    static let sizeChoices: [CGFloat] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 24]
+
+    /// Visual diameter in points (size 5 ≈ 26pt).
+    var diameter: CGFloat {
+        10 + Self.nearestSize(size) * 3.2
+    }
+
+    /// Bold digit font sized to fit inside the disk / plain glyph.
+    func makeFont() -> NSFont {
+        let pointSize = max(diameter * 0.55, 8)
+        return NSFont.systemFont(ofSize: pointSize, weight: .bold)
+    }
+
+    mutating func clamp() {
+        size = Self.nearestSize(size)
+    }
+
+    static func nearestSize(_ value: CGFloat) -> CGFloat {
+        sizeChoices.min(by: { abs($0 - value) < abs($1 - value) }) ?? 5
+    }
+
+    /// Axis-aligned bounds centered on `center` (selection-local).
+    func bounds(around center: CGPoint) -> CGRect {
+        let d = diameter
+        switch kind {
+        case .filled, .outline:
+            return CGRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d)
+        case .plain:
+            // Slightly tighter than the disk so the digit isn’t oversized empty chrome.
+            let w = d * 0.72
+            let h = d * 0.85
+            return CGRect(x: center.x - w / 2, y: center.y - h / 2, width: w, height: h)
+        }
+    }
+}
+
+/// Persisted last-used step annotate prefs.
+enum StepAnnotationPrefs {
+    private static let kindKey = "annotate.step.kind"
+    private static let sizeKey = "annotate.step.size"
+    private static let colorKey = "annotate.step.palette"
+
+    static func load() -> StepStyle {
+        let defaults = UserDefaults.standard
+        var style = StepStyle.default
+        if defaults.object(forKey: kindKey) != nil {
+            style.kind = StepChromeKind(rawValue: defaults.integer(forKey: kindKey)) ?? .filled
+        }
+        if defaults.object(forKey: sizeKey) != nil {
+            style.size = StepStyle.nearestSize(CGFloat(defaults.double(forKey: sizeKey)))
+        }
+        if defaults.object(forKey: colorKey) != nil,
+           let swatch = PaletteColor(rawValue: defaults.integer(forKey: colorKey)) {
+            style.color = swatch.color
+        }
+        return style
+    }
+
+    static func save(_ style: StepStyle) {
+        var clamped = style
+        clamped.clamp()
+        let defaults = UserDefaults.standard
+        defaults.set(clamped.kind.rawValue, forKey: kindKey)
+        defaults.set(Double(clamped.size), forKey: sizeKey)
+        defaults.set(PaletteColor.matching(clamped.color).rawValue, forKey: colorKey)
+    }
+}
+
 /// Extensible mark payload. New tools add cases here without forking history/store.
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
@@ -458,6 +551,8 @@ enum AnnotationPayload: Equatable {
     case pencil(points: [CGPoint], style: AnnotationStyle)
     case mosaic(MosaicGeometry, style: MosaicStyle)
     case text(string: String, rect: CGRect, style: TextStyle)
+    /// Sequence number centered at `center` (selection-local).
+    case step(number: Int, center: CGPoint, style: StepStyle)
 }
 
 /// One drawable mark. Geometry is in **selection-local** Cocoa points
@@ -519,6 +614,14 @@ struct Annotation: Equatable {
         self.payload = .text(string: string, rect: rect, style: style)
     }
 
+    /// Convenience for the step / numbering tool.
+    init(id: UUID = UUID(), number: Int, center: CGPoint, stepStyle: StepStyle) {
+        self.id = id
+        var style = stepStyle
+        style.clamp()
+        self.payload = .step(number: max(number, 1), center: center, style: style)
+    }
+
     /// Disk / tooling type discriminator (`"shape"`, `"pencil"`, `"mosaic"`, `"text"`, …).
     var typeName: String {
         switch payload {
@@ -527,18 +630,19 @@ struct Annotation: Equatable {
         case .pencil: return "pencil"
         case .mosaic: return "mosaic"
         case .text: return "text"
+        case .step: return "step"
         }
     }
 
     // MARK: Shared accessors
 
-    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / text marks.
+    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / text / step marks.
     var style: AnnotationStyle {
         get {
             switch payload {
             case .shape(_, _, let style), .arrow(_, _, let style, _), .pencil(_, let style):
                 return style
-            case .mosaic, .text:
+            case .mosaic, .text, .step:
                 return .default
             }
         }
@@ -550,7 +654,7 @@ struct Annotation: Equatable {
                 payload = .arrow(start: start, end: end, style: newValue, caps: caps)
             case .pencil(let points, _):
                 payload = .pencil(points: points, style: newValue)
-            case .mosaic, .text:
+            case .mosaic, .text, .step:
                 break
             }
         }
@@ -601,6 +705,41 @@ struct Annotation: Equatable {
         }
     }
 
+    var stepStyle: StepStyle {
+        get {
+            if case .step(_, _, let style) = payload { return style }
+            return .default
+        }
+        set {
+            guard case .step(let number, let center, _) = payload else { return }
+            var style = newValue
+            style.clamp()
+            payload = .step(number: number, center: center, style: style)
+        }
+    }
+
+    var stepNumber: Int {
+        get {
+            if case .step(let number, _, _) = payload { return number }
+            return 0
+        }
+        set {
+            guard case .step(_, let center, let style) = payload else { return }
+            payload = .step(number: max(newValue, 1), center: center, style: style)
+        }
+    }
+
+    var stepCenter: CGPoint {
+        get {
+            if case .step(_, let center, _) = payload { return center }
+            return .zero
+        }
+        set {
+            guard case .step(let number, _, let style) = payload else { return }
+            payload = .step(number: number, center: newValue, style: style)
+        }
+    }
+
     /// Axis-aligned bounds in selection-local space.
     var boundingRect: CGRect {
         switch payload {
@@ -619,6 +758,8 @@ struct Annotation: Equatable {
             case .region(_, let rect):
                 return rect
             }
+        case .step(_, let center, let style):
+            return style.bounds(around: center)
         }
     }
 
@@ -647,6 +788,11 @@ struct Annotation: Equatable {
         return false
     }
 
+    var isStep: Bool {
+        if case .step = payload { return true }
+        return false
+    }
+
     // MARK: Shape accessors (no-ops for non-shape payloads)
 
     var kind: ShapeKind {
@@ -668,7 +814,7 @@ struct Annotation: Equatable {
                 payload = .shape(kind, rect: newValue, style: style)
             case .text(let string, _, let style):
                 payload = .text(string: string, rect: newValue, style: style)
-            case .arrow, .pencil, .mosaic:
+            case .arrow, .pencil, .mosaic, .step:
                 break
             }
         }
@@ -773,6 +919,12 @@ struct Annotation: Equatable {
                 rect: rect.offsetBy(dx: delta.width, dy: delta.height),
                 style: style
             )
+        case .step(let number, let center, let style):
+            payload = .step(
+                number: number,
+                center: CGPoint(x: center.x + delta.width, y: center.y + delta.height),
+                style: style
+            )
         }
     }
 
@@ -826,6 +978,13 @@ struct Annotation: Equatable {
             }
         case .text(let string, _, let style):
             payload = .text(string: string, rect: newBounds, style: style)
+        case .step(let number, _, let style):
+            // Steps keep aspect via center; resize chrome is disabled — keep center of newBounds.
+            payload = .step(
+                number: number,
+                center: CGPoint(x: newBounds.midX, y: newBounds.midY),
+                style: style
+            )
         }
     }
 
@@ -928,6 +1087,9 @@ enum AnnotationDrawing {
         case .text(let string, let localRect, let style):
             let rect = localRect.offsetBy(dx: origin.x, dy: origin.y)
             drawText(string: string, style: style, in: rect)
+        case .step(let number, let center, let style):
+            let c = CGPoint(x: center.x + origin.x, y: center.y + origin.y)
+            drawStep(number: number, center: c, style: style)
         }
     }
 
@@ -936,7 +1098,7 @@ enum AnnotationDrawing {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
-        case .arrow, .pencil, .mosaic, .text:
+        case .arrow, .pencil, .mosaic, .text, .step:
             draw(annotation, origin: .zero)
         }
     }
@@ -1826,6 +1988,48 @@ enum AnnotationDrawing {
         attributed.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading])
     }
 
+    private static func drawStep(number: Int, center: CGPoint, style: StepStyle) {
+        let d = style.diameter
+        let disk = CGRect(x: center.x - d / 2, y: center.y - d / 2, width: d, height: d)
+        let label = "\(number)"
+        let font = style.makeFont()
+        let digitColor: NSColor
+        switch style.kind {
+        case .filled:
+            style.color.setFill()
+            NSBezierPath(ovalIn: disk).fill()
+            digitColor = .white
+        case .outline:
+            let stroke = max(d * 0.08, 1.25)
+            let path = NSBezierPath(ovalIn: disk.insetBy(dx: stroke / 2, dy: stroke / 2))
+            path.lineWidth = stroke
+            style.color.setStroke()
+            path.stroke()
+            digitColor = style.color
+        case .plain:
+            digitColor = style.color
+        }
+
+        drawCenteredDigit(label, at: center, font: font, color: digitColor)
+    }
+
+    /// Digits look sunk if centered by `size(withAttributes:)` — that box includes empty
+    /// descender space. Align the optical mid (`baseline + capHeight/2`) to `center`.
+    static func drawCenteredDigit(_ label: String, at center: CGPoint, font: NSFont, color: NSColor) {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color,
+        ]
+        let size = (label as NSString).size(withAttributes: attrs)
+        // `draw(at:)` origin = bottom-left of the typographic box;
+        // baseline = origin.y - descender (descender is negative).
+        let origin = CGPoint(
+            x: center.x - size.width / 2,
+            y: center.y - font.capHeight / 2 + font.descender
+        )
+        (label as NSString).draw(at: origin, withAttributes: attrs)
+    }
+
     private static func applyStroke(_ style: AnnotationStyle, to path: NSBezierPath) {
         path.lineWidth = style.strokeWidth
         path.lineJoinStyle = .miter
@@ -2011,6 +2215,7 @@ enum AnnotationCursors {
 
     private static var pencilCrosshairCache: (key: UInt64, cursor: NSCursor)?
     private static var mosaicCrosshairCache: (key: Int, cursor: NSCursor)?
+    private static var stepBadgeCache: (key: String, cursor: NSCursor)?
 
     /// Brush outline matching actual diameter (no artificial cap that hid size changes).
     static func mosaicCrosshair(brushWidth: CGFloat) -> NSCursor {
@@ -2034,6 +2239,44 @@ enum AnnotationCursors {
         }
         let cursor = NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
         mosaicCrosshairCache = (key, cursor)
+        return cursor
+    }
+
+    /// Live step badge under the pointer (next number + current style) — click to stamp.
+    static func stepBadge(number: Int, style: StepStyle) -> NSCursor {
+        var style = style
+        style.clamp()
+        let number = max(number, 1)
+        let rgb = style.color.usingColorSpace(.genericRGB) ?? style.color
+        let key = String(
+            format: "%d-%d-%.1f-%.3f-%.3f-%.3f-%.2f",
+            number,
+            style.kind.rawValue,
+            style.size,
+            rgb.redComponent,
+            rgb.greenComponent,
+            rgb.blueComponent,
+            rgb.alphaComponent
+        )
+        if let cache = stepBadgeCache, cache.key == key {
+            return cache.cursor
+        }
+        let d = style.diameter
+        let pad: CGFloat = 2
+        let size = ceil(d + pad * 2)
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { _ in
+            AnnotationDrawing.draw(
+                Annotation(
+                    number: number,
+                    center: CGPoint(x: size / 2, y: size / 2),
+                    stepStyle: style
+                ),
+                origin: .zero
+            )
+            return true
+        }
+        let cursor = NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
+        stepBadgeCache = (key, cursor)
         return cursor
     }
 

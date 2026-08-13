@@ -83,10 +83,11 @@ final class SelectionOverlayController {
     private var textStyle: TextStyle = TextAnnotationPrefs.load()
     private var mosaicStyle: MosaicStyle = AnnotationPrefs.loadMosaicStyle()
     private var mosaicDrawMode: MosaicDrawMode = AnnotationPrefs.loadMosaicDrawMode()
+    private var stepStyle: StepStyle = StepAnnotationPrefs.load()
     private let annotationHistory = AnnotationHistory()
     /// In-progress mark while dragging (selection-local geometry).
     private var draftAnnotation: Annotation?
-    /// Text click-to-place / click-to-edit (resolved on mouse-up if drag is tiny).
+    /// Text / step click-to-place (resolved on mouse-up if drag is tiny).
     private var textClickCandidate: (id: UUID?, start: CGPoint, wasSelected: Bool)?
     /// Snipaste hover outline while the pointer is over a text mark.
     private var hoveredTextID: UUID?
@@ -301,6 +302,7 @@ final class SelectionOverlayController {
         textStyle = TextAnnotationPrefs.load()
         mosaicStyle = AnnotationPrefs.loadMosaicStyle()
         mosaicDrawMode = AnnotationPrefs.loadMosaicDrawMode()
+        stepStyle = StepAnnotationPrefs.load()
         annotationHistory.reset()
         draftAnnotation = nil
         textClickCandidate = nil
@@ -622,7 +624,7 @@ final class SelectionOverlayController {
                 updateHighlight(showHandles: true)
 
             case .draw:
-                if annotateTool == .text {
+                if annotateTool == .text || annotateTool == .step {
                     // Click-to-place resolved on mouse-up (ignore tiny drag).
                     textClickCandidate = (nil, point, false)
                     updateHighlight(showHandles: true)
@@ -825,7 +827,7 @@ final class SelectionOverlayController {
                 break
             }
 
-            // Text: click-to-place / click-to-re-edit when drag stayed tiny.
+            // Text / step: click-to-place / click-to-re-edit when drag stayed tiny.
             if let candidate = textClickCandidate {
                 textClickCandidate = nil
                 let moved = hypot(point.x - candidate.start.x, point.y - candidate.start.y)
@@ -836,6 +838,8 @@ final class SelectionOverlayController {
                         }
                     } else if annotateTool == .text {
                         placeAndEditText(at: candidate.start)
+                    } else if annotateTool == .step {
+                        placeStep(at: candidate.start)
                     }
                 }
             }
@@ -904,6 +908,11 @@ final class SelectionOverlayController {
             toolbar?.syncTextStyle(textStyle)
             return
         }
+        if annotation.isStep {
+            stepStyle = annotation.stepStyle
+            toolbar?.syncStepStyle(stepStyle)
+            return
+        }
         if annotation.isMosaic {
             mosaicStyle = annotation.mosaicStyle
             if case .region(let mode, _) = annotation.mosaicGeometry {
@@ -954,6 +963,8 @@ final class SelectionOverlayController {
                 anchor: .leadingMidY
             )
             return Annotation(string: "", rect: rect, style: textStyle)
+        case .step:
+            return Annotation(number: nextStepNumber(), center: local, stepStyle: stepStyle)
         case .rectangle, .none:
             return Annotation(
                 kind: annotationKind,
@@ -1072,6 +1083,10 @@ final class SelectionOverlayController {
             // Text is click-to-place; drag-draw is unused.
             return makeDraftAnnotation(startingAt: start)
 
+        case .step:
+            // Step is click-to-place; drag-draw is unused.
+            return makeDraftAnnotation(startingAt: start)
+
         case .rectangle, .none:
             var draft = CGRect(
                 x: min(start.x, end.x),
@@ -1104,7 +1119,7 @@ final class SelectionOverlayController {
             case .region(_, let rect):
                 return rect.width >= minAnnotation && rect.height >= minAnnotation
             }
-        case .text:
+        case .text, .step:
             return true
         }
     }
@@ -1135,6 +1150,8 @@ final class SelectionOverlayController {
             }
         case .text(let string, let rect, let style):
             return Annotation(string: string, rect: rect, style: style)
+        case .step(let number, let center, let style):
+            return Annotation(number: number, center: center, stepStyle: style)
         }
     }
 
@@ -1212,6 +1229,13 @@ final class SelectionOverlayController {
                     if annotateTool == .text {
                         return .interior(id: ann.id)
                     }
+                    return .border(id: ann.id)
+                }
+                continue
+            }
+            if ann.isStep {
+                // Entire badge is a move target (no interior edit / no resize).
+                if toGlobal(ann.boundingRect).insetBy(dx: -2, dy: -2).contains(point) {
                     return .border(id: ann.id)
                 }
                 continue
@@ -1327,15 +1351,16 @@ final class SelectionOverlayController {
                 tolerance: tolerance
             )
 
-        case .text:
+        case .text, .step:
             return false
         }
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
-        // Pencil / freehand mosaic / text / arrow: no 8-handle resize chrome.
+        // Pencil / freehand mosaic / text / arrow / step: no 8-handle resize chrome.
         // Mosaic region (rect/oval) uses the same 8 handles as shapes.
-        guard !annotation.isPencil, !annotation.isMosaicStroke, !annotation.isText, !annotation.isArrow else {
+        guard !annotation.isPencil, !annotation.isMosaicStroke, !annotation.isText,
+              !annotation.isArrow, !annotation.isStep else {
             return nil
         }
         let global = toGlobal(annotation.boundingRect)
@@ -1463,6 +1488,8 @@ final class SelectionOverlayController {
                 }
             } else if annotateTool == .text {
                 NSCursor.iBeam.set()
+            } else if annotateTool == .step {
+                AnnotationCursors.stepBadge(number: nextStepNumber(), style: stepStyle).set()
             } else {
                 AnnotationCursors.whitePlus.set()
             }
@@ -1514,7 +1541,7 @@ final class SelectionOverlayController {
         AnnotationPrefs.save(style: next, kind: annotationKind)
         if let id = selectedAnnotationID,
            let selected = annotations.first(where: { $0.id == id }),
-           !selected.isText {
+           !selected.isText, !selected.isMosaic, !selected.isStep {
             var applied = next
             // Don't push fill onto a pencil / arrow mark.
             if selected.isPencil || selected.isArrow {
@@ -1570,6 +1597,24 @@ final class SelectionOverlayController {
     private func applyMosaicDrawMode(_ mode: MosaicDrawMode) {
         mosaicDrawMode = mode
         AnnotationPrefs.saveMosaicDrawMode(mode)
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
+
+    private func applyStepStyle(_ style: StepStyle) {
+        var next = style
+        next.clamp()
+        stepStyle = next
+        StepAnnotationPrefs.save(next)
+        if let id = selectedAnnotationID,
+           let selected = annotations.first(where: { $0.id == id }),
+           selected.isStep {
+            annotationHistory.commit { doc in
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+                doc.marks[idx].stepStyle = next
+            }
+            updateHighlight(showHandles: true)
+            refreshHistoryChrome()
+        }
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
@@ -1634,6 +1679,27 @@ final class SelectionOverlayController {
     }
 
     // MARK: - Text editing
+
+    /// Next sequence number: max existing step + 1 (or 1 if none).
+    private func nextStepNumber() -> Int {
+        let maxNumber = annotations.compactMap { ann -> Int? in
+            guard ann.isStep else { return nil }
+            return ann.stepNumber
+        }.max() ?? 0
+        return maxNumber + 1
+    }
+
+    private func placeStep(at globalPoint: CGPoint) {
+        let local = toLocal(globalPoint)
+        let ann = Annotation(number: nextStepNumber(), center: local, stepStyle: stepStyle)
+        annotationHistory.commit { doc in
+            doc.marks.append(ann)
+            doc.selectedID = ann.id
+        }
+        refreshHistoryChrome()
+        updateHighlight(showHandles: true)
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
 
     private func placeAndEditText(at globalPoint: CGPoint) {
         // Selection-local, may be outside the blue rect (Snipaste free placement).
@@ -2197,7 +2263,8 @@ final class SelectionOverlayController {
             initialArrowCaps: arrowCaps,
             initialTextStyle: textStyle,
             initialMosaicStyle: mosaicStyle,
-            initialMosaicDrawMode: mosaicDrawMode
+            initialMosaicDrawMode: mosaicDrawMode,
+            initialStepStyle: stepStyle
         ) { [weak self] event in
             guard let self else { return }
             switch event {
@@ -2220,6 +2287,8 @@ final class SelectionOverlayController {
                 self.applyMosaicStyle(style)
             case .mosaicDrawModeChanged(let mode):
                 self.applyMosaicDrawMode(mode)
+            case .stepStyleChanged(let style):
+                self.applyStepStyle(style)
             case .kindChanged(let kind):
                 self.applyKind(kind)
             case .arrowCapsChanged(let caps):
