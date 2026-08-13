@@ -897,6 +897,7 @@ private final class RefineToolbarController: NSObject {
     private var fillButton: NSButton!
     private var rectKindButton: NSButton!
     private var ovalKindButton: NSButton!
+    private var lineStyleButton: NSButton!
     private var colorButtons: [NSButton] = []
     private var colorPreview: NSView!
 
@@ -1082,7 +1083,30 @@ private final class RefineToolbarController: NSObject {
 
         stack.addArrangedSubview(miniDivider())
 
-        // Color preview + swatches
+        // Item 7: border line style dropdown (Snipaste 5 patterns).
+        lineStyleButton = NSButton(frame: .zero)
+        lineStyleButton.bezelStyle = .inline
+        lineStyleButton.isBordered = false
+        lineStyleButton.setButtonType(.momentaryChange)
+        lineStyleButton.imagePosition = .imageOnly
+        lineStyleButton.toolTip = "Border style"
+        lineStyleButton.target = self
+        lineStyleButton.action = #selector(lineStyleTapped(_:))
+        lineStyleButton.translatesAutoresizingMaskIntoConstraints = false
+        lineStyleButton.wantsLayer = true
+        lineStyleButton.layer?.cornerRadius = 10
+        lineStyleButton.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1).cgColor
+        lineStyleButton.layer?.borderWidth = 1
+        lineStyleButton.layer?.borderColor = NSColor(calibratedWhite: 0.78, alpha: 1).cgColor
+        NSLayoutConstraint.activate([
+            lineStyleButton.widthAnchor.constraint(equalToConstant: 56),
+            lineStyleButton.heightAnchor.constraint(equalToConstant: 22),
+        ])
+        stack.addArrangedSubview(lineStyleButton)
+
+        stack.addArrangedSubview(miniDivider())
+
+        // Color preview + 2-row swatch grid
         let preview = NSView(frame: .zero)
         preview.wantsLayer = true
         preview.layer?.cornerRadius = 3
@@ -1096,32 +1120,44 @@ private final class RefineToolbarController: NSObject {
         colorPreview = preview
         stack.addArrangedSubview(preview)
 
-        let swatchStack = NSStackView(views: [])
-        swatchStack.orientation = .horizontal
-        swatchStack.spacing = 2
-        colorButtons = PaletteColor.allCases.map { swatch in
-            let button = NSButton(frame: .zero)
-            button.bezelStyle = .inline
-            button.isBordered = false
-            button.setButtonType(.momentaryChange)
-            button.imagePosition = .imageOnly
-            button.target = self
-            button.action = #selector(colorTapped(_:))
-            button.tag = swatch.rawValue
-            button.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                button.widthAnchor.constraint(equalToConstant: 14),
-                button.heightAnchor.constraint(equalToConstant: 14),
-            ])
-            button.wantsLayer = true
-            button.layer?.backgroundColor = swatch.color.cgColor
-            button.layer?.cornerRadius = 2
-            button.layer?.borderWidth = 1
-            button.layer?.borderColor = NSColor(calibratedWhite: 0.7, alpha: 1).cgColor
-            return button
+        let swatchGrid = NSStackView(views: [])
+        swatchGrid.orientation = .vertical
+        swatchGrid.spacing = 2
+        swatchGrid.alignment = .leading
+
+        let allSwatches = PaletteColor.allCases
+        let columns = 8
+        colorButtons = []
+        for rowStart in stride(from: 0, to: allSwatches.count, by: columns) {
+            let row = NSStackView(views: [])
+            row.orientation = .horizontal
+            row.spacing = 2
+            let end = min(rowStart + columns, allSwatches.count)
+            for swatch in allSwatches[rowStart..<end] {
+                let button = NSButton(frame: .zero)
+                button.bezelStyle = .inline
+                button.isBordered = false
+                button.setButtonType(.momentaryChange)
+                button.imagePosition = .imageOnly
+                button.target = self
+                button.action = #selector(colorTapped(_:))
+                button.tag = swatch.rawValue
+                button.translatesAutoresizingMaskIntoConstraints = false
+                NSLayoutConstraint.activate([
+                    button.widthAnchor.constraint(equalToConstant: 11),
+                    button.heightAnchor.constraint(equalToConstant: 11),
+                ])
+                button.wantsLayer = true
+                button.layer?.backgroundColor = swatch.color.cgColor
+                button.layer?.cornerRadius = 1.5
+                button.layer?.borderWidth = 1
+                button.layer?.borderColor = NSColor(calibratedWhite: 0.7, alpha: 1).cgColor
+                colorButtons.append(button)
+                row.addArrangedSubview(button)
+            }
+            swatchGrid.addArrangedSubview(row)
         }
-        for b in colorButtons { swatchStack.addArrangedSubview(b) }
-        stack.addArrangedSubview(swatchStack)
+        stack.addArrangedSubview(swatchGrid)
 
         // Top hairline above sub-toolbar
         let wrap = NSView(frame: .zero)
@@ -1170,6 +1206,10 @@ private final class RefineToolbarController: NSObject {
 
         tintSelected(rectKindButton, selected: kind == .rectangle)
         tintSelected(ovalKindButton, selected: kind == .ellipse)
+
+        lineStyleButton.image = lineStylePreviewImage(style.lineStyle)
+        lineStyleButton.isEnabled = !style.isFilled
+        lineStyleButton.alphaValue = style.isFilled ? 0.45 : 1
     }
 
     private func tintSelected(_ button: NSButton, selected: Bool) {
@@ -1208,6 +1248,44 @@ private final class RefineToolbarController: NSObject {
             color.setFill()
             let r = CGRect(x: 3, y: 3, width: 12, height: 12)
             NSBezierPath(roundedRect: r, xRadius: 1.5, yRadius: 1.5).fill()
+            return true
+        }
+    }
+
+    /// Compact pill preview: line pattern + chevron (Snipaste-like).
+    private func lineStylePreviewImage(_ lineStyle: StrokeLineStyle) -> NSImage {
+        let size = CGSize(width: 52, height: 18)
+        let previewStroke: CGFloat = 2
+        return NSImage(size: size, flipped: false) { rect in
+            let ink = NSColor(calibratedWhite: 0.28, alpha: 1)
+            ink.setStroke()
+
+            let y = rect.midY
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: 6, y: y))
+            line.line(to: NSPoint(x: 34, y: y))
+            line.lineWidth = previewStroke
+            line.lineCapStyle = .butt
+            let dash = lineStyle.dashPattern(strokeWidth: previewStroke)
+            if !dash.isEmpty {
+                line.setLineDash(dash, count: dash.count, phase: 0)
+            }
+            line.stroke()
+
+            // Up / down chevrons on the trailing edge.
+            let chevronX: CGFloat = 42
+            let chevron = NSBezierPath()
+            chevron.move(to: NSPoint(x: chevronX, y: y + 4.5))
+            chevron.line(to: NSPoint(x: chevronX + 3.5, y: y + 1.5))
+            chevron.line(to: NSPoint(x: chevronX + 7, y: y + 4.5))
+            chevron.move(to: NSPoint(x: chevronX, y: y - 4.5))
+            chevron.line(to: NSPoint(x: chevronX + 3.5, y: y - 1.5))
+            chevron.line(to: NSPoint(x: chevronX + 7, y: y - 4.5))
+            chevron.lineWidth = 1.2
+            chevron.lineCapStyle = .round
+            chevron.lineJoinStyle = .round
+            ink.setStroke()
+            chevron.stroke()
             return true
         }
     }
@@ -1320,6 +1398,53 @@ private final class RefineToolbarController: NSObject {
         kind = .ellipse
         refreshSelectionChrome()
         onEvent(.kindChanged(kind))
+    }
+
+    @objc private func lineStyleTapped(_ sender: NSButton) {
+        guard !style.isFilled else { return }
+        let menu = NSMenu()
+        for option in StrokeLineStyle.allCases {
+            let item = NSMenuItem(
+                title: "",
+                action: #selector(lineStyleMenuPicked(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = option.rawValue
+            item.state = (option == style.lineStyle) ? .on : .off
+            item.toolTip = option.toolTip
+            item.image = lineStyleMenuImage(option)
+            menu.addItem(item)
+        }
+        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
+        menu.popUp(positioning: nil, at: point, in: sender)
+    }
+
+    @objc private func lineStyleMenuPicked(_ sender: NSMenuItem) {
+        guard let option = StrokeLineStyle(rawValue: sender.tag) else { return }
+        style.lineStyle = option
+        style.isFilled = false
+        refreshSelectionChrome()
+        onEvent(.styleChanged(style))
+    }
+
+    private func lineStyleMenuImage(_ lineStyle: StrokeLineStyle) -> NSImage {
+        let size = CGSize(width: 56, height: 14)
+        let previewStroke: CGFloat = 2
+        return NSImage(size: size, flipped: false) { rect in
+            NSColor(calibratedWhite: 0.25, alpha: 1).setStroke()
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: 2, y: rect.midY))
+            line.line(to: NSPoint(x: rect.width - 2, y: rect.midY))
+            line.lineWidth = previewStroke
+            line.lineCapStyle = .butt
+            let dash = lineStyle.dashPattern(strokeWidth: previewStroke)
+            if !dash.isEmpty {
+                line.setLineDash(dash, count: dash.count, phase: 0)
+            }
+            line.stroke()
+            return true
+        }
     }
 
     @objc private func colorTapped(_ sender: NSButton) {

@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate: **shape tool** (rect / ellipse, stroke widths / fill / color, draw / move / resize). Other annotate / OCR / undo remain stubs.
+Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / color, draw / move / resize). Other annotate / OCR / undo remain stubs.
 
 ## Behaviour
 
@@ -13,14 +13,16 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / color, draw / m
    - **Toolbar**: white rounded-rect (≈6pt corner radius), icon row with dividers, **right-aligned** to the selection, **≈4pt** gap below (flips above if near screen bottom).
 3. Working toolbar actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** (+ Esc / Return for primary).
 4. **Shape annotate** (main toolbar rectangle button):
-   - Opens a sub-toolbar with two radio groups, then the color palette:
+   - Opens a sub-toolbar with stroke / shape / line-style / color:
      1. **Stroke / fill** (items 1–4): thin / medium / thick outline, or fill. Mutually exclusive.
      2. **Shape kind** (items 5–6): rectangle ↔ ellipse. Mutually exclusive. Hold **Shift** while dragging for square / circle.
+     3. **Border style** (item 7): dropdown — Snipaste 5 patterns: solid / long dash / short dash / long–short / long–short–short (disabled while fill is selected).
+     4. **Color**: current swatch preview + 2×8 preset grid.
    - Pointer zones on an existing mark:
      - **Interior** → white “＋” cursor; drag draws a new shape (nesting allowed); does **not** move.
      - **Border** → open-hand cursor; drag moves the mark.
      - **Handles** → resize cursors; drag adjusts size.
-   - Stroke / fill / color / kind changes apply to the selected mark (or the next one drawn).
+   - Stroke / fill / line style / color / kind changes apply to the selected mark (or the next one drawn).
    - Delete removes the selected mark.
    - Confirm composites annotations onto the capture before pin / copy / save.
 5. On confirm → tear down overlay → capture final rect → (optional annotate bake) → pin, clipboard, or save panel.
@@ -48,7 +50,7 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / color, draw / m
 | [ ✕ | pin | save | copy | …‡ ]
 
 † Shape tool expands a sub-row when active:
-  [ thin | med | thick | fill ] | [ rect | oval ] | [ palette ]
+  [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ palette 2×8 ]
 ‡ More is stub / disabled today.
 ```
 
@@ -69,5 +71,5 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / color, draw / m
 - [x] Confirm tears down overlay, then captures final rect
 - [x] ⌘F1 entry; primary action matches mode
 - [x] Pin soft glow + drag
-- [x] Shape tool: stroke/fill + rect/oval switches, draw / move / resize, bake into capture
+- [x] Shape tool: stroke/fill + rect/oval + line-style dropdown + 2×8 palette; draw / move / resize, bake into capture
 - [x] Debug build succeeds

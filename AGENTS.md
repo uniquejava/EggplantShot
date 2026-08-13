@@ -24,6 +24,22 @@ Bundle ID: `click.yinsb.EggplantShot`
 Team: `DEVELOPMENT_TEAM = M5J7K9HVYB`  
 Xcode: `EggplantShot.xcodeproj` (scheme `EggplantShot`)
 
+## Build / run (agents — always)
+
+**Always** pass `-derivedDataPath build` so the binary lands at a stable path. Without it, `xcodebuild` writes to `~/Library/Developer/Xcode/DerivedData/...` and `open build/...` launches a **stale** app.
+
+Menu-bar apps also keep the old process on a second `open` — **kill first**.
+
+```bash
+killall EggplantShot 2>/dev/null
+xcodebuild -project EggplantShot.xcodeproj -scheme EggplantShot \
+  -configuration Debug -derivedDataPath build build
+open build/Build/Products/Debug/EggplantShot.app
+```
+
+Do **not** open the DerivedData path, and do **not** skip `-derivedDataPath build`.
+`build/` is gitignored.
+
 ## Layout
 
 ```

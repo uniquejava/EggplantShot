@@ -12,18 +12,22 @@ struct AnnotationStyle: Equatable {
     var strokeColor: NSColor
     /// Filled body (sub-toolbar item 4). Mutually exclusive with stroke-width picks.
     var isFilled: Bool
+    /// Outline dash pattern (sub-toolbar item 7). Ignored when filled.
+    var lineStyle: StrokeLineStyle
 
     static let `default` = AnnotationStyle(
         strokeWidth: StrokeWidthOption.medium.points,
         strokeColor: PaletteColor.sky.color,
-        isFilled: false
+        isFilled: false,
+        lineStyle: .solid
     )
 }
 
-/// Persisted last-used annotate prefs (stroke / fill / color / shape kind).
+/// Persisted last-used annotate prefs (stroke / fill / line style / color / shape kind).
 enum AnnotationPrefs {
     private static let strokeWidthKey = "annotate.strokeWidth"
     private static let isFilledKey = "annotate.isFilled"
+    private static let lineStyleKey = "annotate.lineStyle"
     private static let paletteKey = "annotate.palette"
     private static let kindKey = "annotate.kind"
 
@@ -34,6 +38,10 @@ enum AnnotationPrefs {
             style.strokeWidth = CGFloat(defaults.double(forKey: strokeWidthKey))
         }
         style.isFilled = defaults.bool(forKey: isFilledKey)
+        if defaults.object(forKey: lineStyleKey) != nil,
+           let line = StrokeLineStyle(rawValue: defaults.integer(forKey: lineStyleKey)) {
+            style.lineStyle = line
+        }
         if defaults.object(forKey: paletteKey) != nil,
            let swatch = PaletteColor(rawValue: defaults.integer(forKey: paletteKey)) {
             style.strokeColor = swatch.color
@@ -46,8 +54,51 @@ enum AnnotationPrefs {
         let defaults = UserDefaults.standard
         defaults.set(Double(style.strokeWidth), forKey: strokeWidthKey)
         defaults.set(style.isFilled, forKey: isFilledKey)
+        defaults.set(style.lineStyle.rawValue, forKey: lineStyleKey)
         defaults.set(PaletteColor.matching(style.strokeColor).rawValue, forKey: paletteKey)
         defaults.set(kind == .ellipse ? 1 : 0, forKey: kindKey)
+    }
+}
+
+/// Border outline pattern for stroke shapes (Snipaste 5 styles).
+enum StrokeLineStyle: Int, CaseIterable {
+    /// 1. Continuous solid stroke.
+    case solid
+    /// 2. Long rectangular dashes.
+    case longDash
+    /// 3. Short rectangular bars.
+    case shortDash
+    /// 4. Long–short alternating.
+    case longShort
+    /// 5. Long–short–short alternating.
+    case longShortShort
+
+    var toolTip: String {
+        switch self {
+        case .solid: return "Solid"
+        case .longDash: return "Long dash"
+        case .shortDash: return "Short dash"
+        case .longShort: return "Dash-dot"
+        case .longShortShort: return "Dash-dot-dot"
+        }
+    }
+
+    /// Dash pattern for `NSBezierPath.setLineDash` (empty = solid).
+    /// Lengths scale with stroke width so bars stay rectangular and readable.
+    func dashPattern(strokeWidth: CGFloat) -> [CGFloat] {
+        let w = max(strokeWidth, 1)
+        switch self {
+        case .solid:
+            return []
+        case .longDash:
+            return [w * 4.5, w * 2.2]
+        case .shortDash:
+            return [w * 1.35, w * 1.6]
+        case .longShort:
+            return [w * 4.5, w * 1.8, w * 1.35, w * 1.8]
+        case .longShortShort:
+            return [w * 4.5, w * 1.8, w * 1.35, w * 1.8, w * 1.35, w * 1.8]
+        }
     }
 }
 
@@ -79,7 +130,7 @@ enum StrokeWidthOption: Int, CaseIterable {
     }
 }
 
-/// Fixed Snipaste-like quick palette (4×4).
+/// Fixed Snipaste-like quick palette (2×8).
 enum PaletteColor: Int, CaseIterable {
     case white, black, red, orange
     case yellow, lime, green, teal
@@ -162,6 +213,14 @@ enum AnnotationDrawing {
         } else {
             path.lineWidth = annotation.style.strokeWidth
             path.lineJoinStyle = .miter
+            // Butt caps keep dash segments as rectangles (Snipaste-style).
+            path.lineCapStyle = .butt
+            let dash = annotation.style.lineStyle.dashPattern(strokeWidth: annotation.style.strokeWidth)
+            if dash.isEmpty {
+                path.setLineDash(nil, count: 0, phase: 0)
+            } else {
+                path.setLineDash(dash, count: dash.count, phase: 0)
+            }
             annotation.style.strokeColor.setStroke()
             path.stroke()
         }
