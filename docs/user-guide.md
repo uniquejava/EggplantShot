@@ -27,7 +27,7 @@ Menu bar → **Disable hotkeys** pauses global shortcuts (persisted).
 
 ## Pins
 
-Floating image above ordinary windows. Drag to move. **Esc** or double-click closes that pin only.
+Floating image above ordinary windows. Drag to move. Scroll wheel zooms ±10% (brief % badge in the top-left). **Esc** or double-click closes that pin only.
 
 ## Annotate (during refine)
 

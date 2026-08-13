@@ -140,6 +140,9 @@ private final class PinPanel: NSPanel {
         chrome.onCopy = { [weak self] in
             self?.copyImage()
         }
+        chrome.onScaleChange = { [weak self] scale in
+            self?.applyScale(scale)
+        }
         chrome.menuBuilder = { [weak self] in
             self?.makeContextMenu()
         }
@@ -235,6 +238,21 @@ private final class PinPanel: NSPanel {
     @objc private func closePin() {
         onClose(itemID)
     }
+
+    /// Resize the panel around its center so the pin stays put while zooming.
+    private func applyScale(_ scale: CGFloat) {
+        let pad = Self.chromePadding
+        let imageSize = CGSize(
+            width: max(image.size.width * scale, 1),
+            height: max(image.size.height * scale, 1)
+        )
+        let newSize = CGSize(width: imageSize.width + pad * 2, height: imageSize.height + pad * 2)
+        var frame = self.frame
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        frame.size = newSize
+        frame.origin = CGPoint(x: center.x - newSize.width / 2, y: center.y - newSize.height / 2)
+        setFrame(frame, display: true)
+    }
 }
 
 /// Image + Snipaste-style outer glow (CSS `box-shadow: 0 0 blur color` — no hard border).
@@ -243,10 +261,21 @@ private final class PinChromeView: NSView {
     var onEscape: (() -> Void)?
     var onMouseDown: (() -> Void)?
     var onCopy: (() -> Void)?
+    var onScaleChange: ((CGFloat) -> Void)?
     var menuBuilder: (() -> NSMenu?)?
     var shadowEnabled = true
 
     private let imageView: NSImageView
+    private let zoomLabel: NSTextField
+    private var scale: CGFloat = 1.0
+    private var scrollAccum: CGFloat = 0
+    private var hideZoomWorkItem: DispatchWorkItem?
+
+    private static let zoomStep: CGFloat = 0.1
+    private static let minScale: CGFloat = 0.1
+    private static let maxScale: CGFloat = 10.0
+    private static let zoomBadgeDuration: TimeInterval = 0.6
+    private static let preciseScrollThreshold: CGFloat = 12
 
     /// ≈ CSS `box-shadow: 0 0 12px rgb(51,140,255)`
     private let activeGlow = NSColor(calibratedRed: 0.20, green: 0.55, blue: 1.0, alpha: 1)
@@ -261,14 +290,31 @@ private final class PinChromeView: NSView {
         imageView.wantsLayer = true
         imageView.layer?.masksToBounds = false
 
+        zoomLabel = NSTextField(labelWithString: "100%")
+        zoomLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        zoomLabel.textColor = .white
+        zoomLabel.backgroundColor = NSColor.black.withAlphaComponent(0.55)
+        zoomLabel.drawsBackground = true
+        zoomLabel.isBezeled = false
+        zoomLabel.isEditable = false
+        zoomLabel.isSelectable = false
+        zoomLabel.alignment = .center
+        zoomLabel.wantsLayer = true
+        zoomLabel.layer?.cornerRadius = 4
+        zoomLabel.layer?.masksToBounds = true
+        zoomLabel.alphaValue = 0
+        zoomLabel.isHidden = true
+
         super.init(frame: frame)
         wantsLayer = true
         layer?.masksToBounds = false
         layer?.backgroundColor = NSColor.clear.cgColor
 
         addSubview(imageView)
+        addSubview(zoomLabel)
         imageView.autoresizingMask = [.width, .height]
         applyGlow(active: true)
+        layoutZoomLabel()
     }
 
     @available(*, unavailable)
@@ -286,6 +332,22 @@ private final class PinChromeView: NSView {
         if let layer = imageView.layer {
             layer.shadowPath = CGPath(rect: layer.bounds, transform: nil)
         }
+        layoutZoomLabel()
+    }
+
+    private func layoutZoomLabel() {
+        let pad = PinPanel.chromePadding
+        let inset: CGFloat = 8
+        zoomLabel.sizeToFit()
+        var labelFrame = zoomLabel.frame
+        labelFrame.size.width += 10
+        labelFrame.size.height += 4
+        // Inner top-left of the bitmap (AppKit y-up).
+        labelFrame.origin = CGPoint(
+            x: pad + inset,
+            y: bounds.height - pad - inset - labelFrame.height
+        )
+        zoomLabel.frame = labelFrame
     }
 
     override func viewDidMoveToWindow() {
@@ -331,6 +393,64 @@ private final class PinChromeView: NSView {
             return
         }
         window?.performDrag(with: event)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        let dy = event.scrollingDeltaY
+        guard dy != 0 else {
+            super.scrollWheel(with: event)
+            return
+        }
+
+        if event.hasPreciseScrollingDeltas {
+            scrollAccum += dy
+            let threshold = Self.preciseScrollThreshold
+            while scrollAccum >= threshold {
+                scrollAccum -= threshold
+                applyZoomStep(+Self.zoomStep)
+            }
+            while scrollAccum <= -threshold {
+                scrollAccum += threshold
+                applyZoomStep(-Self.zoomStep)
+            }
+        } else if dy > 0 {
+            applyZoomStep(+Self.zoomStep)
+        } else {
+            applyZoomStep(-Self.zoomStep)
+        }
+    }
+
+    private func applyZoomStep(_ delta: CGFloat) {
+        let next = min(Self.maxScale, max(Self.minScale, scale + delta))
+        guard abs(next - scale) > 0.0001 else { return }
+        scale = (next * 10).rounded() / 10
+        onScaleChange?(scale)
+        showZoomBadge()
+    }
+
+    private func showZoomBadge() {
+        let percent = Int((scale * 100).rounded())
+        zoomLabel.stringValue = "\(percent)%"
+        zoomLabel.isHidden = false
+        layoutZoomLabel()
+
+        hideZoomWorkItem?.cancel()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.08
+            zoomLabel.animator().alphaValue = 1
+        }
+
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.2
+                self.zoomLabel.animator().alphaValue = 0
+            }, completionHandler: { [weak self] in
+                self?.zoomLabel.isHidden = true
+            })
+        }
+        hideZoomWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.zoomBadgeDuration, execute: work)
     }
 
     override func keyDown(with event: NSEvent) {

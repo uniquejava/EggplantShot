@@ -63,7 +63,7 @@ EggplantShot/
 
 ## Product behaviour to preserve
 
-1. **Snip (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; Esc / double-click closes).
+1. **Snip (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; scroll wheel ±10% zoom with brief top-left % badge; Esc / double-click closes).
 2. **Snip and copy (⌘F1)** → same refine UX; Return primary is Copy.
 3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
 4. **Esc** during drag/refine cancels the snip. Esc on a pin closes that pin only.
