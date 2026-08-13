@@ -105,6 +105,8 @@ final class SelectionOverlayController {
     private var hoveredTextID: UUID?
     /// Snipaste hover: dashed outline over a non-selected marker region.
     private var hoveredMarkerRegionID: UUID?
+    /// Magnifier lenses under the cursor (reveal nested source when decluttering).
+    private var hoveredMagnifierLensIDs: Set<UUID> = []
     /// Active inline text editor (selection-local mark id).
     private var editingTextID: UUID?
     private var textEditorHost: SelectionPanel?
@@ -327,6 +329,7 @@ final class SelectionOverlayController {
         textClickCandidate = nil
         hoveredTextID = nil
         hoveredMarkerRegionID = nil
+        hoveredMagnifierLensIDs = []
         discardTextEditor()
         historyCursor = nil
         playbackBaseImage = nil
@@ -350,6 +353,7 @@ final class SelectionOverlayController {
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
                 self.updateHoveredText(at: point)
                 self.updateHoveredMarkerRegion(at: point)
+                self.updateHoveredMagnifier(at: point)
                 self.updateOverlayCursor(at: point)
             }
             // Live-moving the editing chrome: swallow so NSTextView cannot steal the drag.
@@ -377,6 +381,7 @@ final class SelectionOverlayController {
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
                 self.updateHoveredText(at: point)
                 self.updateHoveredMarkerRegion(at: point)
+                self.updateHoveredMagnifier(at: point)
                 self.updateOverlayCursor(at: point)
             }
             if self.isDraggingEditingText {
@@ -1568,6 +1573,64 @@ final class SelectionOverlayController {
         updateHighlight(showHandles: true)
     }
 
+    /// Reveal nested magnifier source frames while the pointer is over their lens.
+    private func updateHoveredMagnifier(at point: CGPoint) {
+        let next = magnifierLensIDs(containing: point)
+        guard next != hoveredMagnifierLensIDs else { return }
+        hoveredMagnifierLensIDs = next
+        updateHighlight(showHandles: true)
+    }
+
+    private func magnifierLensIDs(containing point: CGPoint) -> Set<UUID> {
+        let mags = annotations.filter(\.isMagnifier)
+        guard mags.count >= 2 else { return [] }
+
+        var ids = Set<UUID>()
+        for ann in mags {
+            guard case .magnifier(let kind, let source, let lens, let style) = ann.payload else {
+                continue
+            }
+            // Only track hover for marks whose source would otherwise be hidden.
+            guard AnnotationDrawing.isMagnifierSourceNestedInLens(
+                kind: kind,
+                source: source,
+                lens: lens
+            ) else { continue }
+            let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
+            if magnifierShapeContains(
+                kind: kind,
+                globalRect: toGlobal(lens),
+                point: point,
+                tolerance: tolerance
+            ) {
+                ids.insert(ann.id)
+            }
+        }
+        return ids
+    }
+
+    /// Nested source borders hidden for declutter (≥2 magnifiers); hover / selection reveals them.
+    private func hiddenMagnifierSourceIDs() -> Set<UUID> {
+        var revealed = hoveredMagnifierLensIDs
+        if let selectedAnnotationID {
+            revealed.insert(selectedAnnotationID)
+        }
+        // Keep source visible while actively moving / resizing that magnifier.
+        switch dragKind {
+        case .annotateMove(let id, _, _, _), .annotateResize(let id, _, _, _, _):
+            revealed.insert(id)
+        default:
+            break
+        }
+        if let draft = draftAnnotation, draft.isMagnifier {
+            revealed.insert(draft.id)
+        }
+        return AnnotationDrawing.nestedMagnifierSourceIDsToHide(
+            in: annotations,
+            revealedIDs: revealed
+        )
+    }
+
     private func isOnAnnotationStroke(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
         switch annotation.payload {
         case .shape(let kind, let localRect, let style):
@@ -1721,7 +1784,8 @@ final class SelectionOverlayController {
             return nil
         }
         let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
-        let sourceHit = magnifierShapeContains(
+        let sourceHidden = hiddenMagnifierSourceIDs().contains(annotation.id)
+        let sourceHit = !sourceHidden && magnifierShapeContains(
             kind: kind,
             globalRect: toGlobal(source),
             point: point,
@@ -1926,6 +1990,8 @@ final class SelectionOverlayController {
             annotationStyle.isFilled = false
             AnnotationPrefs.save(style: annotationStyle, kind: annotationKind)
         }
+        // Magnifier tool always shows sources; leaving it may need hover recompute.
+        hoveredMagnifierLensIDs = magnifierLensIDs(containing: NSEvent.mouseLocation)
         toolbar?.setAnnotateTool(tool)
         updateHighlight(showHandles: true)
         repositionToolbar()
@@ -2647,6 +2713,7 @@ final class SelectionOverlayController {
         textClickCandidate = nil
         hoveredTextID = nil
         hoveredMarkerRegionID = nil
+        hoveredMagnifierLensIDs = []
         annotateTool = .none
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
@@ -2751,7 +2818,8 @@ final class SelectionOverlayController {
                 editingAnnotationID: editingTextID,
                 hoveredTextID: hoveredTextID,
                 hoveredMarkerRegionID: hoveredMarkerRegionID,
-                showSolidMarkerRegionBorder: movingOrResizingMarkerRegion
+                showSolidMarkerRegionBorder: movingOrResizingMarkerRegion,
+                hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs()
             )
         }
     }

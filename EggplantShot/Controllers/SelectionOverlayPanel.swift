@@ -75,7 +75,8 @@ final class SelectionPanel: NSPanel {
         editingAnnotationID: UUID?,
         hoveredTextID: UUID?,
         hoveredMarkerRegionID: UUID? = nil,
-        showSolidMarkerRegionBorder: Bool = false
+        showSolidMarkerRegionBorder: Bool = false,
+        hiddenMagnifierSourceIDs: Set<UUID> = []
     ) {
         let local: CGRect
         if globalRect.isNull {
@@ -100,6 +101,7 @@ final class SelectionPanel: NSPanel {
         overlayView.hoveredTextID = hoveredTextID
         overlayView.hoveredMarkerRegionID = hoveredMarkerRegionID
         overlayView.showSolidMarkerRegionBorder = showSolidMarkerRegionBorder
+        overlayView.hiddenMagnifierSourceIDs = hiddenMagnifierSourceIDs
         overlayView.needsDisplay = true
     }
 
@@ -132,6 +134,8 @@ final class SelectionOverlayNSView: NSView {
     var hoveredMarkerRegionID: UUID?
     /// While moving / resizing a selected marker region: solid hairline (Snipaste).
     var showSolidMarkerRegionBorder = false
+    /// Magnifier nested source frames to skip while decluttering (≥2 magnifiers, tool inactive).
+    var hiddenMagnifierSourceIDs: Set<UUID> = []
     var onCursorUpdate: (() -> Void)?
     var cursorMode: CursorMode = .selectingPlus {
         didSet {
@@ -283,7 +287,8 @@ final class SelectionOverlayNSView: NSView {
             marks,
             size: bounds.size,
             origin: origin,
-            sample: sample
+            sample: sample,
+            hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs
         ) {
             layer.draw(
                 in: bounds,

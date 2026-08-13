@@ -23,7 +23,11 @@ enum AnnotationCompositor {
                 annotations,
                 size: size,
                 origin: .zero,
-                sample: sample
+                sample: sample,
+                // Match idle overlay: hide nested sources when ≥2 magnifiers (no hover on bake).
+                hiddenMagnifierSourceIDs: AnnotationDrawing.nestedMagnifierSourceIDsToHide(
+                    in: annotations
+                )
             ) {
                 layer.draw(
                     in: CGRect(origin: .zero, size: size),

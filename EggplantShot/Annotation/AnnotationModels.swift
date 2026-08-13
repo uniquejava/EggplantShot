@@ -1763,7 +1763,8 @@ enum AnnotationDrawing {
                 lens: lens,
                 style: style,
                 drawOrigin: origin,
-                sample: sample
+                sample: sample,
+                showSourceBorder: true
             )
         }
     }
@@ -1781,11 +1782,13 @@ enum AnnotationDrawing {
     /// Renders marks onto a transparent layer so eraser `destinationOut` punches annotations only.
     /// Mosaic samples the freeze/base image directly. Magnifier with `includeAnnotations` samples
     /// freeze/base + marks drawn before that magnifier — **source-crop only** (not full-screen).
+    /// `hiddenMagnifierSourceIDs`: skip nested source borders (lens still draws) for declutter.
     static func renderMarksLayer(
         _ annotations: [Annotation],
         size: CGSize,
         origin: CGPoint = .zero,
-        sample: MosaicSampleContext? = nil
+        sample: MosaicSampleContext? = nil,
+        hiddenMagnifierSourceIDs: Set<UUID> = []
     ) -> NSImage? {
         guard size.width > 0, size.height > 0, !annotations.isEmpty else { return nil }
         return NSImage(size: size, flipped: false) { _ in
@@ -1800,7 +1803,8 @@ enum AnnotationDrawing {
                         style: style,
                         drawOrigin: origin,
                         sample: sample,
-                        priorMarks: style.includeAnnotations ? prior : []
+                        priorMarks: style.includeAnnotations ? prior : [],
+                        showSourceBorder: !hiddenMagnifierSourceIDs.contains(annotation.id)
                     )
                 } else {
                     draw(annotation, origin: origin, sample: sample)
@@ -1809,6 +1813,51 @@ enum AnnotationDrawing {
             }
             return true
         }
+    }
+
+    /// Nested source frames to hide when ≥2 magnifiers (declutter). `revealedIDs` stay visible.
+    static func nestedMagnifierSourceIDsToHide(
+        in annotations: [Annotation],
+        revealedIDs: Set<UUID> = []
+    ) -> Set<UUID> {
+        let mags = annotations.filter(\.isMagnifier)
+        guard mags.count >= 2 else { return [] }
+        var hidden = Set<UUID>()
+        for ann in mags {
+            guard case .magnifier(let kind, let source, let lens, _) = ann.payload else { continue }
+            guard isMagnifierSourceNestedInLens(kind: kind, source: source, lens: lens) else { continue }
+            if revealedIDs.contains(ann.id) { continue }
+            hidden.insert(ann.id)
+        }
+        return hidden
+    }
+
+    /// True when the source sample frame sits fully inside the lens (rect or oval).
+    static func isMagnifierSourceNestedInLens(kind: ShapeKind, source: CGRect, lens: CGRect) -> Bool {
+        guard source.width >= 1, source.height >= 1, lens.width >= 1, lens.height >= 1 else {
+            return false
+        }
+        switch kind {
+        case .rectangle:
+            return lens.contains(source)
+        case .ellipse:
+            let corners = [
+                CGPoint(x: source.minX, y: source.minY),
+                CGPoint(x: source.maxX, y: source.minY),
+                CGPoint(x: source.minX, y: source.maxY),
+                CGPoint(x: source.maxX, y: source.maxY),
+            ]
+            return corners.allSatisfy { ellipseContains(lens, point: $0) }
+        }
+    }
+
+    private static func ellipseContains(_ oval: CGRect, point: CGPoint) -> Bool {
+        let rx = oval.width / 2
+        let ry = oval.height / 2
+        guard rx > 0, ry > 0 else { return false }
+        let nx = (point.x - oval.midX) / rx
+        let ny = (point.y - oval.midY) / ry
+        return nx * nx + ny * ny <= 1
     }
 
     /// Draw prior marks into a small buffer (no nested include-annotations rebuild).
@@ -1827,7 +1876,8 @@ enum AnnotationDrawing {
                     style: style,
                     drawOrigin: origin,
                     sample: sample,
-                    priorMarks: []
+                    priorMarks: [],
+                    showSourceBorder: true
                 )
             } else {
                 draw(annotation, origin: origin, sample: sample)
@@ -2811,7 +2861,8 @@ enum AnnotationDrawing {
         style: MagnifierStyle,
         drawOrigin: CGPoint,
         sample: MosaicSampleContext?,
-        priorMarks: [Annotation] = []
+        priorMarks: [Annotation] = [],
+        showSourceBorder: Bool = true
     ) {
         let sourceDraw = source.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
         let lensDraw = lens.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
@@ -2853,15 +2904,18 @@ enum AnnotationDrawing {
 
         // Source border: dashed contrast hairline inside the lens (not palette);
         // thick palette stroke where source sits outside the lens.
-        let dashColor = magnifierSourceDashColor(sourceLocal: source, sample: sample)
-        drawMagnifierSourceBorder(
-            kind: kind,
-            source: sourceDraw,
-            lens: lensDraw,
-            style: style,
-            dashColor: dashColor,
-            solidColor: style.color
-        )
+        // Nested sources may be hidden (declutter) when ≥2 magnifiers and tool inactive.
+        if showSourceBorder {
+            let dashColor = magnifierSourceDashColor(sourceLocal: source, sample: sample)
+            drawMagnifierSourceBorder(
+                kind: kind,
+                source: sourceDraw,
+                lens: lensDraw,
+                style: style,
+                dashColor: dashColor,
+                solidColor: style.color
+            )
+        }
 
         style.color.setStroke()
         let inset = style.strokeWidth / 2
@@ -2870,7 +2924,8 @@ enum AnnotationDrawing {
         lensPath.lineJoinStyle = .miter
         lensPath.stroke()
 
-        if let (a, b) = magnifierConnectorEndpoints(source: sourceDraw, lens: lensDraw) {
+        if showSourceBorder,
+           let (a, b) = magnifierConnectorEndpoints(source: sourceDraw, lens: lensDraw) {
             let line = NSBezierPath()
             line.move(to: a)
             line.line(to: b)
