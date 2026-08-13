@@ -85,7 +85,7 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 ## Next (not done yet)
 
-→ Remaining annotate tools: magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + arrow + pencil + marker + mosaic + text + step + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
+→ Remaining annotate tools: magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + arrow + pencil + marker + mosaic + text + step + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
 
 → Pencil: if dense live sampling causes lag / history bloat, simplify polyline on mouse-up (keep live feel). See deferred note in `docs/selection-refine.md`.
 

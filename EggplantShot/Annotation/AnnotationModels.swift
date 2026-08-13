@@ -11,6 +11,7 @@ enum AnnotateTool: Equatable {
     case mosaic
     case text
     case step
+    case eraser
 }
 
 /// Mosaic / blur draw mode: freehand stroke, or drag a blurred region.
@@ -121,6 +122,25 @@ struct MarkerStyle: Equatable {
             blue: rgb.blueComponent,
             alpha: Self.whiteWashAlpha
         )
+    }
+}
+
+/// Eraser style (brush size for freehand). Geometry reuses `MosaicGeometry` / `MosaicDrawMode`.
+/// Punches holes in the annotation layer only (destinationOut) — never mutates `baseImage` (P4).
+struct EraserStyle: Equatable {
+    var brushWidth: CGFloat
+
+    static let brushPresets: [CGFloat] = MosaicStyle.brushPresets
+    static let brushPreviewDiameters: [CGFloat] = MosaicStyle.brushPreviewDiameters
+
+    static let `default` = EraserStyle(brushWidth: 18)
+
+    mutating func clamp() {
+        brushWidth = Self.nearestBrushPreset(brushWidth)
+    }
+
+    static func nearestBrushPreset(_ width: CGFloat) -> CGFloat {
+        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? 18
     }
 }
 
@@ -306,6 +326,8 @@ enum AnnotationPrefs {
     private static let markerBrushWidthKey = "annotate.marker.brushWidth"
     private static let markerDrawModeKey = "annotate.marker.drawMode"
     private static let markerColorKey = "annotate.marker.color"
+    private static let eraserBrushWidthKey = "annotate.eraser.brushWidth"
+    private static let eraserDrawModeKey = "annotate.eraser.drawMode"
 
     static func loadMarkerStyle() -> MarkerStyle {
         let defaults = UserDefaults.standard
@@ -340,6 +362,35 @@ enum AnnotationPrefs {
 
     static func saveMarkerDrawMode(_ mode: MosaicDrawMode) {
         UserDefaults.standard.set(mode.rawValue, forKey: markerDrawModeKey)
+    }
+
+    static func loadEraserStyle() -> EraserStyle {
+        let defaults = UserDefaults.standard
+        var style = EraserStyle.default
+        if defaults.object(forKey: eraserBrushWidthKey) != nil {
+            style.brushWidth = EraserStyle.nearestBrushPreset(
+                CGFloat(defaults.double(forKey: eraserBrushWidthKey))
+            )
+        }
+        return style
+    }
+
+    static func loadEraserDrawMode() -> MosaicDrawMode {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: eraserDrawModeKey) != nil {
+            return MosaicDrawMode(rawValue: defaults.integer(forKey: eraserDrawModeKey)) ?? .rectangle
+        }
+        return .rectangle
+    }
+
+    static func saveEraserStyle(_ style: EraserStyle) {
+        var clamped = style
+        clamped.clamp()
+        UserDefaults.standard.set(Double(clamped.brushWidth), forKey: eraserBrushWidthKey)
+    }
+
+    static func saveEraserDrawMode(_ mode: MosaicDrawMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: eraserDrawModeKey)
     }
 }
 
@@ -646,6 +697,7 @@ enum AnnotationPayload: Equatable {
     case pencil(points: [CGPoint], style: AnnotationStyle)
     case marker(MosaicGeometry, style: MarkerStyle)
     case mosaic(MosaicGeometry, style: MosaicStyle)
+    case eraser(MosaicGeometry, style: EraserStyle)
     case text(string: String, rect: CGRect, style: TextStyle)
     /// Sequence number centered at `center` (selection-local).
     case step(number: Int, center: CGPoint, style: StepStyle)
@@ -726,6 +778,28 @@ struct Annotation: Equatable {
         self.payload = .marker(.region(kind, rect: rect), style: style)
     }
 
+    /// Convenience for freehand eraser.
+    init(id: UUID = UUID(), eraserPoints points: [CGPoint], eraserStyle: EraserStyle) {
+        self.id = id
+        var style = eraserStyle
+        style.clamp()
+        self.payload = .eraser(.stroke(points: points), style: style)
+    }
+
+    /// Convenience for region eraser (rect / oval).
+    init(
+        id: UUID = UUID(),
+        eraserRegion mode: MosaicDrawMode,
+        rect: CGRect,
+        eraserStyle: EraserStyle
+    ) {
+        self.id = id
+        var style = eraserStyle
+        style.clamp()
+        let kind: MosaicDrawMode = (mode == .ellipse) ? .ellipse : .rectangle
+        self.payload = .eraser(.region(kind, rect: rect), style: style)
+    }
+
     /// Convenience for the text tool.
     init(id: UUID = UUID(), string: String, rect: CGRect, style: TextStyle) {
         self.id = id
@@ -748,6 +822,7 @@ struct Annotation: Equatable {
         case .pencil: return "pencil"
         case .marker: return "marker"
         case .mosaic: return "mosaic"
+        case .eraser: return "eraser"
         case .text: return "text"
         case .step: return "step"
         }
@@ -755,13 +830,13 @@ struct Annotation: Equatable {
 
     // MARK: Shared accessors
 
-    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / marker / text / step marks.
+    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / marker / eraser / text / step marks.
     var style: AnnotationStyle {
         get {
             switch payload {
             case .shape(_, _, let style), .arrow(_, _, let style, _), .pencil(_, let style):
                 return style
-            case .marker, .mosaic, .text, .step:
+            case .marker, .mosaic, .eraser, .text, .step:
                 return .default
             }
         }
@@ -773,7 +848,7 @@ struct Annotation: Equatable {
                 payload = .arrow(start: start, end: end, style: newValue, caps: caps)
             case .pencil(let points, _):
                 payload = .pencil(points: points, style: newValue)
-            case .marker, .mosaic, .text, .step:
+            case .marker, .mosaic, .eraser, .text, .step:
                 break
             }
         }
@@ -844,6 +919,40 @@ struct Annotation: Equatable {
 
     var isMarkerRegion: Bool {
         if case .marker(.region, _) = payload { return true }
+        return false
+    }
+
+    var eraserStyle: EraserStyle {
+        get {
+            if case .eraser(_, let style) = payload { return style }
+            return .default
+        }
+        set {
+            guard case .eraser(let geometry, _) = payload else { return }
+            var style = newValue
+            style.clamp()
+            payload = .eraser(geometry, style: style)
+        }
+    }
+
+    var eraserGeometry: MosaicGeometry? {
+        get {
+            if case .eraser(let geometry, _) = payload { return geometry }
+            return nil
+        }
+        set {
+            guard let newValue, case .eraser(_, let style) = payload else { return }
+            payload = .eraser(newValue, style: style)
+        }
+    }
+
+    var isEraserStroke: Bool {
+        if case .eraser(.stroke, _) = payload { return true }
+        return false
+    }
+
+    var isEraserRegion: Bool {
+        if case .eraser(.region, _) = payload { return true }
         return false
     }
 
@@ -920,6 +1029,15 @@ struct Annotation: Equatable {
             case .region(_, let rect):
                 return rect
             }
+        case .eraser(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let hull = Self.bounds(of: points)
+                let pad = style.brushWidth / 2
+                return hull.insetBy(dx: -pad, dy: -pad)
+            case .region(_, let rect):
+                return rect
+            }
         case .step(_, let center, let style):
             return style.bounds(around: center)
         }
@@ -947,6 +1065,11 @@ struct Annotation: Equatable {
 
     var isMosaic: Bool {
         if case .mosaic = payload { return true }
+        return false
+    }
+
+    var isEraser: Bool {
+        if case .eraser = payload { return true }
         return false
     }
 
@@ -981,7 +1104,7 @@ struct Annotation: Equatable {
                 payload = .shape(kind, rect: newValue, style: style)
             case .text(let string, _, let style):
                 payload = .text(string: string, rect: newValue, style: style)
-            case .arrow, .pencil, .marker, .mosaic, .step:
+            case .arrow, .pencil, .marker, .mosaic, .eraser, .step:
                 break
             }
         }
@@ -992,7 +1115,8 @@ struct Annotation: Equatable {
             switch payload {
             case .pencil(let points, _):
                 return points
-            case .marker(.stroke(let points), _), .mosaic(.stroke(let points), _):
+            case .marker(.stroke(let points), _), .mosaic(.stroke(let points), _),
+                 .eraser(.stroke(let points), _):
                 return points
             default:
                 return []
@@ -1006,6 +1130,8 @@ struct Annotation: Equatable {
                 payload = .marker(.stroke(points: newValue), style: style)
             case .mosaic(.stroke, let style):
                 payload = .mosaic(.stroke(points: newValue), style: style)
+            case .eraser(.stroke, let style):
+                payload = .eraser(.stroke(points: newValue), style: style)
             default:
                 break
             }
@@ -1093,6 +1219,17 @@ struct Annotation: Equatable {
                     style: style
                 )
             }
+        case .eraser(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
+                payload = .eraser(.stroke(points: moved), style: style)
+            case .region(let mode, let rect):
+                payload = .eraser(
+                    .region(mode, rect: rect.offsetBy(dx: delta.width, dy: delta.height)),
+                    style: style
+                )
+            }
         case .text(let string, let rect, let style):
             payload = .text(
                 string: string,
@@ -1174,6 +1311,25 @@ struct Annotation: Equatable {
                 payload = .mosaic(.stroke(points: mapped), style: style)
             case .region(let mode, _):
                 payload = .mosaic(.region(mode, rect: newBounds), style: style)
+            }
+        case .eraser(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let pad = style.brushWidth / 2
+                let oldHull = old.insetBy(dx: pad, dy: pad)
+                let newHull = newBounds.insetBy(dx: pad, dy: pad)
+                guard oldHull.width > 0, oldHull.height > 0 else { return }
+                let sx = newHull.width / oldHull.width
+                let sy = newHull.height / oldHull.height
+                let mapped = points.map { p in
+                    CGPoint(
+                        x: newHull.minX + (p.x - oldHull.minX) * sx,
+                        y: newHull.minY + (p.y - oldHull.minY) * sy
+                    )
+                }
+                payload = .eraser(.stroke(points: mapped), style: style)
+            case .region(let mode, _):
+                payload = .eraser(.region(mode, rect: newBounds), style: style)
             }
         case .text(let string, _, let style):
             payload = .text(string: string, rect: newBounds, style: style)
@@ -1285,6 +1441,8 @@ enum AnnotationDrawing {
             drawMarker(geometry: geometry, style: style, drawOrigin: origin)
         case .mosaic(let geometry, let style):
             drawMosaic(geometry: geometry, style: style, drawOrigin: origin, sample: sample)
+        case .eraser(let geometry, let style):
+            drawEraser(geometry: geometry, style: style, drawOrigin: origin)
         case .text(let string, let localRect, let style):
             let rect = localRect.offsetBy(dx: origin.x, dy: origin.y)
             drawText(string: string, style: style, in: rect)
@@ -1299,9 +1457,29 @@ enum AnnotationDrawing {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
-        case .arrow, .pencil, .marker, .mosaic, .text, .step:
+        case .arrow, .pencil, .marker, .mosaic, .eraser, .text, .step:
             draw(annotation, origin: .zero)
         }
+    }
+
+    /// Renders marks onto a transparent layer so eraser `destinationOut` punches annotations only.
+    static func renderMarksLayer(
+        _ annotations: [Annotation],
+        size: CGSize,
+        origin: CGPoint = .zero,
+        sample: MosaicSampleContext? = nil
+    ) -> NSImage? {
+        guard size.width > 0, size.height > 0, !annotations.isEmpty else { return nil }
+        return NSImage(size: size, flipped: false) { _ in
+            for annotation in annotations {
+                draw(annotation, origin: origin, sample: sample)
+            }
+            return true
+        }
+    }
+
+    static func containsEraser(_ annotations: [Annotation]) -> Bool {
+        annotations.contains { $0.isEraser }
     }
 
     private static func drawShape(kind: ShapeKind, style: AnnotationStyle, in rect: CGRect) {
@@ -2015,6 +2193,55 @@ enum AnnotationDrawing {
                 path = NSBezierPath(rect: rect)
             }
             fill.setFill()
+            path.fill()
+        }
+    }
+
+    /// Punches marks already drawn in the current context (annotation layer only).
+    /// Callers must composite marks off the base image so eraser never clears pixels.
+    private static func drawEraser(
+        geometry: MosaicGeometry,
+        style: EraserStyle,
+        drawOrigin: CGPoint
+    ) {
+        guard let ctx = NSGraphicsContext.current else { return }
+        ctx.saveGraphicsState()
+        defer { ctx.restoreGraphicsState() }
+
+        ctx.compositingOperation = .destinationOut
+        // Opaque source alpha drives destinationOut; color is irrelevant.
+        NSColor.black.set()
+
+        switch geometry {
+        case .stroke(let localPoints):
+            guard !localPoints.isEmpty else { return }
+            let brush = max(style.brushWidth, 1)
+            let offset = localPoints.map { CGPoint(x: $0.x + drawOrigin.x, y: $0.y + drawOrigin.y) }
+            guard let first = offset.first else { return }
+            let path = NSBezierPath()
+            if offset.count == 1 {
+                let r = brush / 2
+                path.appendOval(in: CGRect(x: first.x - r, y: first.y - r, width: r * 2, height: r * 2))
+                path.fill()
+                return
+            }
+            path.move(to: first)
+            for p in offset.dropFirst() { path.line(to: p) }
+            path.lineWidth = brush
+            path.lineJoinStyle = .round
+            path.lineCapStyle = .round
+            path.stroke()
+
+        case .region(let mode, let localRect):
+            guard localRect.width >= 1, localRect.height >= 1 else { return }
+            let rect = localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
+            let path: NSBezierPath
+            switch mode {
+            case .ellipse:
+                path = NSBezierPath(ovalIn: rect)
+            case .rectangle, .freehand:
+                path = NSBezierPath(rect: rect)
+            }
             path.fill()
         }
     }

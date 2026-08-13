@@ -18,8 +18,23 @@ enum AnnotationCompositor {
                 operation: .copy,
                 fraction: 1
             )
-            for annotation in annotations {
-                AnnotationDrawing.draw(annotation, origin: .zero, sample: sample)
+            // Marks (incl. eraser destinationOut) on a separate layer so base pixels stay intact.
+            if let layer = AnnotationDrawing.renderMarksLayer(
+                annotations,
+                size: size,
+                origin: .zero,
+                sample: sample
+            ) {
+                layer.draw(
+                    in: CGRect(origin: .zero, size: size),
+                    from: .zero,
+                    operation: .sourceOver,
+                    fraction: 1
+                )
+            } else {
+                for annotation in annotations {
+                    AnnotationDrawing.draw(annotation, origin: .zero, sample: sample)
+                }
             }
             return true
         }

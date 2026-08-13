@@ -22,6 +22,8 @@ final class RefineToolbarController: NSObject {
         case mosaicDrawModeChanged(MosaicDrawMode)
         case markerStyleChanged(MarkerStyle)
         case markerDrawModeChanged(MosaicDrawMode)
+        case eraserStyleChanged(EraserStyle)
+        case eraserDrawModeChanged(MosaicDrawMode)
         case stepStyleChanged(StepStyle)
         case kindChanged(ShapeKind)
         case arrowCapsChanged(ArrowCaps)
@@ -38,6 +40,8 @@ final class RefineToolbarController: NSObject {
     private var mosaicDrawMode: MosaicDrawMode
     private var markerStyle: MarkerStyle
     private var markerDrawMode: MosaicDrawMode
+    private var eraserStyle: EraserStyle
+    private var eraserDrawMode: MosaicDrawMode
     private var stepStyle: StepStyle
     private var tool: AnnotateTool
     private var kind: ShapeKind
@@ -51,6 +55,7 @@ final class RefineToolbarController: NSObject {
     private var mosaicButton: NSButton!
     private var textButton: NSButton!
     private var stepButton: NSButton!
+    private var eraserButton: NSButton!
     private var undoButton: NSButton!
     private var redoButton: NSButton!
     private var subToolbarContainer: NSView!
@@ -62,6 +67,8 @@ final class RefineToolbarController: NSObject {
     private var mosaicOptionsRow: NSView!
     /// Marker options row (brush / kind / color card).
     private var markerOptionsRow: NSView!
+    /// Eraser options row (brush / rect / oval — same first 5 as mosaic).
+    private var eraserOptionsRow: NSView!
     /// Step options row (chrome kind / size / palette).
     private var stepOptionsRow: NSView!
     /// Shape-only chrome (fill + rect/oval). Hidden for pencil / arrow.
@@ -96,6 +103,9 @@ final class RefineToolbarController: NSObject {
     private var markerRectButton: NSButton!
     private var markerOvalButton: NSButton!
     private var markerColorPreview: NSView!
+    private var eraserBrushButtons: [NSButton] = []
+    private var eraserRectButton: NSButton!
+    private var eraserOvalButton: NSButton!
     private var stepKindButtons: [NSButton] = []
     private var stepSizeButton: NSButton!
     private var stepColorPreview: NSView!
@@ -111,6 +121,8 @@ final class RefineToolbarController: NSObject {
         initialMosaicDrawMode: MosaicDrawMode = .rectangle,
         initialMarkerStyle: MarkerStyle = .default,
         initialMarkerDrawMode: MosaicDrawMode = .rectangle,
+        initialEraserStyle: EraserStyle = .default,
+        initialEraserDrawMode: MosaicDrawMode = .rectangle,
         initialStepStyle: StepStyle = .default,
         onEvent: @escaping (Event) -> Void
     ) {
@@ -121,6 +133,8 @@ final class RefineToolbarController: NSObject {
         self.mosaicDrawMode = initialMosaicDrawMode
         self.markerStyle = initialMarkerStyle
         self.markerDrawMode = initialMarkerDrawMode
+        self.eraserStyle = initialEraserStyle
+        self.eraserDrawMode = initialEraserDrawMode
         self.stepStyle = initialStepStyle
         self.tool = initialTool
         self.kind = initialKind
@@ -159,11 +173,13 @@ final class RefineToolbarController: NSObject {
         textOptionsRow = buildTextSubToolbar()
         mosaicOptionsRow = buildMosaicSubToolbar()
         markerOptionsRow = buildMarkerSubToolbar()
+        eraserOptionsRow = buildEraserSubToolbar()
         stepOptionsRow = buildStepSubToolbar()
         optionsStack.addArrangedSubview(strokeOptionsRow)
         optionsStack.addArrangedSubview(textOptionsRow)
         optionsStack.addArrangedSubview(markerOptionsRow)
         optionsStack.addArrangedSubview(mosaicOptionsRow)
+        optionsStack.addArrangedSubview(eraserOptionsRow)
         optionsStack.addArrangedSubview(stepOptionsRow)
         embed(optionsStack, in: optionsCard)
         subToolbarContainer = optionsCard
@@ -238,6 +254,12 @@ final class RefineToolbarController: NSObject {
             enabled: true,
             action: #selector(stepTapped)
         )
+        eraserButton = iconButton(
+            systemName: "eraser",
+            tooltip: "Eraser",
+            enabled: true,
+            action: #selector(eraserTapped)
+        )
 
         let annotateViews: [NSView] = [
             shapeButton,
@@ -248,7 +270,7 @@ final class RefineToolbarController: NSObject {
             textButton,
             stepButton,
             iconButton(systemName: "magnifyingglass", tooltip: "Magnifier", enabled: false, action: nil),
-            iconButton(systemName: "eraser", tooltip: "Eraser", enabled: false, action: nil),
+            eraserButton,
         ]
         undoButton = iconButton(
             systemName: "arrow.uturn.backward",
@@ -746,6 +768,57 @@ final class RefineToolbarController: NSObject {
         return stack
     }
 
+    /// Eraser = mosaic’s first five icons only (brush sizes + rect / oval region).
+    private func buildEraserSubToolbar() -> NSView {
+        let stack = NSStackView(views: [])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+
+        eraserBrushButtons = EraserStyle.brushPresets.enumerated().map { index, width in
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.setButtonType(.momentaryChange)
+            button.imagePosition = .imageOnly
+            button.toolTip = "Brush \(Int(width))"
+            button.target = self
+            button.action = #selector(eraserBrushTapped(_:))
+            button.tag = Int(width)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 24),
+                button.heightAnchor.constraint(equalToConstant: 24),
+            ])
+            let preview = EraserStyle.brushPreviewDiameters[index]
+            button.image = strokeDotImage(diameter: preview, selected: false)
+            return button
+        }
+        for button in eraserBrushButtons {
+            stack.addArrangedSubview(button)
+        }
+        stack.addArrangedSubview(miniDivider())
+
+        eraserRectButton = iconButton(
+            image: mosaicBrushKindIcon(kind: .rectangle),
+            tooltip: "Rectangle region",
+            enabled: true,
+            action: #selector(eraserRectTapped)
+        )
+        eraserOvalButton = iconButton(
+            image: mosaicBrushKindIcon(kind: .ellipse),
+            tooltip: "Oval region",
+            enabled: true,
+            action: #selector(eraserOvalTapped)
+        )
+        stack.addArrangedSubview(eraserRectButton)
+        stack.addArrangedSubview(eraserOvalButton)
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
+
     private func buildStepSubToolbar() -> NSView {
         let stack = NSStackView(views: [])
         stack.orientation = .horizontal
@@ -880,6 +953,7 @@ final class RefineToolbarController: NSObject {
         tintSelected(mosaicButton, selected: tool == .mosaic)
         tintSelected(textButton, selected: tool == .text)
         tintSelected(stepButton, selected: tool == .step)
+        tintSelected(eraserButton, selected: tool == .eraser)
         colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
         textColorPreview.layer?.backgroundColor = textStyle.color.cgColor
         markerColorPreview.layer?.backgroundColor = markerStyle.color.cgColor
@@ -889,10 +963,12 @@ final class RefineToolbarController: NSObject {
         let isMosaic = (tool == .mosaic)
         let isMarker = (tool == .marker)
         let isStep = (tool == .step)
-        strokeOptionsRow.isHidden = isText || isMosaic || isMarker || isStep
+        let isEraser = (tool == .eraser)
+        strokeOptionsRow.isHidden = isText || isMosaic || isMarker || isStep || isEraser
         textOptionsRow.isHidden = !isText
         mosaicOptionsRow.isHidden = !isMosaic
         markerOptionsRow.isHidden = !isMarker
+        eraserOptionsRow.isHidden = !isEraser
         stepOptionsRow.isHidden = !isStep
 
         let isArrow = (tool == .arrow)
@@ -900,7 +976,7 @@ final class RefineToolbarController: NSObject {
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
-        afterKindDivider.isHidden = isArrow || isText || isMosaic || isMarker || isStep
+        afterKindDivider.isHidden = isArrow || isText || isMosaic || isMarker || isStep || isEraser
         for view in arrowOnlyViews {
             view.isHidden = !isArrow
         }
@@ -943,6 +1019,7 @@ final class RefineToolbarController: NSObject {
 
         refreshMosaicChrome()
         refreshMarkerChrome()
+        refreshEraserChrome()
         refreshStepChrome()
     }
 
@@ -981,6 +1058,22 @@ final class RefineToolbarController: NSObject {
         tintSelected(markerRectButton, selected: markerDrawMode == .rectangle)
         tintSelected(markerOvalButton, selected: markerDrawMode == .ellipse)
         markerColorPreview.layer?.backgroundColor = markerStyle.color.cgColor
+    }
+
+    private func refreshEraserChrome() {
+        let selectedWidth = EraserStyle.nearestBrushPreset(eraserStyle.brushWidth)
+        let isFreehand = (eraserDrawMode == .freehand)
+        for (index, button) in eraserBrushButtons.enumerated() {
+            let width = EraserStyle.brushPresets[index]
+            let on = isFreehand && abs(width - selectedWidth) < 0.5
+            let preview = EraserStyle.brushPreviewDiameters[index]
+            button.title = ""
+            button.imagePosition = .imageOnly
+            button.image = strokeDotImage(diameter: preview, selected: on)
+            tintSelected(button, selected: on)
+        }
+        tintSelected(eraserRectButton, selected: eraserDrawMode == .rectangle)
+        tintSelected(eraserOvalButton, selected: eraserDrawMode == .ellipse)
     }
 
     private func refreshStepChrome() {
@@ -1424,6 +1517,10 @@ final class RefineToolbarController: NSObject {
         selectTool(tool == .step ? .none : .step)
     }
 
+    @objc private func eraserTapped() {
+        selectTool(tool == .eraser ? .none : .eraser)
+    }
+
     private func selectTool(_ next: AnnotateTool) {
         tool = next
         if next == .pencil || next == .arrow {
@@ -1483,6 +1580,26 @@ final class RefineToolbarController: NSObject {
         markerDrawMode = .ellipse
         refreshMarkerChrome()
         onEvent(.markerDrawModeChanged(markerDrawMode))
+    }
+
+    @objc private func eraserBrushTapped(_ sender: NSButton) {
+        eraserStyle.brushWidth = EraserStyle.nearestBrushPreset(CGFloat(sender.tag))
+        eraserDrawMode = .freehand
+        refreshEraserChrome()
+        onEvent(.eraserDrawModeChanged(eraserDrawMode))
+        onEvent(.eraserStyleChanged(eraserStyle))
+    }
+
+    @objc private func eraserRectTapped() {
+        eraserDrawMode = .rectangle
+        refreshEraserChrome()
+        onEvent(.eraserDrawModeChanged(eraserDrawMode))
+    }
+
+    @objc private func eraserOvalTapped() {
+        eraserDrawMode = .ellipse
+        refreshEraserChrome()
+        onEvent(.eraserDrawModeChanged(eraserDrawMode))
     }
 
     @objc private func textBoldTapped() {
@@ -1831,6 +1948,18 @@ final class RefineToolbarController: NSObject {
 
     func syncMarkerDrawMode(_ mode: MosaicDrawMode) {
         markerDrawMode = mode
+        refreshSelectionChrome()
+    }
+
+    func syncEraserStyle(_ style: EraserStyle) {
+        var next = style
+        next.clamp()
+        self.eraserStyle = next
+        refreshSelectionChrome()
+    }
+
+    func syncEraserDrawMode(_ mode: MosaicDrawMode) {
+        eraserDrawMode = mode
         refreshSelectionChrome()
     }
 

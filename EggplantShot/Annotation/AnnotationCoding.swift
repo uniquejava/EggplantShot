@@ -45,6 +45,8 @@ enum AnnotationCoding {
         var mosaicStyle: MosaicStyleDTO?
         /// Marker / highlighter style (type == "marker").
         var markerStyle: MarkerStyleDTO?
+        /// Eraser brush style (type == "eraser").
+        var eraserStyle: EraserStyleDTO?
         /// Step / numbering style (type == "step").
         var stepStyle: StepStyleDTO?
         /// Step number (type == "step").
@@ -61,6 +63,10 @@ enum AnnotationCoding {
     struct MarkerStyleDTO: Codable {
         var brushWidth: Double
         var color: ColorDTO
+    }
+
+    struct EraserStyleDTO: Codable {
+        var brushWidth: Double
     }
 
     struct StepStyleDTO: Codable {
@@ -175,6 +181,7 @@ enum AnnotationCoding {
                 endCap: nil,
                 mosaicStyle: nil,
                 markerStyle: nil,
+                eraserStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
@@ -192,6 +199,7 @@ enum AnnotationCoding {
                 endCap: caps.end.rawValue,
                 mosaicStyle: nil,
                 markerStyle: nil,
+                eraserStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
@@ -209,6 +217,7 @@ enum AnnotationCoding {
                 endCap: nil,
                 mosaicStyle: nil,
                 markerStyle: nil,
+                eraserStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
@@ -228,6 +237,7 @@ enum AnnotationCoding {
                     endCap: nil,
                     mosaicStyle: nil,
                     markerStyle: encode(style),
+                    eraserStyle: nil,
                     stepStyle: nil,
                     number: nil
                 )
@@ -245,6 +255,7 @@ enum AnnotationCoding {
                     endCap: nil,
                     mosaicStyle: nil,
                     markerStyle: encode(style),
+                    eraserStyle: nil,
                     stepStyle: nil,
                     number: nil
                 )
@@ -265,6 +276,7 @@ enum AnnotationCoding {
                     endCap: nil,
                     mosaicStyle: encode(style),
                     markerStyle: nil,
+                    eraserStyle: nil,
                     stepStyle: nil,
                     number: nil
                 )
@@ -282,6 +294,46 @@ enum AnnotationCoding {
                     endCap: nil,
                     mosaicStyle: encode(style),
                     markerStyle: nil,
+                    eraserStyle: nil,
+                    stepStyle: nil,
+                    number: nil
+                )
+            }
+        case .eraser(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                return MarkDTO(
+                    id: annotation.id.uuidString,
+                    type: "eraser",
+                    kind: nil,
+                    rect: RectDTO(annotation.boundingRect),
+                    points: points.map(PointDTO.init),
+                    string: nil,
+                    style: nil,
+                    textStyle: nil,
+                    startCap: nil,
+                    endCap: nil,
+                    mosaicStyle: nil,
+                    markerStyle: nil,
+                    eraserStyle: encode(style),
+                    stepStyle: nil,
+                    number: nil
+                )
+            case .region(let mode, let rect):
+                return MarkDTO(
+                    id: annotation.id.uuidString,
+                    type: "eraser",
+                    kind: mode == .ellipse ? "ellipse" : "rectangle",
+                    rect: RectDTO(rect),
+                    points: nil,
+                    string: nil,
+                    style: nil,
+                    textStyle: nil,
+                    startCap: nil,
+                    endCap: nil,
+                    mosaicStyle: nil,
+                    markerStyle: nil,
+                    eraserStyle: encode(style),
                     stepStyle: nil,
                     number: nil
                 )
@@ -300,6 +352,7 @@ enum AnnotationCoding {
                 endCap: nil,
                 mosaicStyle: nil,
                 markerStyle: nil,
+                eraserStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
@@ -317,6 +370,7 @@ enum AnnotationCoding {
                 endCap: nil,
                 mosaicStyle: nil,
                 markerStyle: nil,
+                eraserStyle: nil,
                 stepStyle: encode(style),
                 number: number
             )
@@ -408,6 +462,27 @@ enum AnnotationCoding {
             }
             NSLog("SnipHistory: skipping mosaic mark without points or rect")
             return nil
+        case "eraser":
+            guard let eraserDTO = dto.eraserStyle else {
+                NSLog("SnipHistory: skipping eraser mark without eraserStyle")
+                return nil
+            }
+            let style = decode(eraserDTO)
+            if let points = dto.points, !points.isEmpty {
+                return Annotation(
+                    id: id,
+                    payload: .eraser(.stroke(points: points.map(\.cgPoint)), style: style)
+                )
+            }
+            if let rect = dto.rect?.cgRect {
+                let mode: MosaicDrawMode = (dto.kind == "ellipse") ? .ellipse : .rectangle
+                return Annotation(
+                    id: id,
+                    payload: .eraser(.region(mode, rect: rect), style: style)
+                )
+            }
+            NSLog("SnipHistory: skipping eraser mark without points or rect")
+            return nil
         case "text":
             guard let rect = dto.rect?.cgRect, let textDTO = dto.textStyle else {
                 NSLog("SnipHistory: skipping text mark without rect/textStyle")
@@ -472,6 +547,16 @@ enum AnnotationCoding {
             brushWidth: CGFloat(dto.brushWidth),
             color: decode(dto.color)
         )
+        style.clamp()
+        return style
+    }
+
+    static func encode(_ style: EraserStyle) -> EraserStyleDTO {
+        EraserStyleDTO(brushWidth: Double(style.brushWidth))
+    }
+
+    static func decode(_ dto: EraserStyleDTO) -> EraserStyle {
+        var style = EraserStyle(brushWidth: CGFloat(dto.brushWidth))
         style.clamp()
         return style
     }

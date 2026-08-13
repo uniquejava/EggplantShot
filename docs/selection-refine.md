@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate live: **shape**, **arrow**, **pencil**, **marker**, **mosaic**, **text**, **step** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Magnifier remains a stub.
+Annotate live: **shape**, **arrow**, **pencil**, **marker**, **mosaic**, **text**, **step**, **eraser** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Magnifier remains a stub.
 
 Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
@@ -34,7 +34,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ## Toolbar layout (Snipaste parity)
 
 ```
-[ shape† | arrow | pen† | marker‖ | mosaic¶ | T‡ | step§ | magnifier | eraser ]
+[ shape† | arrow | pen† | marker‖ | mosaic¶ | T‡ | step§ | magnifier | eraser♯ ]
 | [ OCR | undo | redo ]
 | [ ✕ | pin | save | copy | … ]
 
@@ -46,6 +46,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ¶ Mosaic: [ · | ·· | ··· ] | [ rect region | oval region ] | [ preview | slider 3…24 | value ]  (sizes 14/18/24 freehand; rect/oval = area blur)
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 § Step: [ filled | outline | plain ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
+♯ Eraser: [ · | ·· | ··· ] | [ rect region | oval region ]  (same first 5 as mosaic; punches marks only)
   More stub / disabled
 ```
 
@@ -72,7 +73,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 - Sub-toolbar: stroke + line-style + color (no fill / kind).
 - Color reticle; mouse-down hides cursor. Freehand; Shift → straight any angle.
-- No resize chrome; no auto-select after stroke. While pencil is armed, existing pencil strokes draw-through (keep reticle for edge tracing); hold **⌘** for temporary move (four-arrow + drag). Other annotate tools still hit-move pencil strokes.
+- No resize chrome; no auto-select after stroke. Pencil strokes always draw-through under any annotate tool (keep reticle / eraser tip); hold **⌘** for temporary move (four-arrow + drag).
 - Deferred: if dense sampling (~0.15pt + 120Hz) lags or bloats history, simplify polyline on mouse-up (RDP).
 
 ### Marker
@@ -91,6 +92,15 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
 - Effect: **gaussian blur** (`CIGaussianBlur`; full-res below intensity 8, half-res soft pass above) sampled from freeze/base at draw time — **vector stroke/region data only** (P4; never mutates `baseImage`). Intensity 3…24 maps to ~0.35…20 pt (ease-in so 3…5 stay readable); sample pad ≈ 3.5σ.
 - No color palette.
+
+### Eraser
+
+- Sub-toolbar: same first **5** icons as mosaic — brush **14 / 18 / 24** | **rect / oval region** (no intensity / color).
+- Freehand: stroke sampling; Shift → straight; mouse-down hides cursor (tip temporarily reuses mosaic brush outline; concentric-ring tip deferred). No resize chrome / no auto-select after stroke.
+- Region: drag like mosaic; Shift → square / circle; auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles.
+- Effect: punches **annotation marks only** (`destinationOut` on a marks layer composited over the freeze/base) — never erases image pixels (P4). Order matters: later marks redraw on top of earlier erasures.
+- Hit: eraser marks draw-through under any annotate tool (no move hand over erased areas); hold **⌘** to move.
+- Disk: `type: "eraser"` with `eraserStyle` (brushWidth) plus either stroke `points` or region `kind` + `rect`.
 
 ### Text
 
@@ -141,6 +151,6 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
 - [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
-- [x] Shape / arrow / pencil / marker / mosaic / text / step: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] Shape / arrow / pencil / marker / mosaic / text / step / eraser: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] OCR: recognize selection → clipboard + bubble-pop; dismiss overlay; no result UI
 - [x] Undo / redo; debug build succeeds

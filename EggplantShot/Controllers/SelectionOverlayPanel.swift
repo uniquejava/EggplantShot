@@ -270,17 +270,38 @@ final class SelectionOverlayNSView: NSView {
         let origin = selectionRect.origin
         let sample = mosaicSampleContext()
         // Fullscreen annotate: marks may sit outside the blue selection — no clip.
-        for ann in annotations {
-            if ann.id == editingAnnotationID { continue }
-            AnnotationDrawing.draw(ann, origin: origin, sample: sample)
+        // Offscreen layer so eraser destinationOut punches marks only, not the freeze.
+        var marks: [Annotation] = []
+        marks.reserveCapacity(annotations.count + 1)
+        for ann in annotations where ann.id != editingAnnotationID {
+            marks.append(ann)
         }
         if let draft = draftAnnotation {
-            AnnotationDrawing.draw(draft, origin: origin, sample: sample)
-            // Mosaic / marker region drag: solid 1px contrast hairline (edit chrome only).
+            marks.append(draft)
+        }
+        if let layer = AnnotationDrawing.renderMarksLayer(
+            marks,
+            size: bounds.size,
+            origin: origin,
+            sample: sample
+        ) {
+            layer.draw(
+                in: bounds,
+                from: .zero,
+                operation: .sourceOver,
+                fraction: 1
+            )
+        }
+
+        if let draft = draftAnnotation {
+            // Mosaic / marker / eraser region drag: solid 1px contrast hairline (edit chrome only).
             if case .mosaic(.region(let mode, let rect), _) = draft.payload {
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
                 drawRegionChrome(in: r, mode: mode, dashed: false)
             } else if case .marker(.region(let mode, let rect), _) = draft.payload {
+                let r = rect.offsetBy(dx: origin.x, dy: origin.y)
+                drawRegionChrome(in: r, mode: mode, dashed: false)
+            } else if case .eraser(.region(let mode, let rect), _) = draft.payload {
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
                 drawRegionChrome(in: r, mode: mode, dashed: false)
             }
@@ -290,6 +311,7 @@ final class SelectionOverlayNSView: NSView {
            !selected.isPencil,
            !selected.isMosaicStroke,
            !selected.isMarkerStroke,
+           !selected.isEraserStroke,
            !selected.isText,
            !selected.isStep,
            selected.id != editingAnnotationID {
@@ -304,6 +326,10 @@ final class SelectionOverlayNSView: NSView {
                 )
             } else if case .mosaic(.region(let mode, let rect), _) = selected.payload {
                 // After release: dashed hairline + resize handles.
+                let r = rect.offsetBy(dx: origin.x, dy: origin.y)
+                drawRegionChrome(in: r, mode: mode, dashed: true)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+            } else if case .eraser(.region(let mode, let rect), _) = selected.payload {
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
                 drawRegionChrome(in: r, mode: mode, dashed: true)
                 AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
