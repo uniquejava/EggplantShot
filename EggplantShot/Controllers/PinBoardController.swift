@@ -88,12 +88,15 @@ private final class PinPanel: NSPanel {
     static let chromePadding: CGFloat = 10
 
     private let itemID: UUID
+    private let image: NSImage
     private let onClose: (UUID) -> Void
     private let chromeView: PinChromeView
     private var keyObservers: [NSObjectProtocol] = []
+    private var staysOnTop = true
 
     init(itemID: UUID, image: NSImage, frame: CGRect, onClose: @escaping (UUID) -> Void) {
         self.itemID = itemID
+        self.image = image
         self.onClose = onClose
 
         let pad = Self.chromePadding
@@ -134,6 +137,12 @@ private final class PinPanel: NSPanel {
         chrome.onMouseDown = { [weak self] in
             self?.makeKeyAndOrderFront(nil)
         }
+        chrome.onCopy = { [weak self] in
+            self?.copyImage()
+        }
+        chrome.menuBuilder = { [weak self] in
+            self?.makeContextMenu()
+        }
         contentView = chrome
 
         let center = NotificationCenter.default
@@ -163,6 +172,69 @@ private final class PinPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    private func makeContextMenu() -> NSMenu {
+        let menu = NSMenu()
+
+        menu.addItem(withTitle: "Copy Image", action: #selector(copyImage), keyEquivalent: "c")
+            .target = self
+        menu.addItem(withTitle: "Save Image As…", action: #selector(saveImageAs), keyEquivalent: "")
+            .target = self
+
+        menu.addItem(.separator())
+
+        let stay = menu.addItem(withTitle: "Stay on Top", action: #selector(toggleStayOnTop), keyEquivalent: "")
+        stay.target = self
+        stay.state = staysOnTop ? .on : .off
+
+        let shadow = menu.addItem(withTitle: "Shadow", action: #selector(toggleShadow), keyEquivalent: "")
+        shadow.target = self
+        shadow.state = chromeView.shadowEnabled ? .on : .off
+
+        menu.addItem(.separator())
+
+        menu.addItem(withTitle: "Close", action: #selector(closePin), keyEquivalent: "")
+            .target = self
+
+        menu.addItem(.separator())
+
+        let size = menu.addItem(withTitle: pixelSizeLabel(), action: nil, keyEquivalent: "")
+        size.isEnabled = false
+
+        return menu
+    }
+
+    private func pixelSizeLabel() -> String {
+        if let rep = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first {
+            return "\(rep.pixelsWide) × \(rep.pixelsHigh)"
+        }
+        return "\(Int(image.size.width.rounded())) × \(Int(image.size.height.rounded()))"
+    }
+
+    @objc private func copyImage() {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.writeObjects([image])
+    }
+
+    @objc private func saveImageAs() {
+        ImageFileSaver.saveInteractive(image)
+    }
+
+    @objc private func toggleStayOnTop() {
+        staysOnTop.toggle()
+        level = staysOnTop ? .statusBar : .normal
+        orderFrontRegardless()
+    }
+
+    @objc private func toggleShadow() {
+        chromeView.shadowEnabled.toggle()
+        chromeView.setActive(isKeyWindow)
+    }
+
+    @objc private func closePin() {
+        onClose(itemID)
+    }
 }
 
 /// Image + Snipaste-style outer glow (CSS `box-shadow: 0 0 blur color` — no hard border).
@@ -170,6 +242,9 @@ private final class PinChromeView: NSView {
     var onDoubleClick: (() -> Void)?
     var onEscape: (() -> Void)?
     var onMouseDown: (() -> Void)?
+    var onCopy: (() -> Void)?
+    var menuBuilder: (() -> NSMenu?)?
+    var shadowEnabled = true
 
     private let imageView: NSImageView
 
@@ -228,6 +303,11 @@ private final class PinChromeView: NSView {
         layer.borderWidth = 0
         layer.shadowOffset = .zero
         layer.masksToBounds = false
+        guard shadowEnabled else {
+            layer.shadowOpacity = 0
+            layer.shadowPath = nil
+            return
+        }
         if active {
             layer.shadowColor = activeGlow.cgColor
             layer.shadowRadius = 6 // blur-radius (half of prior 12)
@@ -238,6 +318,10 @@ private final class PinChromeView: NSView {
             layer.shadowOpacity = 0.55
         }
         layer.shadowPath = CGPath(rect: layer.bounds, transform: nil)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        menuBuilder?()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -252,6 +336,12 @@ private final class PinChromeView: NSView {
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 {
             onEscape?()
+            return
+        }
+        // ⌘C copies the pinned image (matches context-menu shortcut).
+        if event.modifierFlags.contains(.command),
+           event.charactersIgnoringModifiers?.lowercased() == "c" {
+            onCopy?()
             return
         }
         super.keyDown(with: event)
