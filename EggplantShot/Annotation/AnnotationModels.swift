@@ -1977,7 +1977,7 @@ enum AnnotationCursors {
     /// Loaded from HIServices — do not call private `NSCursor._moveCursor` (aborts on macOS 15+).
     static let move: NSCursor = hiServicesMoveCursor() ?? drawnMoveCursor()
 
-    /// White “＋” used inside the selection / annotation interior (shape draw mode).
+    /// White “＋” used for selecting / shape-draw (custom-drawn, not system crosshair).
     static let whitePlus: NSCursor = {
         let size: CGFloat = 24
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
