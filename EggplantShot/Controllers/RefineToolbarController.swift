@@ -88,7 +88,7 @@ final class RefineToolbarController: NSObject {
         initialArrowCaps: ArrowCaps,
         initialTextStyle: TextStyle,
         initialMosaicStyle: MosaicStyle = .default,
-        initialMosaicDrawMode: MosaicDrawMode = .freehand,
+        initialMosaicDrawMode: MosaicDrawMode = .rectangle,
         onEvent: @escaping (Event) -> Void
     ) {
         self.onEvent = onEvent
@@ -178,7 +178,7 @@ final class RefineToolbarController: NSObject {
             action: #selector(arrowTapped)
         )
         pencilButton = iconButton(
-            systemName: "pencil",
+            image: pencilToolIcon(),
             tooltip: "Pen",
             enabled: true,
             action: #selector(pencilTapped)
@@ -889,22 +889,114 @@ final class RefineToolbarController: NSObject {
         return image
     }
 
-    /// Snipaste-like 2×2 pixel block (checkerboard mosaic).
+    /// Snipaste-like pencil: twin shaft lines, pointed tip, semi-ellipse eraser (~mosaic size).
+    private func pencilToolIcon() -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { _ in
+            // Axis tip (bottom-left) → eraser (top-right); a touch larger than mosaic.
+            let tip = CGPoint(x: 2.6, y: 2.6)
+            let end = CGPoint(x: 13.4, y: 13.4)
+            let dx = end.x - tip.x
+            let dy = end.y - tip.y
+            let len = hypot(dx, dy)
+            guard len > 1 else { return false }
+            let ux = dx / len
+            let uy = dy / len
+            let px = -uy
+            let py = ux
+
+            let halfGap: CGFloat = 1.45
+            let tipLen: CGFloat = 3.0
+            let ferruleGap: CGFloat = 1.15 // air between shaft and eraser (metal-band read)
+            let eraserLen: CGFloat = 2.35
+            let lineW: CGFloat = 1.35
+
+            func along(_ t: CGFloat) -> CGPoint {
+                CGPoint(x: tip.x + ux * t, y: tip.y + uy * t)
+            }
+            func offset(_ p: CGPoint, by s: CGFloat) -> CGPoint {
+                CGPoint(x: p.x + px * s, y: p.y + py * s)
+            }
+
+            let shaftA = along(tipLen)
+            let shaftB = along(len - eraserLen - ferruleGap)
+            let leftA = offset(shaftA, by: halfGap)
+            let leftB = offset(shaftB, by: halfGap)
+            let rightA = offset(shaftA, by: -halfGap)
+            let rightB = offset(shaftB, by: -halfGap)
+
+            NSColor.black.setStroke()
+
+            let shaft = NSBezierPath()
+            shaft.move(to: leftA)
+            shaft.line(to: leftB)
+            shaft.move(to: rightA)
+            shaft.line(to: rightB)
+            shaft.lineWidth = lineW
+            shaft.lineCapStyle = .butt
+            shaft.stroke()
+
+            let tipPath = NSBezierPath()
+            tipPath.move(to: tip)
+            tipPath.line(to: leftA)
+            tipPath.move(to: tip)
+            tipPath.line(to: rightA)
+            tipPath.lineWidth = lineW
+            tipPath.lineCapStyle = .round
+            tipPath.stroke()
+
+            // Half-capsule eraser: flat face toward shaft, with a small ferrule gap.
+            let flat = along(len - eraserLen)
+            let eraserHalfW = halfGap + 0.2
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return true }
+            ctx.saveGState()
+            ctx.translateBy(x: flat.x, y: flat.y)
+            ctx.rotate(by: atan2(uy, ux))
+            // Capsule half: straight sides + semicircular dome on +X.
+            let body = max(eraserLen - eraserHalfW, 0.35)
+            let cap = NSBezierPath()
+            cap.move(to: CGPoint(x: 0, y: -eraserHalfW))
+            cap.line(to: CGPoint(x: body, y: -eraserHalfW))
+            cap.appendArc(
+                withCenter: CGPoint(x: body, y: 0),
+                radius: eraserHalfW,
+                startAngle: -90,
+                endAngle: 90,
+                clockwise: false
+            )
+            cap.line(to: CGPoint(x: 0, y: eraserHalfW))
+            cap.close()
+            NSColor.black.setFill()
+            cap.fill()
+            ctx.restoreGState()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    /// Snipaste-like 2×2 pixel block: rounded outer frame, large cells tight to the border.
     private func mosaicToolIcon() -> NSImage {
         let size = NSSize(width: 16, height: 16)
         let image = NSImage(size: size, flipped: false) { rect in
-            let inset: CGFloat = 2.5
-            let gap: CGFloat = 1.25
-            let cell = (rect.width - inset * 2 - gap) / 2
-            let origin = CGPoint(x: inset, y: inset)
-            // Top-left + bottom-right filled (classic pixel-block read).
-            let cells = [
-                CGRect(x: origin.x, y: origin.y + cell + gap, width: cell, height: cell),
-                CGRect(x: origin.x + cell + gap, y: origin.y, width: cell, height: cell),
+            let frame = rect.insetBy(dx: 1.25, dy: 1.25)
+            let border = NSBezierPath(roundedRect: frame, xRadius: 2.0, yRadius: 2.0)
+            border.lineWidth = 1.2
+            NSColor.black.setStroke()
+            border.stroke()
+
+            // Cells hug the inner edge of the stroke (almost flush).
+            let edge: CGFloat = 0.85
+            let gap: CGFloat = 0.9
+            let inner = frame.insetBy(dx: edge, dy: edge)
+            let cell = (inner.width - gap) / 2
+            let darkCells = [
+                CGRect(x: inner.minX, y: inner.maxY - cell, width: cell, height: cell), // top-left
+                CGRect(x: inner.maxX - cell, y: inner.minY, width: cell, height: cell), // bottom-right
             ]
             NSColor.black.setFill()
-            for cellRect in cells {
-                NSBezierPath(roundedRect: cellRect, xRadius: 0.75, yRadius: 0.75).fill()
+            for cellRect in darkCells {
+                NSBezierPath(roundedRect: cellRect, xRadius: 0.9, yRadius: 0.9).fill()
             }
             return true
         }
@@ -1566,18 +1658,32 @@ final class MosaicIntensityPreviewView: NSView {
         let intensity = MosaicStyle.clampedIntensity(intensity)
         let radius = MosaicStyle.blurRadiusPoints(forIntensity: intensity)
 
+        let useSoft = intensity >= MosaicStyle.softDownsampleIntensityThreshold
+        let down: CGFloat = useSoft ? 0.5 : 1
+        let working = down < 1
+            ? Self.sampleImage.transformed(by: CGAffineTransform(scaleX: down, y: down))
+            : Self.sampleImage
         let filter = CIFilter(name: "CIGaussianBlur")
-        filter?.setValue(Self.sampleImage, forKey: kCIInputImageKey)
-        filter?.setValue(radius * 1.2, forKey: kCIInputRadiusKey)
+        filter?.setValue(working.clampedToExtent(), forKey: kCIInputImageKey)
+        filter?.setValue(max(radius * down * 1.2, 0.35), forKey: kCIInputRadiusKey)
 
         let shapePath = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
 
         NSGraphicsContext.current?.saveGraphicsState()
         shapePath.addClip()
-        if let output = filter?.outputImage?.cropped(to: Self.sampleImage.extent),
-           let cg = Self.ciContext.createCGImage(output, from: Self.sampleImage.extent) {
-            NSImage(cgImage: cg, size: bounds.size)
-                .draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
+        let workingExtent = working.extent
+        if let blurred = filter?.outputImage?.cropped(to: workingExtent) {
+            let up: CIImage = down < 1
+                ? blurred.transformed(by: CGAffineTransform(scaleX: 1 / down, y: 1 / down))
+                : blurred
+            let extent = Self.sampleImage.extent
+            if let cg = Self.ciContext.createCGImage(up.cropped(to: extent), from: extent) {
+                NSImage(cgImage: cg, size: bounds.size)
+                    .draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
+            } else {
+                NSColor(calibratedWhite: 0.85, alpha: 1).setFill()
+                shapePath.fill()
+            }
         } else {
             NSColor(calibratedWhite: 0.85, alpha: 1).setFill()
             shapePath.fill()

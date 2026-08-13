@@ -55,12 +55,16 @@ struct MosaicStyle: Equatable {
     }
 
     /// Maps Snipaste intensity 3…24 → gaussian radius in **points**.
-    /// At 3 the backdrop (e.g. body text) stays readable; at 24 it’s heavily defocused.
+    /// Low end (3…5) stays light so body text remains mostly readable; mid/high ramps harder.
     static func blurRadiusPoints(forIntensity intensity: CGFloat) -> CGFloat {
         let t = (clampedIntensity(intensity) - intensityRange.lowerBound)
             / (intensityRange.upperBound - intensityRange.lowerBound)
-        return 0.7 + t * 13.3 // ≈ 0.7 … 14
+        // Ease-in: ≈ 0.35 … 20 pt (t=0→0.35, t≈0.1→~0.7, t≈0.33→~3.2, t=1→20)
+        return 0.35 + pow(t, 1.45) * 19.65
     }
+
+    /// Half-res soft pass only above this intensity; below it, full-res keeps fine text.
+    static let softDownsampleIntensityThreshold: CGFloat = 8
 }
 
 /// Arrowhead / end-cap styles (Snipaste start / end dropdown).
@@ -212,17 +216,20 @@ enum AnnotationPrefs {
     static func loadMosaicDrawMode() -> MosaicDrawMode {
         let defaults = UserDefaults.standard
         if defaults.object(forKey: mosaicDrawModeKey) != nil {
-            return MosaicDrawMode(rawValue: defaults.integer(forKey: mosaicDrawModeKey)) ?? .freehand
+            return MosaicDrawMode(rawValue: defaults.integer(forKey: mosaicDrawModeKey)) ?? .rectangle
         }
-        // Migrate old tip-shape prefs (0 rect / 1 oval) → region modes.
+        // One-shot migrate old tip-shape prefs, then drop the legacy key.
         if defaults.object(forKey: mosaicBrushKindKey) != nil {
+            let mode: MosaicDrawMode
             switch defaults.integer(forKey: mosaicBrushKindKey) {
-            case 0: return .rectangle
-            case 1: return .ellipse
-            default: return .freehand
+            case 1: mode = .ellipse
+            default: mode = .rectangle
             }
+            defaults.removeObject(forKey: mosaicBrushKindKey)
+            defaults.set(mode.rawValue, forKey: mosaicDrawModeKey)
+            return mode
         }
-        return .freehand
+        return .rectangle
     }
 
     static func saveMosaicStyle(_ style: MosaicStyle) {
@@ -234,7 +241,9 @@ enum AnnotationPrefs {
     }
 
     static func saveMosaicDrawMode(_ mode: MosaicDrawMode) {
-        UserDefaults.standard.set(mode.rawValue, forKey: mosaicDrawModeKey)
+        let defaults = UserDefaults.standard
+        defaults.set(mode.rawValue, forKey: mosaicDrawModeKey)
+        defaults.removeObject(forKey: mosaicBrushKindKey)
     }
 }
 
@@ -1614,12 +1623,14 @@ enum AnnotationDrawing {
                 drawMosaicFallbackStroke(points: offset, brushWidth: brush)
                 return
             }
-            let pad = brush / 2 + radius * 2
+            // ≥3σ pad so neighbors outside the brush bleed into the blur (Snipaste-like).
+            let pad = brush / 2 + radius * 3.5
             let hull = Annotation.bounds(of: localPoints).insetBy(dx: -pad, dy: -pad)
             drawBlurredMask(
                 localMask: mosaicStrokeMask(localPoints: localPoints, brushWidth: brush),
                 localHull: hull,
                 radius: radius,
+                intensity: intensity,
                 drawOrigin: drawOrigin,
                 sample: sample
             ) {
@@ -1633,7 +1644,7 @@ enum AnnotationDrawing {
                 drawMosaicFallbackRegion(rect: localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y), mode: mode)
                 return
             }
-            let pad = radius * 2
+            let pad = radius * 3.5
             let hull = localRect.insetBy(dx: -pad, dy: -pad)
             let mask: NSBezierPath
             switch mode {
@@ -1646,6 +1657,7 @@ enum AnnotationDrawing {
                 localMask: mask,
                 localHull: hull,
                 radius: radius,
+                intensity: intensity,
                 drawOrigin: drawOrigin,
                 sample: sample
             ) {
@@ -1661,6 +1673,7 @@ enum AnnotationDrawing {
         localMask: NSBezierPath,
         localHull: CGRect,
         radius: CGFloat,
+        intensity: CGFloat,
         drawOrigin: CGPoint,
         sample: MosaicSampleContext,
         fallback: () -> Void
@@ -1674,7 +1687,12 @@ enum AnnotationDrawing {
         let crop = sampleHull.intersection(imageBounds)
         guard crop.width >= 1, crop.height >= 1 else { return }
 
-        guard let blurred = blurredCrop(from: sample.image, crop: crop, radius: radius) else {
+        guard let blurred = blurredCrop(
+            from: sample.image,
+            crop: crop,
+            radius: radius,
+            intensity: intensity
+        ) else {
             fallback()
             return
         }
@@ -1747,10 +1765,12 @@ enum AnnotationDrawing {
 
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
+    /// Soft gaussian: full-res at low intensity (keep text), half-res + clamp above threshold.
     private static func blurredCrop(
         from image: NSImage,
         crop: CGRect,
-        radius: CGFloat
+        radius: CGFloat,
+        intensity: CGFloat
     ) -> NSImage? {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             return nil
@@ -1769,11 +1789,22 @@ enum AnnotationDrawing {
         else { return nil }
 
         let ci = CIImage(cgImage: cropped)
+        let useSoftDownsample = intensity >= MosaicStyle.softDownsampleIntensityThreshold
+        let down: CGFloat = useSoftDownsample ? 0.5 : 1
+        let working = down < 1
+            ? ci.transformed(by: CGAffineTransform(scaleX: down, y: down))
+            : ci
         let filter = CIFilter(name: "CIGaussianBlur")
-        filter?.setValue(ci, forKey: kCIInputImageKey)
-        filter?.setValue(radius * pixelScale, forKey: kCIInputRadiusKey)
-        guard let output = filter?.outputImage?.cropped(to: ci.extent),
-              let outCG = ciContext.createCGImage(output, from: ci.extent)
+        filter?.setValue(working.clampedToExtent(), forKey: kCIInputImageKey)
+        filter?.setValue(max(radius * pixelScale * down, 0.35), forKey: kCIInputRadiusKey)
+        let workingExtent = working.extent
+        guard let blurredWorking = filter?.outputImage?.cropped(to: workingExtent) else { return nil }
+
+        let up: CIImage = down < 1
+            ? blurredWorking.transformed(by: CGAffineTransform(scaleX: 1 / down, y: 1 / down))
+            : blurredWorking
+        let outExtent = ci.extent
+        guard let outCG = ciContext.createCGImage(up.cropped(to: outExtent), from: outExtent)
         else { return nil }
 
         return NSImage(cgImage: outCG, size: crop.size)
@@ -2000,13 +2031,13 @@ enum AnnotationCursors {
         let pad: CGFloat = 3
         let size = diameter + pad * 2
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
-            let r = rect.insetBy(dx: pad, dy: pad)
+            let r = rect.insetBy(dx: pad + 0.5, dy: pad + 0.5)
             let path = NSBezierPath(ovalIn: r)
-            path.lineWidth = 1.5
-            NSColor.black.withAlphaComponent(0.45).setStroke()
-            path.stroke()
+            // Soft dark ring + translucent white fill (Snipaste-like brush tip).
+            NSColor.white.withAlphaComponent(0.45).setFill()
+            path.fill()
             path.lineWidth = 1
-            NSColor.white.setStroke()
+            NSColor(calibratedWhite: 0.18, alpha: 0.88).setStroke()
             path.stroke()
             return true
         }

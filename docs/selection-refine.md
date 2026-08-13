@@ -78,7 +78,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to blur an area) | intensity **3…24** with live blur preview left of the slider.
 - Freehand: stroke sampling; Shift → straight; mouse-down hides cursor. No resize chrome / no auto-select after stroke.
 - Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
-- Effect: **gaussian blur** (`CIGaussianBlur`) sampled from freeze/base at draw time — **vector stroke/region data only** (P4; never mutates `baseImage`). Intensity 3…24 maps to ~0.7…14 pt radius (3 ≈ frosted but text still readable; 24 ≈ heavy defocus).
+- Effect: **gaussian blur** (`CIGaussianBlur`; full-res below intensity 8, half-res soft pass above) sampled from freeze/base at draw time — **vector stroke/region data only** (P4; never mutates `baseImage`). Intensity 3…24 maps to ~0.35…20 pt (ease-in so 3…5 stay readable); sample pad ≈ 3.5σ.
 - No color palette.
 
 ### Text
