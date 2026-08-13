@@ -70,7 +70,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 - Sub-toolbar: stroke + line-style + color (no fill / kind).
 - Color reticle; mouse-down hides cursor. Freehand; Shift → straight any angle.
-- No resize chrome; hit stroke to move. No auto-select after stroke.
+- No resize chrome; no auto-select after stroke. While pencil is armed, existing pencil strokes draw-through (keep reticle for edge tracing); hold **⌘** for temporary move (four-arrow + drag). Other annotate tools still hit-move pencil strokes.
 - Deferred: if dense sampling (~0.15pt + 120Hz) lags or bloats history, simplify polyline on mouse-up (RDP).
 
 ### Mosaic

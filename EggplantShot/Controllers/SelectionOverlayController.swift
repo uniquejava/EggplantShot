@@ -405,6 +405,26 @@ final class SelectionOverlayController {
         }) {
             eventMonitors.append(mon)
         }
+
+        // ⌘ up/down while pencil is armed: refresh move-vs-draw cursor without waiting for mouse move.
+        let flagsMask: NSEvent.EventTypeMask = .flagsChanged
+        if let mon = NSEvent.addLocalMonitorForEvents(matching: flagsMask, handler: { [weak self] event in
+            self?.handleAnnotateModifierFlagsChanged()
+            return event
+        }) {
+            eventMonitors.append(mon)
+        }
+        if let mon = NSEvent.addGlobalMonitorForEvents(matching: flagsMask, handler: { [weak self] _ in
+            self?.handleAnnotateModifierFlagsChanged()
+        }) {
+            eventMonitors.append(mon)
+        }
+    }
+
+    /// Pencil + ⌘: temporary move over existing pencil strokes (cursor updates on key alone).
+    private func handleAnnotateModifierFlagsChanged() {
+        guard phase == .refining, annotateTool == .pencil, dragKind == nil else { return }
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     private func removeMonitors() {
@@ -1145,6 +1165,11 @@ final class SelectionOverlayController {
                     }
                     return .border(id: ann.id)
                 }
+                continue
+            }
+            // Pencil armed: own strokes draw-through unless ⌘ is held (temporary move).
+            if annotateTool == .pencil, ann.isPencil,
+               !NSEvent.modifierFlags.contains(.command) {
                 continue
             }
             if isOnAnnotationStroke(ann, at: point) {
