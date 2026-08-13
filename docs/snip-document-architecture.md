@@ -75,10 +75,11 @@ enum AnnotationPayload: Equatable {
     case eraser(MosaicGeometry, style: EraserStyle) // stroke points | rect/oval region
     case text(string: String, rect: CGRect, style: TextStyle)
     case step(number: Int, center: CGPoint, style: StepStyle)
+    case magnifier(kind: ShapeKind, source: CGRect, lens: CGRect, style: MagnifierStyle)
 }
 ```
 
-Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"arrow"`, `"pencil"`, `"marker"`, `"mosaic"`, `"eraser"`, `"text"`, `"step"`, …). Shape keeps `kind` / `rect`; arrow stores `points: [start, end]` + `startCap` / `endCap` (+ optional hull `rect`); pencil stores `points` (+ optional hull `rect`); marker stores `markerStyle` (brushWidth / color) plus either stroke `points` or region `kind` + `rect`; mosaic stores `mosaicStyle` (brushWidth / intensity) plus either stroke `points` or region `kind` + `rect`; eraser stores `eraserStyle` (brushWidth) plus either stroke `points` or region `kind` + `rect`; text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
+Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"arrow"`, `"pencil"`, `"marker"`, `"mosaic"`, `"eraser"`, `"text"`, `"step"`, `"magnifier"`, …). Shape keeps `kind` / `rect`; arrow stores `points: [start, end]` + `startCap` / `endCap` (+ optional hull `rect`); pencil stores `points` (+ optional hull `rect`); marker stores `markerStyle` (brushWidth / color) plus either stroke `points` or region `kind` + `rect`; mosaic stores `mosaicStyle` (brushWidth / intensity) plus either stroke `points` or region `kind` + `rect`; eraser stores `eraserStyle` (brushWidth) plus either stroke `points` or region `kind` + `rect`; text stores `string` / `rect` / `textStyle`; magnifier stores `kind`, `rect` (source), `lensRect`, `magnifierStyle` (`strokeWidth` / `color` / `includeAnnotations`). Unknown `type` values are skipped on load.
 
 ### `AnnotationDocument`
 
@@ -193,7 +194,7 @@ P0–P4 done:
 - `,` / `.` restore selection + base + document into the active overlay.
 - Marks use `AnnotationPayload` (`shape`, `arrow`, `pencil`, `marker`, `mosaic`, `eraser`, `text`, `step`); disk `type` discriminator ready for new tools.
 
-Next product work: magnifier / … add payload cases + drawing + hit-testing only.
+Annotate payload surface is complete for the current MVP tool set (magnifier included).
 
 ## Coordinate conventions
 

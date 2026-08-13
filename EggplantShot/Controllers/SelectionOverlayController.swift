@@ -32,8 +32,14 @@ final class SelectionOverlayController {
         case expand(handle: Handle, baseRect: CGRect)
         /// Shape / arrow / pencil in-progress stroke (tool decides payload).
         case annotateDraw(startLocal: CGPoint)
-        case annotateMove(id: UUID, start: Annotation, startPoint: CGPoint)
-        case annotateResize(id: UUID, handle: Handle, start: Annotation, startPoint: CGPoint)
+        case annotateMove(id: UUID, start: Annotation, startPoint: CGPoint, magnifierPart: MagnifierPart?)
+        case annotateResize(
+            id: UUID,
+            handle: Handle,
+            start: Annotation,
+            startPoint: CGPoint,
+            magnifierPart: MagnifierPart?
+        )
         case annotateEndpoint(id: UUID, endpoint: ArrowEndpoint, start: Annotation)
     }
 
@@ -88,6 +94,8 @@ final class SelectionOverlayController {
     private var eraserStyle: EraserStyle = AnnotationPrefs.loadEraserStyle()
     private var eraserDrawMode: MosaicDrawMode = AnnotationPrefs.loadEraserDrawMode()
     private var stepStyle: StepStyle = StepAnnotationPrefs.load()
+    private var magnifierStyle: MagnifierStyle = MagnifierAnnotationPrefs.load().style
+    private var magnifierKind: ShapeKind = MagnifierAnnotationPrefs.load().kind
     private let annotationHistory = AnnotationHistory()
     /// In-progress mark while dragging (selection-local geometry).
     private var draftAnnotation: Annotation?
@@ -311,6 +319,9 @@ final class SelectionOverlayController {
         eraserStyle = AnnotationPrefs.loadEraserStyle()
         eraserDrawMode = AnnotationPrefs.loadEraserDrawMode()
         stepStyle = StepAnnotationPrefs.load()
+        let magPrefs = MagnifierAnnotationPrefs.load()
+        magnifierStyle = magPrefs.style
+        magnifierKind = magPrefs.kind
         annotationHistory.reset()
         draftAnnotation = nil
         textClickCandidate = nil
@@ -596,7 +607,16 @@ final class SelectionOverlayController {
                 annotationHistory.select(id)
                 syncToolbar(from: ann)
                 annotationHistory.beginGesture()
-                dragKind = .annotateResize(id: id, handle: handle, start: ann, startPoint: point)
+                let part: MagnifierPart? = ann.isMagnifier
+                    ? (hitTestMagnifierHandle(at: point, annotation: ann)?.part ?? .lens)
+                    : nil
+                dragKind = .annotateResize(
+                    id: id,
+                    handle: handle,
+                    start: ann,
+                    startPoint: point,
+                    magnifierPart: part
+                )
                 resizeCursor(for: handle).set()
 
             case .arrowEndpoint(let id, let endpoint):
@@ -620,7 +640,15 @@ final class SelectionOverlayController {
                 annotationHistory.select(id)
                 syncToolbar(from: ann)
                 annotationHistory.beginGesture()
-                dragKind = .annotateMove(id: id, start: ann, startPoint: point)
+                let part: MagnifierPart? = ann.isMagnifier
+                    ? magnifierMovePart(at: point, annotation: ann)
+                    : nil
+                dragKind = .annotateMove(
+                    id: id,
+                    start: ann,
+                    startPoint: point,
+                    magnifierPart: part
+                )
                 AnnotationCursors.move.set()
                 updateHighlight(showHandles: true)
 
@@ -732,11 +760,15 @@ final class SelectionOverlayController {
         case .annotateDraw(let startLocal):
             appendPencilOrShapeDraft(startLocal: startLocal, globalPoint: point)
 
-        case .annotateMove(let id, let start, let startPoint):
+        case .annotateMove(let id, let start, let startPoint, let magnifierPart):
             let dx = point.x - startPoint.x
             let dy = point.y - startPoint.y
             var next = start
-            next.translate(by: CGSize(width: dx, height: dy))
+            if let magnifierPart, next.isMagnifier {
+                next.translateMagnifierPart(magnifierPart, by: CGSize(width: dx, height: dy))
+            } else {
+                next.translate(by: CGSize(width: dx, height: dy))
+            }
             clampAnnotationInSelection(&next)
             updateAnnotation(id: id) { $0.payload = next.payload }
             if id == editingTextID {
@@ -745,18 +777,31 @@ final class SelectionOverlayController {
             }
             updateHighlight(showHandles: true)
 
-        case .annotateResize(let id, let handle, let start, let startPoint):
-            let startGlobal = toGlobal(start.boundingRect)
-            let resizedGlobal = resizedRect(
-                handle: handle,
-                startRect: startGlobal,
-                startPoint: startPoint,
-                point: point,
-                minSize: minAnnotation
-            )
-            // Annotate marks may live outside the selection — don't clamp into the blue rect.
+        case .annotateResize(let id, let handle, let start, let startPoint, let magnifierPart):
             var next = start
-            next.mapBoundingRect(to: toLocal(resizedGlobal))
+            if let magnifierPart, start.isMagnifier {
+                let startLocal = magnifierPart == .source ? start.magnifierSource : start.magnifierLens
+                let startGlobal = toGlobal(startLocal)
+                let resizedGlobal = resizedRect(
+                    handle: handle,
+                    startRect: startGlobal,
+                    startPoint: startPoint,
+                    point: point,
+                    minSize: minAnnotation
+                )
+                next.mapMagnifierPart(magnifierPart, to: toLocal(resizedGlobal))
+            } else {
+                let startGlobal = toGlobal(start.boundingRect)
+                let resizedGlobal = resizedRect(
+                    handle: handle,
+                    startRect: startGlobal,
+                    startPoint: startPoint,
+                    point: point,
+                    minSize: minAnnotation
+                )
+                // Annotate marks may live outside the selection — don't clamp into the blue rect.
+                next.mapBoundingRect(to: toLocal(resizedGlobal))
+            }
             updateAnnotation(id: id) { $0.payload = next.payload }
             updateHighlight(showHandles: true)
 
@@ -930,6 +975,12 @@ final class SelectionOverlayController {
             toolbar?.syncStepStyle(stepStyle)
             return
         }
+        if annotation.isMagnifier {
+            magnifierStyle = annotation.magnifierStyle
+            magnifierKind = annotation.magnifierKind
+            toolbar?.syncMagnifier(kind: magnifierKind, style: magnifierStyle)
+            return
+        }
         if annotation.isMosaic {
             mosaicStyle = annotation.mosaicStyle
             if case .region(let mode, _) = annotation.mosaicGeometry {
@@ -1026,6 +1077,14 @@ final class SelectionOverlayController {
             return Annotation(string: "", rect: rect, style: textStyle)
         case .step:
             return Annotation(number: nextStepNumber(), center: local, stepStyle: stepStyle)
+        case .magnifier:
+            let source = CGRect(origin: local, size: .zero)
+            return Annotation(
+                magnifierKind: magnifierKind,
+                source: source,
+                lens: Annotation.concentricMagnifierLens(for: source),
+                magnifierStyle: magnifierStyle
+            )
         case .rectangle, .none:
             return Annotation(
                 kind: annotationKind,
@@ -1188,6 +1247,23 @@ final class SelectionOverlayController {
             // Step is click-to-place; drag-draw is unused.
             return makeDraftAnnotation(startingAt: start)
 
+        case .magnifier:
+            var source = CGRect(
+                x: min(start.x, end.x),
+                y: min(start.y, end.y),
+                width: abs(end.x - start.x),
+                height: abs(end.y - start.y)
+            )
+            if NSEvent.modifierFlags.contains(.shift) {
+                source = constrainedSquare(from: start, toward: end)
+            }
+            return Annotation(
+                magnifierKind: magnifierKind,
+                source: source,
+                lens: Annotation.concentricMagnifierLens(for: source),
+                magnifierStyle: magnifierStyle
+            )
+
         case .rectangle, .none:
             var draft = CGRect(
                 x: min(start.x, end.x),
@@ -1236,6 +1312,8 @@ final class SelectionOverlayController {
             }
         case .text, .step:
             return true
+        case .magnifier(_, let source, _, _):
+            return source.width >= minAnnotation && source.height >= minAnnotation
         }
     }
 
@@ -1295,6 +1373,13 @@ final class SelectionOverlayController {
             return Annotation(string: string, rect: rect, style: style)
         case .step(let number, let center, let style):
             return Annotation(number: number, center: center, stepStyle: style)
+        case .magnifier(let kind, let source, let lens, let style):
+            return Annotation(
+                magnifierKind: kind,
+                source: source,
+                lens: lens,
+                magnifierStyle: style
+            )
         }
     }
 
@@ -1353,6 +1438,9 @@ final class SelectionOverlayController {
             if ann.isArrow, let endpoint = hitTestArrowEndpoint(at: point, annotation: ann) {
                 return .arrowEndpoint(id: id, endpoint: endpoint)
             }
+            if ann.isMagnifier, let hit = hitTestMagnifierHandle(at: point, annotation: ann) {
+                return .handle(id: id, handle: hit.handle)
+            }
             if let handle = hitTestAnnotationHandle(at: point, annotation: ann) {
                 return .handle(id: id, handle: handle)
             }
@@ -1379,6 +1467,13 @@ final class SelectionOverlayController {
             if ann.isStep {
                 // Entire badge is a move target (no interior edit / no resize).
                 if toGlobal(ann.boundingRect).insetBy(dx: -2, dy: -2).contains(point) {
+                    return .border(id: ann.id)
+                }
+                continue
+            }
+            if ann.isMagnifier {
+                // Source / lens body moves that part (no nested draw into the frames).
+                if magnifierMovePart(at: point, annotation: ann) != nil {
                     return .border(id: ann.id)
                 }
                 continue
@@ -1553,14 +1648,30 @@ final class SelectionOverlayController {
 
         case .text, .step:
             return false
+
+        case .magnifier(let kind, let source, let lens, let style):
+            let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
+            return magnifierShapeContains(
+                kind: kind,
+                globalRect: toGlobal(source),
+                point: globalPoint,
+                tolerance: tolerance
+            ) || magnifierShapeContains(
+                kind: kind,
+                globalRect: toGlobal(lens),
+                point: globalPoint,
+                tolerance: tolerance
+            )
         }
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
         // Pencil / freehand mosaic / marker / eraser / text / arrow / step: no 8-handle resize chrome.
+        // Magnifier uses dedicated dual-frame handle hit-testing.
         // Mosaic / marker / eraser region (rect/oval) uses the same 8 handles as shapes.
         guard !annotation.isPencil, !annotation.isMosaicStroke, !annotation.isMarkerStroke,
-              !annotation.isEraserStroke, !annotation.isText, !annotation.isArrow, !annotation.isStep else {
+              !annotation.isEraserStroke, !annotation.isText, !annotation.isArrow, !annotation.isStep,
+              !annotation.isMagnifier else {
             return nil
         }
         let global = toGlobal(annotation.boundingRect)
@@ -1570,6 +1681,67 @@ final class SelectionOverlayController {
             }
         }
         return nil
+    }
+
+    private func hitTestMagnifierHandle(
+        at point: CGPoint,
+        annotation: Annotation
+    ) -> (part: MagnifierPart, handle: Handle)? {
+        guard case .magnifier(_, let source, let lens, _) = annotation.payload else { return nil }
+        // Outer lens handles first so concentric nests stay zoomable.
+        for handle in Handle.allCases {
+            if handleHitRect(handle, in: toGlobal(lens)).contains(point) {
+                return (.lens, handle)
+            }
+        }
+        for handle in Handle.allCases {
+            if handleHitRect(handle, in: toGlobal(source)).contains(point) {
+                return (.source, handle)
+            }
+        }
+        return nil
+    }
+
+    /// Which magnifier frame should move under `point` (source wins when nested overlap).
+    private func magnifierMovePart(at point: CGPoint, annotation: Annotation) -> MagnifierPart? {
+        guard case .magnifier(let kind, let source, let lens, let style) = annotation.payload else {
+            return nil
+        }
+        let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
+        let sourceHit = magnifierShapeContains(
+            kind: kind,
+            globalRect: toGlobal(source),
+            point: point,
+            tolerance: tolerance
+        )
+        let lensHit = magnifierShapeContains(
+            kind: kind,
+            globalRect: toGlobal(lens),
+            point: point,
+            tolerance: tolerance
+        )
+        if sourceHit { return .source }
+        if lensHit { return .lens }
+        return nil
+    }
+
+    private func magnifierShapeContains(
+        kind: ShapeKind,
+        globalRect: CGRect,
+        point: CGPoint,
+        tolerance: CGFloat
+    ) -> Bool {
+        let outer = globalRect.insetBy(dx: -tolerance, dy: -tolerance)
+        guard outer.contains(point) else { return false }
+        switch kind {
+        case .rectangle:
+            return true
+        case .ellipse:
+            let local = CGPoint(x: point.x - globalRect.minX, y: point.y - globalRect.minY)
+            let nx = (local.x - globalRect.width / 2) / max(globalRect.width / 2 + tolerance, 0.5)
+            let ny = (local.y - globalRect.height / 2) / max(globalRect.height / 2 + tolerance, 0.5)
+            return nx * nx + ny * ny <= 1
+        }
     }
 
     private func hitTestArrowEndpoint(at point: CGPoint, annotation: Annotation) -> ArrowEndpoint? {
@@ -1754,7 +1926,8 @@ final class SelectionOverlayController {
         AnnotationPrefs.save(style: next, kind: annotationKind)
         if let id = selectedAnnotationID,
            let selected = annotations.first(where: { $0.id == id }),
-           !selected.isText, !selected.isMosaic, !selected.isMarker, !selected.isEraser, !selected.isStep {
+           !selected.isText, !selected.isMosaic, !selected.isMarker, !selected.isEraser,
+           !selected.isStep, !selected.isMagnifier {
             var applied = next
             // Don't push fill onto a pencil / arrow mark.
             if selected.isPencil || selected.isArrow {
@@ -1872,6 +2045,26 @@ final class SelectionOverlayController {
             annotationHistory.commit { doc in
                 guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
                 doc.marks[idx].stepStyle = next
+            }
+            updateHighlight(showHandles: true)
+            refreshHistoryChrome()
+        }
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
+
+    private func applyMagnifier(kind: ShapeKind, style: MagnifierStyle) {
+        var next = style
+        next.clamp()
+        magnifierKind = kind
+        magnifierStyle = next
+        MagnifierAnnotationPrefs.save(kind: kind, style: next)
+        if let id = selectedAnnotationID,
+           let selected = annotations.first(where: { $0.id == id }),
+           selected.isMagnifier {
+            annotationHistory.commit { doc in
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+                doc.marks[idx].magnifierKind = kind
+                doc.marks[idx].magnifierStyle = next
             }
             updateHighlight(showHandles: true)
             refreshHistoryChrome()
@@ -2444,7 +2637,7 @@ final class SelectionOverlayController {
 
     private var isDraggingEditingText: Bool {
         guard let id = editingTextID,
-              case .annotateMove(let moveID, _, _) = dragKind
+              case .annotateMove(let moveID, _, _, _) = dragKind
         else { return false }
         return moveID == id
     }
@@ -2504,7 +2697,7 @@ final class SelectionOverlayController {
         }
         let movingOrResizingMarkerRegion: Bool = {
             switch dragKind {
-            case .annotateResize(_, _, let start, _), .annotateMove(_, let start, _):
+            case .annotateResize(_, _, let start, _, _), .annotateMove(_, let start, _, _):
                 return start.isMarkerRegion
             default:
                 return false
@@ -2543,7 +2736,9 @@ final class SelectionOverlayController {
             initialMarkerDrawMode: markerDrawMode,
             initialEraserStyle: eraserStyle,
             initialEraserDrawMode: eraserDrawMode,
-            initialStepStyle: stepStyle
+            initialStepStyle: stepStyle,
+            initialMagnifierKind: magnifierKind,
+            initialMagnifierStyle: magnifierStyle
         ) { [weak self] event in
             guard let self else { return }
             switch event {
@@ -2576,6 +2771,8 @@ final class SelectionOverlayController {
                 self.applyEraserDrawMode(mode)
             case .stepStyleChanged(let style):
                 self.applyStepStyle(style)
+            case .magnifierChanged(let kind, let style):
+                self.applyMagnifier(kind: kind, style: style)
             case .kindChanged(let kind):
                 self.applyKind(kind)
             case .arrowCapsChanged(let caps):

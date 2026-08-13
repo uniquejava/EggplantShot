@@ -11,7 +11,14 @@ enum AnnotateTool: Equatable {
     case mosaic
     case text
     case step
+    case magnifier
     case eraser
+}
+
+/// Which frame of a magnifier mark is being moved / resized.
+enum MagnifierPart: Equatable {
+    case source
+    case lens
 }
 
 /// Mosaic / blur draw mode: freehand stroke, or drag a blurred region.
@@ -685,6 +692,63 @@ enum StepAnnotationPrefs {
     }
 }
 
+/// Style for the magnifier annotate tool (frames + connector + sample mode).
+struct MagnifierStyle: Equatable {
+    var strokeWidth: CGFloat
+    var color: NSColor
+    /// When true, sample freeze/base **plus prior marks** into the lens (excludes self).
+    var includeAnnotations: Bool
+
+    static let `default` = MagnifierStyle(
+        strokeWidth: StrokeWidthOption.medium.points,
+        color: PaletteColor.red.color,
+        includeAnnotations: false
+    )
+
+    /// Default lens / source scale when creating a concentric pair.
+    static let defaultScale: CGFloat = 2
+
+    mutating func clamp() {
+        strokeWidth = StrokeWidthOption.matching(strokeWidth).points
+    }
+}
+
+/// Persisted last-used magnifier annotate prefs.
+enum MagnifierAnnotationPrefs {
+    private static let kindKey = "annotate.magnifier.kind"
+    private static let strokeWidthKey = "annotate.magnifier.strokeWidth"
+    private static let colorKey = "annotate.magnifier.palette"
+    private static let includeKey = "annotate.magnifier.includeAnnotations"
+
+    static func load() -> (kind: ShapeKind, style: MagnifierStyle) {
+        let defaults = UserDefaults.standard
+        var style = MagnifierStyle.default
+        if defaults.object(forKey: strokeWidthKey) != nil {
+            style.strokeWidth = CGFloat(defaults.double(forKey: strokeWidthKey))
+        }
+        if defaults.object(forKey: colorKey) != nil,
+           let swatch = PaletteColor(rawValue: defaults.integer(forKey: colorKey)) {
+            style.color = swatch.color
+        }
+        if defaults.object(forKey: includeKey) != nil {
+            style.includeAnnotations = defaults.bool(forKey: includeKey)
+        }
+        style.clamp()
+        let kind: ShapeKind = defaults.integer(forKey: kindKey) == 1 ? .ellipse : .rectangle
+        return (kind, style)
+    }
+
+    static func save(kind: ShapeKind, style: MagnifierStyle) {
+        var clamped = style
+        clamped.clamp()
+        let defaults = UserDefaults.standard
+        defaults.set(kind == .ellipse ? 1 : 0, forKey: kindKey)
+        defaults.set(Double(clamped.strokeWidth), forKey: strokeWidthKey)
+        defaults.set(PaletteColor.matching(clamped.color).rawValue, forKey: colorKey)
+        defaults.set(clamped.includeAnnotations, forKey: includeKey)
+    }
+}
+
 /// Extensible mark payload. New tools add cases here without forking history/store.
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
@@ -696,6 +760,8 @@ enum AnnotationPayload: Equatable {
     case text(string: String, rect: CGRect, style: TextStyle)
     /// Sequence number centered at `center` (selection-local).
     case step(number: Int, center: CGPoint, style: StepStyle)
+    /// Source sample rect + magnified lens rect (selection-local). Zoom = lens / source.
+    case magnifier(kind: ShapeKind, source: CGRect, lens: CGRect, style: MagnifierStyle)
 }
 
 /// One drawable mark. Geometry is in **selection-local** Cocoa points
@@ -809,6 +875,20 @@ struct Annotation: Equatable {
         self.payload = .step(number: max(number, 1), center: center, style: style)
     }
 
+    /// Convenience for the magnifier tool.
+    init(
+        id: UUID = UUID(),
+        magnifierKind kind: ShapeKind,
+        source: CGRect,
+        lens: CGRect,
+        magnifierStyle: MagnifierStyle
+    ) {
+        self.id = id
+        var style = magnifierStyle
+        style.clamp()
+        self.payload = .magnifier(kind: kind, source: source, lens: lens, style: style)
+    }
+
     /// Disk / tooling type discriminator (`"shape"`, `"pencil"`, `"mosaic"`, `"text"`, …).
     var typeName: String {
         switch payload {
@@ -820,18 +900,19 @@ struct Annotation: Equatable {
         case .eraser: return "eraser"
         case .text: return "text"
         case .step: return "step"
+        case .magnifier: return "magnifier"
         }
     }
 
     // MARK: Shared accessors
 
-    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / marker / eraser / text / step marks.
+    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / marker / eraser / text / step / magnifier marks.
     var style: AnnotationStyle {
         get {
             switch payload {
             case .shape(_, _, let style), .arrow(_, _, let style, _), .pencil(_, let style):
                 return style
-            case .marker, .mosaic, .eraser, .text, .step:
+            case .marker, .mosaic, .eraser, .text, .step, .magnifier:
                 return .default
             }
         }
@@ -843,9 +924,55 @@ struct Annotation: Equatable {
                 payload = .arrow(start: start, end: end, style: newValue, caps: caps)
             case .pencil(let points, _):
                 payload = .pencil(points: points, style: newValue)
-            case .marker, .mosaic, .eraser, .text, .step:
+            case .marker, .mosaic, .eraser, .text, .step, .magnifier:
                 break
             }
+        }
+    }
+
+    var magnifierStyle: MagnifierStyle {
+        get {
+            if case .magnifier(_, _, _, let style) = payload { return style }
+            return .default
+        }
+        set {
+            guard case .magnifier(let kind, let source, let lens, _) = payload else { return }
+            var style = newValue
+            style.clamp()
+            payload = .magnifier(kind: kind, source: source, lens: lens, style: style)
+        }
+    }
+
+    var magnifierKind: ShapeKind {
+        get {
+            if case .magnifier(let kind, _, _, _) = payload { return kind }
+            return .rectangle
+        }
+        set {
+            guard case .magnifier(_, let source, let lens, let style) = payload else { return }
+            payload = .magnifier(kind: newValue, source: source, lens: lens, style: style)
+        }
+    }
+
+    var magnifierSource: CGRect {
+        get {
+            if case .magnifier(_, let source, _, _) = payload { return source }
+            return .null
+        }
+        set {
+            guard case .magnifier(let kind, _, let lens, let style) = payload else { return }
+            payload = .magnifier(kind: kind, source: newValue, lens: lens, style: style)
+        }
+    }
+
+    var magnifierLens: CGRect {
+        get {
+            if case .magnifier(_, _, let lens, _) = payload { return lens }
+            return .null
+        }
+        set {
+            guard case .magnifier(let kind, let source, _, let style) = payload else { return }
+            payload = .magnifier(kind: kind, source: source, lens: newValue, style: style)
         }
     }
 
@@ -1035,6 +1162,9 @@ struct Annotation: Equatable {
             }
         case .step(_, let center, let style):
             return style.bounds(around: center)
+        case .magnifier(_, let source, let lens, let style):
+            let pad = style.strokeWidth / 2
+            return source.union(lens).insetBy(dx: -pad, dy: -pad)
         }
     }
 
@@ -1078,6 +1208,11 @@ struct Annotation: Equatable {
         return false
     }
 
+    var isMagnifier: Bool {
+        if case .magnifier = payload { return true }
+        return false
+    }
+
     // MARK: Shape accessors (no-ops for non-shape payloads)
 
     var kind: ShapeKind {
@@ -1099,7 +1234,7 @@ struct Annotation: Equatable {
                 payload = .shape(kind, rect: newValue, style: style)
             case .text(let string, _, let style):
                 payload = .text(string: string, rect: newValue, style: style)
-            case .arrow, .pencil, .marker, .mosaic, .eraser, .step:
+            case .arrow, .pencil, .marker, .mosaic, .eraser, .step, .magnifier:
                 break
             }
         }
@@ -1237,7 +1372,59 @@ struct Annotation: Equatable {
                 center: CGPoint(x: center.x + delta.width, y: center.y + delta.height),
                 style: style
             )
+        case .magnifier(let kind, let source, let lens, let style):
+            payload = .magnifier(
+                kind: kind,
+                source: source.offsetBy(dx: delta.width, dy: delta.height),
+                lens: lens.offsetBy(dx: delta.width, dy: delta.height),
+                style: style
+            )
         }
+    }
+
+    /// Moves only the source or lens frame of a magnifier mark.
+    mutating func translateMagnifierPart(_ part: MagnifierPart, by delta: CGSize) {
+        guard case .magnifier(let kind, let source, let lens, let style) = payload else { return }
+        switch part {
+        case .source:
+            payload = .magnifier(
+                kind: kind,
+                source: source.offsetBy(dx: delta.width, dy: delta.height),
+                lens: lens,
+                style: style
+            )
+        case .lens:
+            payload = .magnifier(
+                kind: kind,
+                source: source,
+                lens: lens.offsetBy(dx: delta.width, dy: delta.height),
+                style: style
+            )
+        }
+    }
+
+    /// Resizes only the source or lens frame (selection-local).
+    mutating func mapMagnifierPart(_ part: MagnifierPart, to newBounds: CGRect) {
+        guard case .magnifier(let kind, let source, let lens, let style) = payload else { return }
+        switch part {
+        case .source:
+            payload = .magnifier(kind: kind, source: newBounds, lens: lens, style: style)
+        case .lens:
+            payload = .magnifier(kind: kind, source: source, lens: newBounds, style: style)
+        }
+    }
+
+    /// Concentric lens around `source` at `scale` (default 2×).
+    static func concentricMagnifierLens(for source: CGRect, scale: CGFloat = MagnifierStyle.defaultScale) -> CGRect {
+        let s = max(scale, 1.01)
+        let w = max(source.width * s, source.width + 1)
+        let h = max(source.height * s, source.height + 1)
+        return CGRect(
+            x: source.midX - w / 2,
+            y: source.midY - h / 2,
+            width: w,
+            height: h
+        )
     }
 
     /// Maps geometry so `boundingRect` becomes `newBounds` (used by resize handles).
@@ -1335,6 +1522,23 @@ struct Annotation: Equatable {
                 center: CGPoint(x: newBounds.midX, y: newBounds.midY),
                 style: style
             )
+        case .magnifier(let kind, let source, let lens, let style):
+            // Dual-frame resize uses `mapMagnifierPart`; whole-bounds map keeps relative layout.
+            let sx = newBounds.width / old.width
+            let sy = newBounds.height / old.height
+            let mappedSource = CGRect(
+                x: newBounds.minX + (source.minX - old.minX) * sx,
+                y: newBounds.minY + (source.minY - old.minY) * sy,
+                width: source.width * sx,
+                height: source.height * sy
+            )
+            let mappedLens = CGRect(
+                x: newBounds.minX + (lens.minX - old.minX) * sx,
+                y: newBounds.minY + (lens.minY - old.minY) * sy,
+                width: lens.width * sx,
+                height: lens.height * sy
+            )
+            payload = .magnifier(kind: kind, source: mappedSource, lens: mappedLens, style: style)
         }
     }
 
@@ -1494,6 +1698,15 @@ enum AnnotationDrawing {
         case .step(let number, let center, let style):
             let c = CGPoint(x: center.x + origin.x, y: center.y + origin.y)
             drawStep(number: number, center: c, style: style)
+        case .magnifier(let kind, let source, let lens, let style):
+            drawMagnifier(
+                kind: kind,
+                source: source,
+                lens: lens,
+                style: style,
+                drawOrigin: origin,
+                sample: sample
+            )
         }
     }
 
@@ -1502,13 +1715,14 @@ enum AnnotationDrawing {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
-        case .arrow, .pencil, .marker, .mosaic, .eraser, .text, .step:
+        case .arrow, .pencil, .marker, .mosaic, .eraser, .text, .step, .magnifier:
             draw(annotation, origin: .zero)
         }
     }
 
     /// Renders marks onto a transparent layer so eraser `destinationOut` punches annotations only.
-    /// Mosaic samples the freeze/base image directly (simple path).
+    /// Mosaic samples the freeze/base image directly. Magnifier with `includeAnnotations` samples
+    /// freeze/base + marks drawn before that magnifier — **source-crop only** (not full-screen).
     static func renderMarksLayer(
         _ annotations: [Annotation],
         size: CGSize,
@@ -1517,10 +1731,49 @@ enum AnnotationDrawing {
     ) -> NSImage? {
         guard size.width > 0, size.height > 0, !annotations.isEmpty else { return nil }
         return NSImage(size: size, flipped: false) { _ in
+            var prior: [Annotation] = []
+            prior.reserveCapacity(annotations.count)
             for annotation in annotations {
-                draw(annotation, origin: origin, sample: sample)
+                if case .magnifier(let kind, let source, let lens, let style) = annotation.payload {
+                    drawMagnifier(
+                        kind: kind,
+                        source: source,
+                        lens: lens,
+                        style: style,
+                        drawOrigin: origin,
+                        sample: sample,
+                        priorMarks: style.includeAnnotations ? prior : []
+                    )
+                } else {
+                    draw(annotation, origin: origin, sample: sample)
+                }
+                prior.append(annotation)
             }
             return true
+        }
+    }
+
+    /// Draw prior marks into a small buffer (no nested include-annotations rebuild).
+    private static func drawMarksSimple(
+        _ annotations: [Annotation],
+        origin: CGPoint,
+        sample: MosaicSampleContext?
+    ) {
+        for annotation in annotations {
+            if case .magnifier(let kind, let source, let lens, var style) = annotation.payload {
+                style.includeAnnotations = false
+                drawMagnifier(
+                    kind: kind,
+                    source: source,
+                    lens: lens,
+                    style: style,
+                    drawOrigin: origin,
+                    sample: sample,
+                    priorMarks: []
+                )
+            } else {
+                draw(annotation, origin: origin, sample: sample)
+            }
         }
     }
 
@@ -2491,6 +2744,207 @@ enum AnnotationDrawing {
         let textRect = rect.insetBy(dx: pad, dy: pad)
         // Wrap to the mark’s width (must match the field editor / commit sizing).
         attributed.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading])
+    }
+
+    private static func drawMagnifier(
+        kind: ShapeKind,
+        source: CGRect,
+        lens: CGRect,
+        style: MagnifierStyle,
+        drawOrigin: CGPoint,
+        sample: MosaicSampleContext?,
+        priorMarks: [Annotation] = []
+    ) {
+        let sourceDraw = source.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
+        let lensDraw = lens.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
+        guard sourceDraw.width >= 1, sourceDraw.height >= 1, lensDraw.width >= 1, lensDraw.height >= 1 else {
+            return
+        }
+
+        // Magnified content inside the lens (sample freeze/base or source-crop + prior marks).
+        if let sample {
+            if style.includeAnnotations, !priorMarks.isEmpty {
+                drawMagnifiedContentWithAnnotations(
+                    kind: kind,
+                    sourceLocal: source,
+                    lensDraw: lensDraw,
+                    sample: sample,
+                    drawOrigin: drawOrigin,
+                    priorMarks: priorMarks
+                )
+            } else {
+                drawMagnifiedContent(
+                    kind: kind,
+                    sourceLocal: source,
+                    lensDraw: lensDraw,
+                    sample: sample,
+                    drawOrigin: drawOrigin
+                )
+            }
+        }
+
+        style.color.setStroke()
+        let inset = style.strokeWidth / 2
+        let sourcePath = magnifierPath(kind: kind, in: sourceDraw.insetBy(dx: inset, dy: inset))
+        sourcePath.lineWidth = style.strokeWidth
+        sourcePath.lineJoinStyle = .miter
+        sourcePath.stroke()
+
+        let lensPath = magnifierPath(kind: kind, in: lensDraw.insetBy(dx: inset, dy: inset))
+        lensPath.lineWidth = style.strokeWidth
+        lensPath.lineJoinStyle = .miter
+        lensPath.stroke()
+
+        if let (a, b) = magnifierConnectorEndpoints(source: sourceDraw, lens: lensDraw) {
+            let line = NSBezierPath()
+            line.move(to: a)
+            line.line(to: b)
+            line.lineWidth = style.strokeWidth
+            line.lineCapStyle = .round
+            line.stroke()
+        }
+    }
+
+    private static func drawMagnifiedContent(
+        kind: ShapeKind,
+        sourceLocal: CGRect,
+        lensDraw: CGRect,
+        sample: MosaicSampleContext,
+        drawOrigin: CGPoint
+    ) {
+        let imageBounds = CGRect(origin: .zero, size: sample.image.size)
+        let sampleSource = sourceLocal.offsetBy(
+            dx: sample.selectionOriginInImage.x,
+            dy: sample.selectionOriginInImage.y
+        )
+        let crop = sampleSource.intersection(imageBounds)
+        guard crop.width >= 1, crop.height >= 1 else { return }
+
+        guard let ctx = NSGraphicsContext.current else { return }
+        ctx.saveGraphicsState()
+        defer { ctx.restoreGraphicsState() }
+
+        magnifierPath(kind: kind, in: lensDraw).addClip()
+
+        // Map the full source rect into the lens (even if crop clipped the image edges).
+        let srcDraw = sourceLocal.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
+        let sx = lensDraw.width / max(srcDraw.width, 0.01)
+        let sy = lensDraw.height / max(srcDraw.height, 0.01)
+        let cropInSource = CGRect(
+            x: crop.minX - sample.selectionOriginInImage.x,
+            y: crop.minY - sample.selectionOriginInImage.y,
+            width: crop.width,
+            height: crop.height
+        )
+        let dest = CGRect(
+            x: lensDraw.minX + (cropInSource.minX - sourceLocal.minX) * sx,
+            y: lensDraw.minY + (cropInSource.minY - sourceLocal.minY) * sy,
+            width: cropInSource.width * sx,
+            height: cropInSource.height * sy
+        )
+        sample.image.draw(in: dest, from: crop, operation: .copy, fraction: 1)
+    }
+
+    /// Composite freeze crop + prior marks into a **source-sized** buffer, then scale into the lens.
+    /// Avoids full-display re-composite on every overlay redraw (was unusably slow).
+    private static func drawMagnifiedContentWithAnnotations(
+        kind: ShapeKind,
+        sourceLocal: CGRect,
+        lensDraw: CGRect,
+        sample: MosaicSampleContext,
+        drawOrigin: CGPoint,
+        priorMarks: [Annotation]
+    ) {
+        let imageBounds = CGRect(origin: .zero, size: sample.image.size)
+        let sampleSource = sourceLocal.offsetBy(
+            dx: sample.selectionOriginInImage.x,
+            dy: sample.selectionOriginInImage.y
+        )
+        let crop = sampleSource.intersection(imageBounds)
+        guard crop.width >= 1, crop.height >= 1 else { return }
+
+        let composed = NSImage(size: crop.size, flipped: false) { _ in
+            sample.image.draw(
+                in: CGRect(origin: .zero, size: crop.size),
+                from: crop,
+                operation: .copy,
+                fraction: 1
+            )
+            // selection-local → crop-image: L + selectionOrigin - crop.origin
+            let markOrigin = CGPoint(
+                x: sample.selectionOriginInImage.x - crop.minX,
+                y: sample.selectionOriginInImage.y - crop.minY
+            )
+            drawMarksSimple(priorMarks, origin: markOrigin, sample: sample)
+            return true
+        }
+
+        guard let ctx = NSGraphicsContext.current else { return }
+        ctx.saveGraphicsState()
+        defer { ctx.restoreGraphicsState() }
+
+        magnifierPath(kind: kind, in: lensDraw).addClip()
+
+        let srcDraw = sourceLocal.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
+        let sx = lensDraw.width / max(srcDraw.width, 0.01)
+        let sy = lensDraw.height / max(srcDraw.height, 0.01)
+        let cropInSource = CGRect(
+            x: crop.minX - sample.selectionOriginInImage.x,
+            y: crop.minY - sample.selectionOriginInImage.y,
+            width: crop.width,
+            height: crop.height
+        )
+        let dest = CGRect(
+            x: lensDraw.minX + (cropInSource.minX - sourceLocal.minX) * sx,
+            y: lensDraw.minY + (cropInSource.minY - sourceLocal.minY) * sy,
+            width: cropInSource.width * sx,
+            height: cropInSource.height * sy
+        )
+        composed.draw(in: dest, from: .zero, operation: .copy, fraction: 1)
+    }
+
+    private static func magnifierPath(kind: ShapeKind, in rect: CGRect) -> NSBezierPath {
+        switch kind {
+        case .rectangle:
+            return NSBezierPath(rect: rect)
+        case .ellipse:
+            return NSBezierPath(ovalIn: rect)
+        }
+    }
+
+    /// Edge-to-edge connector when lens is offset from a concentric nest; `nil` when nested.
+    static func magnifierConnectorEndpoints(source: CGRect, lens: CGRect) -> (CGPoint, CGPoint)? {
+        let sourceCenter = CGPoint(x: source.midX, y: source.midY)
+        let lensCenter = CGPoint(x: lens.midX, y: lens.midY)
+        let centerDist = hypot(lensCenter.x - sourceCenter.x, lensCenter.y - sourceCenter.y)
+        let nested = lens.contains(sourceCenter)
+            && lens.width + 0.5 >= source.width
+            && lens.height + 0.5 >= source.height
+        if nested && centerDist < 6 {
+            return nil
+        }
+        guard centerDist > 1 else { return nil }
+
+        let fromSource = boundaryPoint(of: source, toward: lensCenter) ?? sourceCenter
+        let fromLens = boundaryPoint(of: lens, toward: sourceCenter) ?? lensCenter
+        if hypot(fromLens.x - fromSource.x, fromLens.y - fromSource.y) < 2 {
+            return nil
+        }
+        return (fromSource, fromLens)
+    }
+
+    private static func boundaryPoint(of rect: CGRect, toward target: CGPoint) -> CGPoint? {
+        let origin = CGPoint(x: rect.midX, y: rect.midY)
+        let dx = target.x - origin.x
+        let dy = target.y - origin.y
+        guard abs(dx) > 0.001 || abs(dy) > 0.001 else { return nil }
+        let hw = rect.width / 2
+        let hh = rect.height / 2
+        guard hw > 0, hh > 0 else { return nil }
+        let tx = abs(dx) < 0.001 ? CGFloat.greatestFiniteMagnitude : hw / abs(dx)
+        let ty = abs(dy) < 0.001 ? CGFloat.greatestFiniteMagnitude : hh / abs(dy)
+        let t = min(tx, ty)
+        return CGPoint(x: origin.x + dx * t, y: origin.y + dy * t)
     }
 
     private static func drawStep(number: Int, center: CGPoint, style: StepStyle) {

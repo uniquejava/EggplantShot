@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate live: **shape**, **arrow**, **pencil**, **marker**, **mosaic**, **text**, **step**, **eraser** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Magnifier remains a stub.
+Annotate live: **shape**, **arrow**, **pencil**, **marker**, **mosaic**, **text**, **step**, **magnifier**, **eraser** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success).
 
 Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
@@ -47,6 +47,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 § Step: [ filled | outline | plain ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 ♯ Eraser: [ · | ·· | ··· ] | [ rect region | oval region ]  (same first 5 as mosaic; punches marks only)
+  Magnifier: [ rect | oval ] | [ thin | med | thick ] | [ includeAnnotations ] | [ preview 24 + palette 2×10 ]
   More stub / disabled
 ```
 
@@ -113,12 +114,6 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - **Hit / cursor:** blank overlay (selection or dimmed) → I-beam for place-new; near text edge / hairline (+~2pt outside) → four-arrow move; deeper interior → I-beam + click to edit. Toolbar only → arrow. While editing: border drag **live-moves** the chrome without ending edit; interior still types. Cursor is re-applied after caret blink so AppKit cannot reset to the system arrow while the pointer is still. Hover → 1px contrast dashed outline (black on light freeze, white on dark; clears on mouse-out). No resize handles.
 - Esc ends edit only; Return = newline (not confirm). Empty on end-edit → drop mark.
 
-### OCR
-
-- Toolbar **Recognize Text** (`doc.text.viewfinder`): Vision OCR on the **unannotated** selection crop (zh-Hans / zh-Hant / en-US).
-- Dismisses the overlay immediately after crop (no result UI). On non-empty text → pasteboard + short bubble-pop sound (`Resources/ocr-success.wav`). Empty / failure → silent, clipboard unchanged.
-- Does **not** append to snip history.
-
 ### Step
 
 - Sub-toolbar: **filled** / **outline** / **plain** chrome | size ▾ | color grid.
@@ -130,6 +125,22 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Edit chrome: dashed contrast square around the badge (Snipaste).
 - Disk: `type: "step"` with `number`, `points: [center]`, `stepStyle` (`kind` / `size` / `color`).
 - P4: vector payload only; mutate via `AnnotationHistory`; unknown types skip on load.
+
+### Magnifier
+
+- Drag defines the **source** sample rect; on mouse-up, a concentric **lens** is created at **2×** (same center). Shift → square/circle source.
+- Zoom is derived (`lens / source`). **Lens handles** resize the projection (primary zoom control); **source handles** change the sampled region. Move each frame independently.
+- When the lens is dragged away from a concentric nest, a stroke connector links nearest edges; nested/concentric hides the line.
+- Sub-toolbar: rect ↔ oval | stroke widths | **include annotations** toggle (`rectangle.on.rectangle`) | color grid.
+- `includeAnnotations == false`: sample freeze/base only. `true`: sample freeze/base + marks drawn **before** this magnifier (excludes self; **source-crop composite** only — not full-display; P4 vector data, no bake into `baseImage`).
+- Auto-select after create; dual 8-handle chrome on source + lens.
+- Disk: `type: "magnifier"` with `kind`, `rect` (source), `lensRect`, `magnifierStyle` (`strokeWidth` / `color` / `includeAnnotations`).
+
+### OCR
+
+- Toolbar **Recognize Text** (`doc.text.viewfinder`): Vision OCR on the **unannotated** selection crop (zh-Hans / zh-Hant / en-US).
+- Dismisses the overlay immediately after crop (no result UI). On non-empty text → pasteboard + short bubble-pop sound (`Resources/ocr-success.wav`). Empty / failure → silent, clipboard unchanged.
+- Does **not** append to snip history.
 
 ## Pin chrome
 
@@ -153,6 +164,6 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
 - [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
-- [x] Shape / arrow / pencil / marker / mosaic / text / step / eraser: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] Shape / arrow / pencil / marker / mosaic / text / step / magnifier / eraser: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] OCR: recognize selection → clipboard + bubble-pop; dismiss overlay; no result UI
 - [x] Undo / redo; debug build succeeds

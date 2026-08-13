@@ -340,6 +340,11 @@ final class SelectionOverlayNSView: NSView {
                     drawRegionChrome(in: r, mode: mode, dashed: false)
                 }
                 AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+            } else if case .magnifier(_, let source, let lens, _) = selected.payload {
+                let sourceR = source.offsetBy(dx: origin.x, dy: origin.y)
+                let lensR = lens.offsetBy(dx: origin.x, dy: origin.y)
+                AnnotationDrawing.drawHandles(in: sourceR, size: annotationHandleSize, accent: accent)
+                AnnotationDrawing.drawHandles(in: lensR, size: annotationHandleSize, accent: accent)
             } else {
                 let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
                 AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)

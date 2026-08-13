@@ -25,6 +25,7 @@ final class RefineToolbarController: NSObject {
         case eraserStyleChanged(EraserStyle)
         case eraserDrawModeChanged(MosaicDrawMode)
         case stepStyleChanged(StepStyle)
+        case magnifierChanged(kind: ShapeKind, style: MagnifierStyle)
         case kindChanged(ShapeKind)
         case arrowCapsChanged(ArrowCaps)
         case ocr
@@ -43,6 +44,8 @@ final class RefineToolbarController: NSObject {
     private var eraserStyle: EraserStyle
     private var eraserDrawMode: MosaicDrawMode
     private var stepStyle: StepStyle
+    private var magnifierStyle: MagnifierStyle
+    private var magnifierKind: ShapeKind
     private var tool: AnnotateTool
     private var kind: ShapeKind
     private var arrowCaps: ArrowCaps
@@ -55,6 +58,7 @@ final class RefineToolbarController: NSObject {
     private var mosaicButton: NSButton!
     private var textButton: NSButton!
     private var stepButton: NSButton!
+    private var magnifierButton: NSButton!
     private var eraserButton: NSButton!
     private var undoButton: NSButton!
     private var redoButton: NSButton!
@@ -71,6 +75,8 @@ final class RefineToolbarController: NSObject {
     private var eraserOptionsRow: NSView!
     /// Step options row (chrome kind / size / palette).
     private var stepOptionsRow: NSView!
+    /// Magnifier options row (rect/oval / stroke / includeAnnotations / palette).
+    private var magnifierOptionsRow: NSView!
     /// Shape-only chrome (fill + rect/oval). Hidden for pencil / arrow.
     private var shapeOnlyViews: [NSView] = []
     /// Divider after shape kind group; visible for shape/pencil, hidden for arrow.
@@ -109,6 +115,11 @@ final class RefineToolbarController: NSObject {
     private var stepKindButtons: [NSButton] = []
     private var stepSizeButton: NSButton!
     private var stepColorPreview: NSView!
+    private var magnifierRectButton: NSButton!
+    private var magnifierOvalButton: NSButton!
+    private var magnifierStrokeButtons: [NSButton] = []
+    private var magnifierIncludeButton: NSButton!
+    private var magnifierColorPreview: NSView!
 
     init(
         primaryAction: SelectionOverlayController.ConfirmAction,
@@ -124,6 +135,8 @@ final class RefineToolbarController: NSObject {
         initialEraserStyle: EraserStyle = .default,
         initialEraserDrawMode: MosaicDrawMode = .rectangle,
         initialStepStyle: StepStyle = .default,
+        initialMagnifierKind: ShapeKind = .rectangle,
+        initialMagnifierStyle: MagnifierStyle = .default,
         onEvent: @escaping (Event) -> Void
     ) {
         self.onEvent = onEvent
@@ -136,6 +149,8 @@ final class RefineToolbarController: NSObject {
         self.eraserStyle = initialEraserStyle
         self.eraserDrawMode = initialEraserDrawMode
         self.stepStyle = initialStepStyle
+        self.magnifierKind = initialMagnifierKind
+        self.magnifierStyle = initialMagnifierStyle
         self.tool = initialTool
         self.kind = initialKind
         self.arrowCaps = initialArrowCaps
@@ -175,12 +190,14 @@ final class RefineToolbarController: NSObject {
         markerOptionsRow = buildMarkerSubToolbar()
         eraserOptionsRow = buildEraserSubToolbar()
         stepOptionsRow = buildStepSubToolbar()
+        magnifierOptionsRow = buildMagnifierSubToolbar()
         optionsStack.addArrangedSubview(strokeOptionsRow)
         optionsStack.addArrangedSubview(textOptionsRow)
         optionsStack.addArrangedSubview(markerOptionsRow)
         optionsStack.addArrangedSubview(mosaicOptionsRow)
         optionsStack.addArrangedSubview(eraserOptionsRow)
         optionsStack.addArrangedSubview(stepOptionsRow)
+        optionsStack.addArrangedSubview(magnifierOptionsRow)
         embed(optionsStack, in: optionsCard)
         subToolbarContainer = optionsCard
         subToolbarContainer.isHidden = (initialTool == .none)
@@ -254,6 +271,12 @@ final class RefineToolbarController: NSObject {
             enabled: true,
             action: #selector(stepTapped)
         )
+        magnifierButton = iconButton(
+            systemName: "magnifyingglass",
+            tooltip: "Magnifier",
+            enabled: true,
+            action: #selector(magnifierTapped)
+        )
         eraserButton = iconButton(
             systemName: "eraser",
             tooltip: "Eraser",
@@ -269,7 +292,7 @@ final class RefineToolbarController: NSObject {
             mosaicButton,
             textButton,
             stepButton,
-            iconButton(systemName: "magnifyingglass", tooltip: "Magnifier", enabled: false, action: nil),
+            magnifierButton,
             eraserButton,
         ]
         undoButton = iconButton(
@@ -912,6 +935,103 @@ final class RefineToolbarController: NSObject {
         return stack
     }
 
+    private func buildMagnifierSubToolbar() -> NSView {
+        let stack = NSStackView(views: [])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+
+        magnifierRectButton = iconButton(
+            systemName: "rectangle",
+            tooltip: "Rectangle",
+            enabled: true,
+            action: #selector(magnifierRectTapped)
+        )
+        magnifierOvalButton = iconButton(
+            systemName: "oval",
+            tooltip: "Ellipse / Circle",
+            enabled: true,
+            action: #selector(magnifierOvalTapped)
+        )
+        stack.addArrangedSubview(magnifierRectButton)
+        stack.addArrangedSubview(magnifierOvalButton)
+        stack.addArrangedSubview(miniDivider())
+
+        magnifierStrokeButtons = StrokeWidthOption.allCases.map { option in
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.setButtonType(.momentaryChange)
+            button.imagePosition = .imageOnly
+            button.toolTip = "Stroke"
+            button.target = self
+            button.action = #selector(magnifierStrokeTapped(_:))
+            button.tag = option.rawValue
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 22),
+                button.heightAnchor.constraint(equalToConstant: 22),
+            ])
+            button.image = strokeDotImage(diameter: option.previewDiameter, selected: false)
+            return button
+        }
+        for button in magnifierStrokeButtons {
+            stack.addArrangedSubview(button)
+        }
+        stack.addArrangedSubview(miniDivider())
+
+        magnifierIncludeButton = iconButton(
+            systemName: "rectangle.on.rectangle",
+            tooltip: "Include annotations in magnifier",
+            enabled: true,
+            action: #selector(magnifierIncludeTapped)
+        )
+        stack.addArrangedSubview(magnifierIncludeButton)
+        stack.addArrangedSubview(miniDivider())
+
+        let preview = NSView(frame: .zero)
+        preview.wantsLayer = true
+        preview.layer?.cornerRadius = 3
+        preview.layer?.borderWidth = 1
+        preview.layer?.borderColor = NSColor(calibratedWhite: 0.35, alpha: 1).cgColor
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            preview.widthAnchor.constraint(equalToConstant: 24),
+            preview.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        magnifierColorPreview = preview
+        stack.addArrangedSubview(preview)
+
+        let swatchGrid = NSStackView(views: [])
+        swatchGrid.orientation = .vertical
+        swatchGrid.spacing = 2
+        swatchGrid.alignment = .leading
+
+        let allSwatches = PaletteColor.allCases
+        let columns = 10
+        for rowStart in stride(from: 0, to: allSwatches.count, by: columns) {
+            let row = NSStackView(views: [])
+            row.orientation = .horizontal
+            row.spacing = 2
+            let end = min(rowStart + columns, allSwatches.count)
+            for swatch in allSwatches[rowStart..<end] {
+                let control = PaletteSwatchControl(swatch: swatch) { [weak self] picked in
+                    guard let self else { return }
+                    self.magnifierStyle.color = picked.color
+                    self.refreshSelectionChrome()
+                    self.emitMagnifierChanged()
+                }
+                row.addArrangedSubview(control)
+            }
+            swatchGrid.addArrangedSubview(row)
+        }
+        stack.addArrangedSubview(swatchGrid)
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
+
     private func textStyleToggleButton(title: String, tooltip: String, action: Selector) -> NSButton {
         let button = NSButton(frame: .zero)
         button.bezelStyle = .inline
@@ -953,33 +1073,49 @@ final class RefineToolbarController: NSObject {
         tintSelected(mosaicButton, selected: tool == .mosaic)
         tintSelected(textButton, selected: tool == .text)
         tintSelected(stepButton, selected: tool == .step)
+        tintSelected(magnifierButton, selected: tool == .magnifier)
         tintSelected(eraserButton, selected: tool == .eraser)
         colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
         textColorPreview.layer?.backgroundColor = textStyle.color.cgColor
         markerColorPreview.layer?.backgroundColor = markerStyle.color.cgColor
         stepColorPreview.layer?.backgroundColor = stepStyle.color.cgColor
+        magnifierColorPreview.layer?.backgroundColor = magnifierStyle.color.cgColor
 
         let isText = (tool == .text)
         let isMosaic = (tool == .mosaic)
         let isMarker = (tool == .marker)
         let isStep = (tool == .step)
+        let isMagnifier = (tool == .magnifier)
         let isEraser = (tool == .eraser)
-        strokeOptionsRow.isHidden = isText || isMosaic || isMarker || isStep || isEraser
+        strokeOptionsRow.isHidden = isText || isMosaic || isMarker || isStep || isMagnifier || isEraser
         textOptionsRow.isHidden = !isText
         mosaicOptionsRow.isHidden = !isMosaic
         markerOptionsRow.isHidden = !isMarker
         eraserOptionsRow.isHidden = !isEraser
         stepOptionsRow.isHidden = !isStep
+        magnifierOptionsRow.isHidden = !isMagnifier
 
         let isArrow = (tool == .arrow)
         let shapeExtrasVisible = (tool == .rectangle)
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
-        afterKindDivider.isHidden = isArrow || isText || isMosaic || isMarker || isStep || isEraser
+        afterKindDivider.isHidden = isArrow || isText || isMosaic || isMarker || isStep || isMagnifier
+            || isEraser
         for view in arrowOnlyViews {
             view.isHidden = !isArrow
         }
+
+        tintSelected(magnifierRectButton, selected: magnifierKind == .rectangle)
+        tintSelected(magnifierOvalButton, selected: magnifierKind == .ellipse)
+        let magStroke = StrokeWidthOption.matching(magnifierStyle.strokeWidth)
+        for button in magnifierStrokeButtons {
+            let option = StrokeWidthOption(rawValue: button.tag) ?? .medium
+            let on = option == magStroke
+            button.image = strokeDotImage(diameter: option.previewDiameter, selected: on)
+            tintSelected(button, selected: on)
+        }
+        tintSelected(magnifierIncludeButton, selected: magnifierStyle.includeAnnotations)
 
         let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
         let treatAsStroke = !style.isFilled || tool == .pencil || tool == .arrow
@@ -1517,8 +1653,41 @@ final class RefineToolbarController: NSObject {
         selectTool(tool == .step ? .none : .step)
     }
 
+    @objc private func magnifierTapped() {
+        selectTool(tool == .magnifier ? .none : .magnifier)
+    }
+
     @objc private func eraserTapped() {
         selectTool(tool == .eraser ? .none : .eraser)
+    }
+
+    @objc private func magnifierRectTapped() {
+        magnifierKind = .rectangle
+        refreshSelectionChrome()
+        emitMagnifierChanged()
+    }
+
+    @objc private func magnifierOvalTapped() {
+        magnifierKind = .ellipse
+        refreshSelectionChrome()
+        emitMagnifierChanged()
+    }
+
+    @objc private func magnifierStrokeTapped(_ sender: NSButton) {
+        let option = StrokeWidthOption(rawValue: sender.tag) ?? .medium
+        magnifierStyle.strokeWidth = option.points
+        refreshSelectionChrome()
+        emitMagnifierChanged()
+    }
+
+    @objc private func magnifierIncludeTapped() {
+        magnifierStyle.includeAnnotations.toggle()
+        refreshSelectionChrome()
+        emitMagnifierChanged()
+    }
+
+    private func emitMagnifierChanged() {
+        onEvent(.magnifierChanged(kind: magnifierKind, style: magnifierStyle))
     }
 
     private func selectTool(_ next: AnnotateTool) {
@@ -1967,6 +2136,14 @@ final class RefineToolbarController: NSObject {
         var next = style
         next.clamp()
         self.stepStyle = next
+        refreshSelectionChrome()
+    }
+
+    func syncMagnifier(kind: ShapeKind, style: MagnifierStyle) {
+        var next = style
+        next.clamp()
+        magnifierKind = kind
+        magnifierStyle = next
         refreshSelectionChrome()
     }
 

@@ -51,6 +51,16 @@ enum AnnotationCoding {
         var stepStyle: StepStyleDTO?
         /// Step number (type == "step").
         var number: Int?
+        /// Magnifier lens rect (type == "magnifier"); `rect` is the source sample.
+        var lensRect: RectDTO?
+        /// Magnifier style (type == "magnifier").
+        var magnifierStyle: MagnifierStyleDTO?
+    }
+
+    struct MagnifierStyleDTO: Codable {
+        var strokeWidth: Double
+        var color: ColorDTO
+        var includeAnnotations: Bool
     }
 
     struct MosaicStyleDTO: Codable {
@@ -183,7 +193,9 @@ enum AnnotationCoding {
                 markerStyle: nil,
                 eraserStyle: nil,
                 stepStyle: nil,
-                number: nil
+                number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
             )
         case .arrow(let start, let end, let style, let caps):
             return MarkDTO(
@@ -201,7 +213,9 @@ enum AnnotationCoding {
                 markerStyle: nil,
                 eraserStyle: nil,
                 stepStyle: nil,
-                number: nil
+                number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
             )
         case .pencil(let points, let style):
             return MarkDTO(
@@ -219,7 +233,9 @@ enum AnnotationCoding {
                 markerStyle: nil,
                 eraserStyle: nil,
                 stepStyle: nil,
-                number: nil
+                number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
             )
         case .marker(let geometry, let style):
             switch geometry {
@@ -239,7 +255,9 @@ enum AnnotationCoding {
                     markerStyle: encode(style),
                     eraserStyle: nil,
                     stepStyle: nil,
-                    number: nil
+                    number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
                 )
             case .region(let mode, let rect):
                 return MarkDTO(
@@ -257,7 +275,9 @@ enum AnnotationCoding {
                     markerStyle: encode(style),
                     eraserStyle: nil,
                     stepStyle: nil,
-                    number: nil
+                    number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
                 )
             }
         case .mosaic(let geometry, let style):
@@ -278,7 +298,9 @@ enum AnnotationCoding {
                     markerStyle: nil,
                     eraserStyle: nil,
                     stepStyle: nil,
-                    number: nil
+                    number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
                 )
             case .region(let mode, let rect):
                 return MarkDTO(
@@ -296,7 +318,9 @@ enum AnnotationCoding {
                     markerStyle: nil,
                     eraserStyle: nil,
                     stepStyle: nil,
-                    number: nil
+                    number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
                 )
             }
         case .eraser(let geometry, let style):
@@ -317,7 +341,9 @@ enum AnnotationCoding {
                     markerStyle: nil,
                     eraserStyle: encode(style),
                     stepStyle: nil,
-                    number: nil
+                    number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
                 )
             case .region(let mode, let rect):
                 return MarkDTO(
@@ -335,7 +361,9 @@ enum AnnotationCoding {
                     markerStyle: nil,
                     eraserStyle: encode(style),
                     stepStyle: nil,
-                    number: nil
+                    number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
                 )
             }
         case .text(let string, let rect, let style):
@@ -354,7 +382,9 @@ enum AnnotationCoding {
                 markerStyle: nil,
                 eraserStyle: nil,
                 stepStyle: nil,
-                number: nil
+                number: nil,
+                lensRect: nil,
+                magnifierStyle: nil
             )
         case .step(let number, let center, let style):
             return MarkDTO(
@@ -372,7 +402,29 @@ enum AnnotationCoding {
                 markerStyle: nil,
                 eraserStyle: nil,
                 stepStyle: encode(style),
-                number: number
+                number: number,
+                lensRect: nil,
+                magnifierStyle: nil
+            )
+        case .magnifier(let kind, let source, let lens, let style):
+            return MarkDTO(
+                id: annotation.id.uuidString,
+                type: "magnifier",
+                kind: kindString(kind),
+                rect: RectDTO(source),
+                points: nil,
+                string: nil,
+                style: nil,
+                textStyle: nil,
+                startCap: nil,
+                endCap: nil,
+                mosaicStyle: nil,
+                markerStyle: nil,
+                eraserStyle: nil,
+                stepStyle: nil,
+                number: nil,
+                lensRect: RectDTO(lens),
+                magnifierStyle: encode(style)
             )
         }
     }
@@ -512,6 +564,20 @@ enum AnnotationCoding {
                 center: center,
                 stepStyle: decode(stepDTO)
             )
+        case "magnifier":
+            guard let source = dto.rect?.cgRect,
+                  let lens = dto.lensRect?.cgRect,
+                  let magDTO = dto.magnifierStyle else {
+                NSLog("SnipHistory: skipping magnifier mark without source/lens/style")
+                return nil
+            }
+            return Annotation(
+                id: id,
+                magnifierKind: kindFromString(dto.kind) ?? .rectangle,
+                source: source,
+                lens: lens,
+                magnifierStyle: decode(magDTO)
+            )
         default:
             NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
             return nil
@@ -612,6 +678,24 @@ enum AnnotationCoding {
             kind: StepChromeKind(rawValue: dto.kind) ?? .filled,
             size: CGFloat(dto.size),
             color: decode(dto.color)
+        )
+        style.clamp()
+        return style
+    }
+
+    static func encode(_ style: MagnifierStyle) -> MagnifierStyleDTO {
+        MagnifierStyleDTO(
+            strokeWidth: Double(style.strokeWidth),
+            color: encode(style.color),
+            includeAnnotations: style.includeAnnotations
+        )
+    }
+
+    static func decode(_ dto: MagnifierStyleDTO) -> MagnifierStyle {
+        var style = MagnifierStyle(
+            strokeWidth: CGFloat(dto.strokeWidth),
+            color: decode(dto.color),
+            includeAnnotations: dto.includeAnnotations
         )
         style.clamp()
         return style
