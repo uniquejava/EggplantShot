@@ -118,10 +118,14 @@ final class SelectionOverlayController {
         historyCursor = nil
         playbackBaseImage = nil
 
+        // Window list + freeze frames before our panels cover the displays.
+        windowHitTester = WindowHitTester.snapshot()
+        let captured = await ScreenCapturer.captureAllDisplays()
+
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
             self.phase = .idle
-            showOverlays()
+            showOverlays(freezeCaptures: captured)
         }
     }
 
@@ -183,16 +187,14 @@ final class SelectionOverlayController {
         return ScreenCapturer.crop(frame.cgImage, rectInScreenPoints: rect, on: frame.screen)
     }
 
-    private func showOverlays() {
+    private func showOverlays(freezeCaptures: [(screen: NSScreen, image: CGImage)]) {
         tearDownOverlays()
-        // Window list + freeze frames before our panels cover the displays.
-        windowHitTester = WindowHitTester.snapshot()
-        freezeFrames = []
+        freezeFrames = freezeCaptures.map { FreezeFrame(screen: $0.screen, cgImage: $0.image) }
+        let imageByScreenID = Dictionary(
+            uniqueKeysWithValues: freezeCaptures.map { ($0.screen.displayID, $0.image) }
+        )
         for screen in NSScreen.screens {
-            let cgImage = ScreenCapturer.captureDisplay(screen)
-            if let cgImage {
-                freezeFrames.append(FreezeFrame(screen: screen, cgImage: cgImage))
-            }
+            let cgImage = imageByScreenID[screen.displayID]
             let backdrop = cgImage.map { NSImage(cgImage: $0, size: screen.frame.size) }
             let panel = SelectionPanel(screen: screen, freezeImage: backdrop)
             panels.append(panel)

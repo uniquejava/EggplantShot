@@ -1,12 +1,51 @@
 import AppKit
 import CoreGraphics
-import Darwin
 import Foundation
+import ScreenCaptureKit
 
 enum ScreenCapturer {
     /// Full-display snapshot in pixels (for freeze overlay). Call before showing overlay windows.
-    static func captureDisplay(_ screen: NSScreen) -> CGImage? {
-        LegacyCG.displayImage(screen.displayID)
+    static func captureDisplay(_ screen: NSScreen) async -> CGImage? {
+        do {
+            let content = try await SCShareableContent.current
+            return try await captureDisplay(screen, content: content)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Freeze every connected display. Fetches shareable content once, then captures in parallel.
+    static func captureAllDisplays() async -> [(screen: NSScreen, image: CGImage)] {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return [] }
+
+        let content: SCShareableContent
+        do {
+            content = try await SCShareableContent.current
+        } catch {
+            return []
+        }
+
+        return await withTaskGroup(of: (Int, CGImage)?.self) { group in
+            for (index, screen) in screens.enumerated() {
+                group.addTask {
+                    guard let image = try? await captureDisplay(screen, content: content) else {
+                        return nil
+                    }
+                    return (index, image)
+                }
+            }
+            var byIndex: [Int: CGImage] = [:]
+            for await item in group {
+                if let (index, image) = item {
+                    byIndex[index] = image
+                }
+            }
+            return screens.enumerated().compactMap { index, screen in
+                guard let image = byIndex[index] else { return nil }
+                return (screen, image)
+            }
+        }
     }
 
     /// Crop a frozen display image using a Cocoa global rect (points, bottom-left origin).
@@ -23,7 +62,7 @@ enum ScreenCapturer {
 
     /// Capture a rectangular region in Cocoa global coordinates (points, bottom-left origin).
     /// `rect` is in screen points; the returned image is pixel-backed at display scale.
-    static func capture(rectInScreenPoints rect: CGRect) -> NSImage? {
+    static func capture(rectInScreenPoints rect: CGRect) async -> NSImage? {
         guard rect.width >= 1, rect.height >= 1 else { return nil }
 
         let center = CGPoint(x: rect.midX, y: rect.midY)
@@ -32,28 +71,42 @@ enum ScreenCapturer {
             ?? NSScreen.screens.first
         guard let screen else { return nil }
 
-        if let full = captureDisplay(screen) {
-            return crop(full, rectInScreenPoints: rect, on: screen)
+        guard let full = await captureDisplay(screen) else { return nil }
+        return crop(full, rectInScreenPoints: rect, on: screen)
+    }
+
+    // MARK: - ScreenCaptureKit
+
+    private static func captureDisplay(
+        _ screen: NSScreen,
+        content: SCShareableContent
+    ) async throws -> CGImage {
+        let displayID = screen.displayID
+        guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
+            throw CaptureError.displayNotFound(displayID)
         }
 
-        // Fallback: composite window list for the global quartz rect.
-        guard let pixelRect = pixelRect(for: rect, on: screen) else { return nil }
-        let quartzDisplayBounds = CGDisplayBounds(screen.displayID)
-        let globalQuartz = CGRect(
-            x: quartzDisplayBounds.origin.x + pixelRect.origin.x,
-            y: quartzDisplayBounds.origin.y + pixelRect.origin.y,
-            width: pixelRect.width,
-            height: pixelRect.height
-        )
-        guard let image = LegacyCG.windowListImage(
-            globalQuartz,
-            .optionOnScreenBelowWindow,
-            kCGNullWindowID,
-            [.bestResolution, .nominalResolution]
-        ) else {
-            return nil
+        let excludedApps = content.applications.filter {
+            $0.bundleIdentifier == Bundle.main.bundleIdentifier
+                || $0.processID == ProcessInfo.processInfo.processIdentifier
         }
-        return nsImage(from: image, pointSize: rect.size)
+        let filter = SCContentFilter(
+            display: display,
+            excludingApplications: excludedApps,
+            exceptingWindows: []
+        )
+
+        let scale = screen.backingScaleFactor
+        let config = SCStreamConfiguration()
+        config.width = Int((CGFloat(display.width) * scale).rounded(.toNearestOrAwayFromZero))
+        config.height = Int((CGFloat(display.height) * scale).rounded(.toNearestOrAwayFromZero))
+        config.showsCursor = false
+        config.scalesToFit = false
+
+        return try await SCScreenshotManager.captureImage(
+            contentFilter: filter,
+            configuration: config
+        )
     }
 
     /// Cocoa bottom-left points → pixel rect in the display image (top-left origin).
@@ -78,49 +131,14 @@ enum ScreenCapturer {
     private static func nsImage(from cgImage: CGImage, pointSize: CGSize) -> NSImage {
         NSImage(cgImage: cgImage, size: pointSize)
     }
+
+    private enum CaptureError: Error {
+        case displayNotFound(CGDirectDisplayID)
+    }
 }
 
 extension NSScreen {
     var displayID: CGDirectDisplayID {
         (deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID) ?? 0
-    }
-}
-
-// MARK: - Legacy CG capture (symbols still present; SDK marks them unavailable at macOS 15+)
-
-/// `CGDisplayCreateImage` / `CGWindowListCreateImage` were obsoleted in the macOS 15 SDK
-/// (unavailable when deployment target ≥ 15). Resolve them at runtime until ScreenCaptureKit.
-private enum LegacyCG {
-    private static let coreGraphics = dlopen(
-        "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
-        RTLD_LAZY
-    )
-
-    private static let displayImageFn: (@convention(c) (CGDirectDisplayID) -> Unmanaged<CGImage>?)? = {
-        guard let handle = coreGraphics, let sym = dlsym(handle, "CGDisplayCreateImage") else { return nil }
-        return unsafeBitCast(sym, to: (@convention(c) (CGDirectDisplayID) -> Unmanaged<CGImage>?).self)
-    }()
-
-    private static let windowListImageFn: (
-        @convention(c) (CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption) -> Unmanaged<CGImage>?
-    )? = {
-        guard let handle = coreGraphics, let sym = dlsym(handle, "CGWindowListCreateImage") else { return nil }
-        return unsafeBitCast(
-            sym,
-            to: (@convention(c) (CGRect, CGWindowListOption, CGWindowID, CGWindowImageOption) -> Unmanaged<CGImage>?).self
-        )
-    }()
-
-    static func displayImage(_ displayID: CGDirectDisplayID) -> CGImage? {
-        displayImageFn?(displayID)?.takeRetainedValue()
-    }
-
-    static func windowListImage(
-        _ bounds: CGRect,
-        _ listOption: CGWindowListOption,
-        _ windowID: CGWindowID,
-        _ imageOption: CGWindowImageOption
-    ) -> CGImage? {
-        windowListImageFn?(bounds, listOption, windowID, imageOption)?.takeRetainedValue()
     }
 }

@@ -17,7 +17,7 @@ Inspiration: Snipaste menu + pin workflow.
 |-------|------|
 | UI | SwiftUI `MenuBarExtra` + AppKit overlays / pin panels |
 | Hotkey | `CGEvent` tap (multi-binding) |
-| Capture | `CGDisplayCreateImage` + crop |
+| Capture | ScreenCaptureKit (`SCScreenshotManager`) + crop |
 | Login item | not yet |
 
 Bundle ID: `click.yinsb.EggplantShot`  

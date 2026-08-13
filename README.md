@@ -46,6 +46,6 @@ On first launch, grant Accessibility and Screen Recording when prompted.
 
 - `EggplantShot/EggplantShotApp.swift` — `@main`, MenuBarExtra, AppState
 - `EggplantShot/Hotkey/` — multi-binding `CGEvent` tap
-- `EggplantShot/Capture/` — permissions + `CGDisplayCreateImage` crop
+- `EggplantShot/Capture/` — permissions + ScreenCaptureKit freeze/crop
 - `EggplantShot/Controllers/` — selection overlay, pin board, snip orchestration
 - `EggplantShot/UI/` — status menu, preferences

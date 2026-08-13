@@ -59,7 +59,7 @@ enum AppAboutInfo {
     static let githubDisplay = "github.com/uniquejava/EggplantShot"
     static let techStack = """
     SwiftUI + AppKit · CGEvent hotkey tap
-    CGDisplayCreateImage capture · pin overlays
+    ScreenCaptureKit capture · pin overlays
     macOS 15+
     """
 
