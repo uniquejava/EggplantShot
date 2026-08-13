@@ -1700,16 +1700,11 @@ final class SelectionOverlayController {
         at point: CGPoint,
         annotation: Annotation
     ) -> (part: MagnifierPart, handle: Handle)? {
-        guard case .magnifier(_, let source, let lens, _) = annotation.payload else { return nil }
-        // Outer lens handles first so concentric nests stay zoomable.
+        guard case .magnifier(_, _, let lens, _) = annotation.payload else { return nil }
+        // Source is move-only (no resize handles); only the lens is resizable.
         for handle in Handle.allCases {
             if handleHitRect(handle, in: toGlobal(lens)).contains(point) {
                 return (.lens, handle)
-            }
-        }
-        for handle in Handle.allCases {
-            if handleHitRect(handle, in: toGlobal(source)).contains(point) {
-                return (.source, handle)
             }
         }
         return nil

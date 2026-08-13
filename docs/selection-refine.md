@@ -129,11 +129,12 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ### Magnifier
 
 - Drag defines the **source** sample rect; on mouse-up, a concentric **lens** is created at the current **scale** (default **2.5×**, same center). Shift → square/circle source.
-- Zoom is `lens / source` (avg of width & height ratios). **Scale slider** (1.00…6.00, two decimals) resizes the lens about its center; **lens handles** also change zoom; **source handles** change the sampled region. Move each frame independently.
-- When the lens is dragged away from a concentric nest, a stroke connector links nearest edges; nested/concentric hides the line.
+- Zoom is `lens / source` (avg of width & height ratios). **Scale slider** (1.00…6.00, two decimals) resizes the lens about its center; **lens handles** also change zoom. **Source is move-only** (no resize); lens is resizable. Move each frame independently.
+- Connector links nearest edges **only when source and lens are fully disjoint**; any overlap / nesting → no line.
+- **Source border vs lens:** portion of the source outline **inside** the lens → **1 device-pixel dashed** hairline (same color); portion **outside** → thick solid stroke (`strokeWidth`). Fully nested → all dashed; fully outside → all thick; crossing → hybrid per segment. Lens always thick solid.
 - Sub-toolbar: stroke widths | rect ↔ oval | **include annotations** toggle (`rectangle.on.rectangle`) | **scale** (solid preview dot + slider + value) | color grid.
 - `includeAnnotations == false`: sample freeze/base only. `true`: sample freeze/base + marks drawn **before** this magnifier (excludes self; **source-crop composite** only — not full-display; P4 vector data, no bake into `baseImage`).
-- Auto-select after create; dual 8-handle chrome on source + lens.
+- Auto-select after create; 8-handle chrome on **lens only**.
 - Disk: `type: "magnifier"` with `kind`, `rect` (source), `lensRect`, `magnifierStyle` (`strokeWidth` / `color` / `includeAnnotations` / optional `scale`).
 
 ### OCR

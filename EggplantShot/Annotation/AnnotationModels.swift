@@ -2816,13 +2816,12 @@ enum AnnotationDrawing {
             }
         }
 
+        // Source border: thin dashed where inside the lens, thick solid where outside
+        // (crossing → hybrid per segment). Lens always uses the thick solid stroke.
         style.color.setStroke()
-        let inset = style.strokeWidth / 2
-        let sourcePath = magnifierPath(kind: kind, in: sourceDraw.insetBy(dx: inset, dy: inset))
-        sourcePath.lineWidth = style.strokeWidth
-        sourcePath.lineJoinStyle = .miter
-        sourcePath.stroke()
+        drawMagnifierSourceBorder(kind: kind, source: sourceDraw, lens: lensDraw, style: style)
 
+        let inset = style.strokeWidth / 2
         let lensPath = magnifierPath(kind: kind, in: lensDraw.insetBy(dx: inset, dy: inset))
         lensPath.lineWidth = style.strokeWidth
         lensPath.lineJoinStyle = .miter
@@ -2836,6 +2835,66 @@ enum AnnotationDrawing {
             line.lineCapStyle = .round
             line.stroke()
         }
+    }
+
+    /// Source outline relative to the lens: hairline dashed inside, thick solid outside.
+    private static func drawMagnifierSourceBorder(
+        kind: ShapeKind,
+        source: CGRect,
+        lens: CGRect,
+        style: MagnifierStyle
+    ) {
+        guard let ctx = NSGraphicsContext.current else { return }
+        let deviceScale = max(abs(ctx.cgContext.userSpaceToDeviceSpaceTransform.a), 1)
+        let hairline = 1 / deviceScale
+        let dash: [CGFloat] = [3, 2]
+        let lensClip = magnifierPath(kind: kind, in: lens)
+
+        // Portion inside (or on) the lens → very thin dashed.
+        ctx.saveGraphicsState()
+        lensClip.addClip()
+        strokeMagnifierFrame(
+            kind: kind,
+            rect: source,
+            lineWidth: hairline,
+            dash: dash
+        )
+        ctx.restoreGraphicsState()
+
+        // Portion outside the lens → thick solid (toolbar stroke width).
+        ctx.saveGraphicsState()
+        let pad = max(style.strokeWidth, 4) * 2 + 8
+        let exteriorBounds = source.union(lens).insetBy(dx: -pad, dy: -pad)
+        let exteriorClip = NSBezierPath(rect: exteriorBounds)
+        exteriorClip.append(lensClip)
+        exteriorClip.windingRule = .evenOdd
+        exteriorClip.addClip()
+        strokeMagnifierFrame(
+            kind: kind,
+            rect: source,
+            lineWidth: style.strokeWidth,
+            dash: []
+        )
+        ctx.restoreGraphicsState()
+    }
+
+    private static func strokeMagnifierFrame(
+        kind: ShapeKind,
+        rect: CGRect,
+        lineWidth: CGFloat,
+        dash: [CGFloat]
+    ) {
+        let inset = lineWidth / 2
+        let path = magnifierPath(kind: kind, in: rect.insetBy(dx: inset, dy: inset))
+        path.lineWidth = lineWidth
+        path.lineJoinStyle = .miter
+        path.lineCapStyle = .butt
+        if dash.isEmpty {
+            path.setLineDash(nil, count: 0, phase: 0)
+        } else {
+            path.setLineDash(dash, count: dash.count, phase: 0)
+        }
+        path.stroke()
     }
 
     private static func drawMagnifiedContent(
@@ -2945,17 +3004,13 @@ enum AnnotationDrawing {
         }
     }
 
-    /// Edge-to-edge connector when lens is offset from a concentric nest; `nil` when nested.
+    /// Edge-to-edge connector only when source and lens are fully disjoint (no overlap / nesting).
     static func magnifierConnectorEndpoints(source: CGRect, lens: CGRect) -> (CGPoint, CGPoint)? {
+        guard !source.intersects(lens) else { return nil }
+
         let sourceCenter = CGPoint(x: source.midX, y: source.midY)
         let lensCenter = CGPoint(x: lens.midX, y: lens.midY)
         let centerDist = hypot(lensCenter.x - sourceCenter.x, lensCenter.y - sourceCenter.y)
-        let nested = lens.contains(sourceCenter)
-            && lens.width + 0.5 >= source.width
-            && lens.height + 0.5 >= source.height
-        if nested && centerDist < 6 {
-            return nil
-        }
         guard centerDist > 1 else { return nil }
 
         let fromSource = boundaryPoint(of: source, toward: lensCenter) ?? sourceCenter
