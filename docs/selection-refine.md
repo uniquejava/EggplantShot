@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate: **rectangle tool** (stroke width / color, draw / move / resize). Other annotate / OCR / undo remain stubs.
+Annotate: **shape tool** (rect / ellipse, stroke widths / fill / color, draw / move / resize). Other annotate / OCR / undo remain stubs.
 
 ## Behaviour
 
@@ -12,13 +12,15 @@ Annotate: **rectangle tool** (stroke width / color, draw / move / resize). Other
    - Size label near the rect (`W × H`).
    - **Toolbar**: white rounded-rect (≈6pt corner radius), icon row with dividers, **right-aligned** to the selection, **≈4pt** gap below (flips above if near screen bottom).
 3. Working toolbar actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** (+ Esc / Return for primary).
-4. **Rectangle annotate**:
-   - Click the rectangle tool → sub-toolbar (stroke widths + palette); selection handles hide while the tool is active.
-   - Pointer zones on an existing rectangle:
-     - **Interior** → white “＋” cursor; drag draws a new rectangle (nesting allowed); does **not** move.
-     - **Border** → open-hand cursor; drag moves the rectangle.
+4. **Shape annotate** (main toolbar rectangle button):
+   - Opens a sub-toolbar with two radio groups, then the color palette:
+     1. **Stroke / fill** (items 1–4): thin / medium / thick outline, or fill. Mutually exclusive.
+     2. **Shape kind** (items 5–6): rectangle ↔ ellipse. Mutually exclusive. Hold **Shift** while dragging for square / circle.
+   - Pointer zones on an existing mark:
+     - **Interior** → white “＋” cursor; drag draws a new shape (nesting allowed); does **not** move.
+     - **Border** → open-hand cursor; drag moves the mark.
      - **Handles** → resize cursors; drag adjusts size.
-   - Stroke / color changes apply to the selected rectangle (or the next one drawn).
+   - Stroke / fill / color / kind changes apply to the selected mark (or the next one drawn).
    - Delete removes the selected mark.
    - Confirm composites annotations onto the capture before pin / copy / save.
 5. On confirm → tear down overlay → capture final rect → (optional annotate bake) → pin, clipboard, or save panel.
@@ -45,7 +47,8 @@ Annotate: **rectangle tool** (stroke width / color, draw / move / resize). Other
 | [ OCR | undo | redo ]
 | [ ✕ | pin | save | copy | …‡ ]
 
-† Rectangle only for now; expands a stroke/color sub-row when active.
+† Shape tool expands a sub-row when active:
+  [ thin | med | thick | fill ] | [ rect | oval ] | [ palette ]
 ‡ More is stub / disabled today.
 ```
 
@@ -66,5 +69,5 @@ Annotate: **rectangle tool** (stroke width / color, draw / move / resize). Other
 - [x] Confirm tears down overlay, then captures final rect
 - [x] ⌘F1 entry; primary action matches mode
 - [x] Pin soft glow + drag
-- [x] Rectangle tool: sub-toolbar, draw / move / resize, bake into capture
+- [x] Shape tool: stroke/fill + rect/oval switches, draw / move / resize, bake into capture
 - [x] Debug build succeeds

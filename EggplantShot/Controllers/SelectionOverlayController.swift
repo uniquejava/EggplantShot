@@ -54,10 +54,12 @@ final class SelectionOverlayController {
     // MARK: Annotation state
 
     private var annotateTool: AnnotateTool = .none
-    private var annotationStyle: AnnotationStyle = .default
+    private var annotationStyle: AnnotationStyle = AnnotationPrefs.load().style
+    /// Sub-toolbar rect / oval switch (next draw + selected mark).
+    private var annotationKind: Annotation.Kind = AnnotationPrefs.load().kind
     private var annotations: [Annotation] = []
     private var selectedAnnotationID: UUID?
-    /// In-progress rectangle while dragging (selection-local).
+    /// In-progress shape while dragging (selection-local).
     private var draftAnnotationRect: CGRect?
 
     private let handleVisualSize: CGFloat = 8
@@ -152,7 +154,9 @@ final class SelectionOverlayController {
         hoveredWindowRect = nil
         pendingWindowPick = nil
         annotateTool = .none
-        annotationStyle = .default
+        let prefs = AnnotationPrefs.load()
+        annotationStyle = prefs.style
+        annotationKind = prefs.kind
         annotations = []
         selectedAnnotationID = nil
         draftAnnotationRect = nil
@@ -305,6 +309,9 @@ final class SelectionOverlayController {
             case .handle(let id, let handle):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
                 selectedAnnotationID = id
+                annotationStyle = ann.style
+                annotationKind = ann.kind
+                toolbar?.syncStyle(ann.style, kind: ann.kind)
                 dragKind = .annotateResize(
                     id: id,
                     handle: handle,
@@ -317,7 +324,8 @@ final class SelectionOverlayController {
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
                 selectedAnnotationID = id
                 annotationStyle = ann.style
-                toolbar?.syncStyle(ann.style)
+                annotationKind = ann.kind
+                toolbar?.syncStyle(ann.style, kind: ann.kind)
                 dragKind = .annotateMove(id: id, startRect: ann.rect, startPoint: point)
                 NSCursor.closedHand.set()
                 updateHighlight(showHandles: true)
@@ -354,6 +362,9 @@ final class SelectionOverlayController {
             selectedAnnotationID = nil
             draftAnnotationRect = nil
             annotateTool = .none
+            let prefs = AnnotationPrefs.load()
+            annotationStyle = prefs.style
+            annotationKind = prefs.kind
             NSCursor.arrow.set()
             if let frame = windowHitTester.windowFrame(at: point) {
                 pendingWindowPick = (start: point, frame: frame)
@@ -406,12 +417,17 @@ final class SelectionOverlayController {
         case .annotateDraw(let startLocal):
             let end = clampLocal(toLocal(point))
             let start = clampLocal(startLocal)
-            draftAnnotationRect = CGRect(
+            var draft = CGRect(
                 x: min(start.x, end.x),
                 y: min(start.y, end.y),
                 width: abs(end.x - start.x),
                 height: abs(end.y - start.y)
             )
+            // Shift → square / circle from the drag start corner.
+            if NSEvent.modifierFlags.contains(.shift) {
+                draft = constrainedSquare(from: start, toward: end)
+            }
+            draftAnnotationRect = draft
             updateHighlight(showHandles: true)
 
         case .annotateMove(let id, let startRect, let startPoint):
@@ -477,7 +493,11 @@ final class SelectionOverlayController {
             if case .annotateDraw = dragKind, let draft = draftAnnotationRect {
                 draftAnnotationRect = nil
                 if draft.width >= minAnnotation, draft.height >= minAnnotation {
-                    let ann = Annotation(rect: clampAnnotationRect(draft), style: annotationStyle)
+                    let ann = Annotation(
+                        kind: annotationKind,
+                        rect: clampAnnotationRect(draft),
+                        style: annotationStyle
+                    )
                     annotations.append(ann)
                     selectedAnnotationID = ann.id
                 }
@@ -525,6 +545,16 @@ final class SelectionOverlayController {
         return r
     }
 
+    /// Axis-aligned square / circle bounding box from drag start toward `toward`.
+    private func constrainedSquare(from start: CGPoint, toward end: CGPoint) -> CGRect {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let side = max(abs(dx), abs(dy))
+        let ox = dx < 0 ? -side : 0
+        let oy = dy < 0 ? -side : 0
+        return CGRect(x: start.x + ox, y: start.y + oy, width: side, height: side)
+    }
+
     private func updateAnnotation(id: UUID, mutate: (inout Annotation) -> Void) {
         guard let idx = annotations.firstIndex(where: { $0.id == id }) else { return }
         mutate(&annotations[idx])
@@ -560,17 +590,45 @@ final class SelectionOverlayController {
 
     private func isOnAnnotationBorder(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
         let rect = toGlobal(annotation.rect)
-        let tolerance = max(annotation.style.strokeWidth / 2 + 2, annotationBorderHitSlop)
-        let outer = rect.insetBy(dx: -tolerance, dy: -tolerance)
-        guard outer.contains(globalPoint) else { return false }
+        let halfStroke = annotation.style.isFilled ? 0 : annotation.style.strokeWidth / 2
+        let tolerance = max(halfStroke + 2, annotationBorderHitSlop)
+        let local = CGPoint(x: globalPoint.x - rect.minX, y: globalPoint.y - rect.minY)
 
-        // Too small for a hollow ring — treat the whole footprint as border.
-        if rect.width <= tolerance * 2 || rect.height <= tolerance * 2 {
-            return rect.insetBy(dx: -tolerance, dy: -tolerance).contains(globalPoint)
+        switch annotation.kind {
+        case .rectangle:
+            let outer = rect.insetBy(dx: -tolerance, dy: -tolerance)
+            guard outer.contains(globalPoint) else { return false }
+            if rect.width <= tolerance * 2 || rect.height <= tolerance * 2 {
+                return true
+            }
+            let inner = rect.insetBy(dx: tolerance, dy: tolerance)
+            return !inner.contains(globalPoint)
+
+        case .ellipse:
+            return isOnEllipseRing(size: rect.size, localPoint: local, tolerance: tolerance)
         }
+    }
 
-        let inner = rect.insetBy(dx: tolerance, dy: tolerance)
-        return !inner.contains(globalPoint)
+    /// `localPoint` is relative to the ellipse bounding rect's origin.
+    private func isOnEllipseRing(size: CGSize, localPoint: CGPoint, tolerance: CGFloat) -> Bool {
+        let w = size.width
+        let h = size.height
+        guard w > 0, h > 0 else { return false }
+
+        let cx = w / 2
+        let cy = h / 2
+        let dx = localPoint.x - cx
+        let dy = localPoint.y - cy
+
+        // Avoid degenerate rings on tiny marks.
+        let rxOuter = max(w / 2 + tolerance, 1)
+        let ryOuter = max(h / 2 + tolerance, 1)
+        let rxInner = max(w / 2 - tolerance, 0.5)
+        let ryInner = max(h / 2 - tolerance, 0.5)
+
+        let outer = (dx * dx) / (rxOuter * rxOuter) + (dy * dy) / (ryOuter * ryOuter)
+        let inner = (dx * dx) / (rxInner * rxInner) + (dy * dy) / (ryInner * ryInner)
+        return outer <= 1 && inner >= 1
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
@@ -640,8 +698,18 @@ final class SelectionOverlayController {
 
     private func applyStyle(_ style: AnnotationStyle) {
         annotationStyle = style
+        AnnotationPrefs.save(style: style, kind: annotationKind)
         if let id = selectedAnnotationID {
             updateAnnotation(id: id) { $0.style = style }
+            updateHighlight(showHandles: true)
+        }
+    }
+
+    private func applyKind(_ kind: Annotation.Kind) {
+        annotationKind = kind
+        AnnotationPrefs.save(style: annotationStyle, kind: kind)
+        if let id = selectedAnnotationID {
+            updateAnnotation(id: id) { $0.kind = kind }
             updateHighlight(showHandles: true)
         }
     }
@@ -750,6 +818,7 @@ final class SelectionOverlayController {
                 annotations: annotations,
                 draftRect: draftAnnotationRect,
                 draftStyle: annotationStyle,
+                draftKind: annotationKind,
                 selectedAnnotation: selected,
                 annotationHandleSize: annotationHandleVisualSize
             )
@@ -761,7 +830,8 @@ final class SelectionOverlayController {
         let bar = RefineToolbarController(
             primaryAction: primaryAction,
             initialTool: annotateTool,
-            initialStyle: annotationStyle
+            initialStyle: annotationStyle,
+            initialKind: annotationKind
         ) { [weak self] event in
             guard let self else { return }
             switch event {
@@ -778,6 +848,8 @@ final class SelectionOverlayController {
                 self.setAnnotateTool(tool)
             case .styleChanged(let style):
                 self.applyStyle(style)
+            case .kindChanged(let kind):
+                self.applyKind(kind)
             }
         }
         toolbar = bar
@@ -809,17 +881,22 @@ private final class RefineToolbarController: NSObject {
         case confirm(ConfirmAction)
         case selectTool(AnnotateTool)
         case styleChanged(AnnotationStyle)
+        case kindChanged(Annotation.Kind)
     }
 
     private let panel: NSPanel
     private let onEvent: (Event) -> Void
     private var style: AnnotationStyle
     private var tool: AnnotateTool
+    private var kind: Annotation.Kind
 
     private let rootStack = NSStackView()
     private var shapeButton: NSButton!
     private var subToolbarContainer: NSView!
     private var strokeButtons: [NSButton] = []
+    private var fillButton: NSButton!
+    private var rectKindButton: NSButton!
+    private var ovalKindButton: NSButton!
     private var colorButtons: [NSButton] = []
     private var colorPreview: NSView!
 
@@ -827,11 +904,13 @@ private final class RefineToolbarController: NSObject {
         primaryAction: SelectionOverlayController.ConfirmAction,
         initialTool: AnnotateTool,
         initialStyle: AnnotationStyle,
+        initialKind: Annotation.Kind,
         onEvent: @escaping (Event) -> Void
     ) {
         self.onEvent = onEvent
         self.style = initialStyle
         self.tool = initialTool
+        self.kind = initialKind
         self.panel = NSPanel(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -946,7 +1025,7 @@ private final class RefineToolbarController: NSObject {
         stack.spacing = 4
         stack.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 4, right: 8)
 
-        // Stroke width dots
+        // Switch group 1: three stroke widths + fill (mutually exclusive).
         strokeButtons = StrokeWidthOption.allCases.map { option in
             let button = NSButton(frame: .zero)
             button.bezelStyle = .inline
@@ -967,14 +1046,39 @@ private final class RefineToolbarController: NSObject {
         }
         for b in strokeButtons { stack.addArrangedSubview(b) }
 
+        fillButton = NSButton(frame: .zero)
+        fillButton.bezelStyle = .inline
+        fillButton.isBordered = false
+        fillButton.setButtonType(.momentaryChange)
+        fillButton.imagePosition = .imageOnly
+        fillButton.toolTip = "Fill"
+        fillButton.target = self
+        fillButton.action = #selector(fillTapped)
+        fillButton.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            fillButton.widthAnchor.constraint(equalToConstant: 22),
+            fillButton.heightAnchor.constraint(equalToConstant: 22),
+        ])
+        fillButton.image = fillSwatchImage(selected: false)
+        stack.addArrangedSubview(fillButton)
+
         stack.addArrangedSubview(miniDivider())
 
-        // Shape kinds: rectangle selected; oval/line stubs
-        let rectKind = iconButton(systemName: "rectangle", tooltip: "Rectangle", enabled: true, action: nil)
-        tintSelected(rectKind, selected: true)
-        stack.addArrangedSubview(rectKind)
-        stack.addArrangedSubview(iconButton(systemName: "oval", tooltip: "Ellipse", enabled: false, action: nil))
-        stack.addArrangedSubview(iconButton(systemName: "line.diagonal", tooltip: "Line", enabled: false, action: nil))
+        // Switch group 2: rectangle ↔ ellipse / circle.
+        rectKindButton = iconButton(
+            systemName: "rectangle",
+            tooltip: "Rectangle",
+            enabled: true,
+            action: #selector(rectKindTapped)
+        )
+        ovalKindButton = iconButton(
+            systemName: "oval",
+            tooltip: "Ellipse / Circle",
+            enabled: true,
+            action: #selector(ovalKindTapped)
+        )
+        stack.addArrangedSubview(rectKindButton)
+        stack.addArrangedSubview(ovalKindButton)
 
         stack.addArrangedSubview(miniDivider())
 
@@ -1057,9 +1161,15 @@ private final class RefineToolbarController: NSObject {
         let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
         for button in strokeButtons {
             let option = StrokeWidthOption(rawValue: button.tag) ?? .medium
-            let on = option == selectedStroke
+            let on = !style.isFilled && option == selectedStroke
             button.image = strokeDotImage(diameter: option.previewDiameter, selected: on)
+            tintSelected(button, selected: on)
         }
+        fillButton.image = fillSwatchImage(selected: style.isFilled)
+        tintSelected(fillButton, selected: style.isFilled)
+
+        tintSelected(rectKindButton, selected: kind == .rectangle)
+        tintSelected(ovalKindButton, selected: kind == .ellipse)
     }
 
     private func tintSelected(_ button: NSButton, selected: Bool) {
@@ -1087,6 +1197,17 @@ private final class RefineToolbarController: NSObject {
                 height: diameter
             )
             NSBezierPath(ovalIn: r).fill()
+            return true
+        }
+    }
+
+    private func fillSwatchImage(selected: Bool) -> NSImage {
+        let size = CGSize(width: 18, height: 18)
+        return NSImage(size: size, flipped: false) { rect in
+            let color = selected ? NSColor.systemBlue : NSColor(calibratedWhite: 0.25, alpha: 1)
+            color.setFill()
+            let r = CGRect(x: 3, y: 3, width: 12, height: 12)
+            NSBezierPath(roundedRect: r, xRadius: 1.5, yRadius: 1.5).fill()
             return true
         }
     }
@@ -1178,8 +1299,27 @@ private final class RefineToolbarController: NSObject {
     @objc private func strokeTapped(_ sender: NSButton) {
         let option = StrokeWidthOption(rawValue: sender.tag) ?? .medium
         style.strokeWidth = option.points
+        style.isFilled = false
         refreshSelectionChrome()
         onEvent(.styleChanged(style))
+    }
+
+    @objc private func fillTapped() {
+        style.isFilled = true
+        refreshSelectionChrome()
+        onEvent(.styleChanged(style))
+    }
+
+    @objc private func rectKindTapped() {
+        kind = .rectangle
+        refreshSelectionChrome()
+        onEvent(.kindChanged(kind))
+    }
+
+    @objc private func ovalKindTapped() {
+        kind = .ellipse
+        refreshSelectionChrome()
+        onEvent(.kindChanged(kind))
     }
 
     @objc private func colorTapped(_ sender: NSButton) {
@@ -1203,8 +1343,9 @@ private final class RefineToolbarController: NSObject {
         }
     }
 
-    func syncStyle(_ style: AnnotationStyle) {
+    func syncStyle(_ style: AnnotationStyle, kind: Annotation.Kind) {
         self.style = style
+        self.kind = kind
         refreshSelectionChrome()
     }
 
@@ -1287,6 +1428,7 @@ private final class SelectionPanel: NSPanel {
         annotations: [Annotation],
         draftRect: CGRect?,
         draftStyle: AnnotationStyle,
+        draftKind: Annotation.Kind,
         selectedAnnotation: Annotation?,
         annotationHandleSize: CGFloat
     ) {
@@ -1307,6 +1449,7 @@ private final class SelectionPanel: NSPanel {
         overlayView.annotations = annotations
         overlayView.draftRect = draftRect
         overlayView.draftStyle = draftStyle
+        overlayView.draftKind = draftKind
         overlayView.selectedAnnotation = selectedAnnotation
         overlayView.annotationHandleSize = annotationHandleSize
         overlayView.needsDisplay = true
@@ -1323,6 +1466,7 @@ private final class SelectionOverlayNSView: NSView {
     var annotations: [Annotation] = []
     var draftRect: CGRect?
     var draftStyle: AnnotationStyle = .default
+    var draftKind: Annotation.Kind = .rectangle
     var selectedAnnotation: Annotation?
     var annotationHandleSize: CGFloat = 7
 
@@ -1379,12 +1523,12 @@ private final class SelectionOverlayNSView: NSView {
 
         for ann in annotations {
             let r = ann.rect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
-            AnnotationDrawing.stroke(ann, in: r)
+            AnnotationDrawing.draw(ann, in: r)
         }
 
         if let draft = draftRect, draft.width > 0, draft.height > 0 {
             let r = draft.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
-            AnnotationDrawing.stroke(Annotation(rect: draft, style: draftStyle), in: r)
+            AnnotationDrawing.draw(Annotation(kind: draftKind, rect: draft, style: draftStyle), in: r)
         }
 
         if let selected = selectedAnnotation {

@@ -15,10 +15,7 @@ enum AnnotationCompositor {
                 fraction: 1
             )
             for annotation in annotations {
-                switch annotation.kind {
-                case .rectangle:
-                    AnnotationDrawing.stroke(annotation, in: annotation.rect)
-                }
+                AnnotationDrawing.draw(annotation, in: annotation.rect)
             }
             return true
         }

@@ -6,39 +6,71 @@ enum AnnotateTool: Equatable {
     case rectangle
 }
 
-/// Stroke / color used when drawing or editing an annotation.
+/// Stroke / fill / color used when drawing or editing an annotation.
 struct AnnotationStyle: Equatable {
     var strokeWidth: CGFloat
     var strokeColor: NSColor
+    /// Filled body (sub-toolbar item 4). Mutually exclusive with stroke-width picks.
+    var isFilled: Bool
 
     static let `default` = AnnotationStyle(
         strokeWidth: StrokeWidthOption.medium.points,
-        strokeColor: PaletteColor.sky.color
+        strokeColor: PaletteColor.sky.color,
+        isFilled: false
     )
 }
 
+/// Persisted last-used annotate prefs (stroke / fill / color / shape kind).
+enum AnnotationPrefs {
+    private static let strokeWidthKey = "annotate.strokeWidth"
+    private static let isFilledKey = "annotate.isFilled"
+    private static let paletteKey = "annotate.palette"
+    private static let kindKey = "annotate.kind"
+
+    static func load() -> (style: AnnotationStyle, kind: Annotation.Kind) {
+        let defaults = UserDefaults.standard
+        var style = AnnotationStyle.default
+        if defaults.object(forKey: strokeWidthKey) != nil {
+            style.strokeWidth = CGFloat(defaults.double(forKey: strokeWidthKey))
+        }
+        style.isFilled = defaults.bool(forKey: isFilledKey)
+        if defaults.object(forKey: paletteKey) != nil,
+           let swatch = PaletteColor(rawValue: defaults.integer(forKey: paletteKey)) {
+            style.strokeColor = swatch.color
+        }
+        let kind: Annotation.Kind = defaults.integer(forKey: kindKey) == 1 ? .ellipse : .rectangle
+        return (style, kind)
+    }
+
+    static func save(style: AnnotationStyle, kind: Annotation.Kind) {
+        let defaults = UserDefaults.standard
+        defaults.set(Double(style.strokeWidth), forKey: strokeWidthKey)
+        defaults.set(style.isFilled, forKey: isFilledKey)
+        defaults.set(PaletteColor.matching(style.strokeColor).rawValue, forKey: paletteKey)
+        defaults.set(kind == .ellipse ? 1 : 0, forKey: kindKey)
+    }
+}
+
+/// Outline widths for the first three sub-toolbar dots (fill is separate).
 enum StrokeWidthOption: Int, CaseIterable {
-    case hairline
     case thin
     case medium
     case thick
 
     var points: CGFloat {
         switch self {
-        case .hairline: return 1.5
-        case .thin: return 2.5
-        case .medium: return 4
-        case .thick: return 6
+        case .thin: return 2
+        case .medium: return 3.5
+        case .thick: return 5
         }
     }
 
-    /// Dot diameter shown in the sub-toolbar.
+    /// Dot diameter shown in the sub-toolbar (keep visually light).
     var previewDiameter: CGFloat {
         switch self {
-        case .hairline: return 3
-        case .thin: return 5
-        case .medium: return 7
-        case .thick: return 10
+        case .thin: return 3
+        case .medium: return 4.5
+        case .thick: return 6
         }
     }
 
@@ -74,6 +106,22 @@ enum PaletteColor: Int, CaseIterable {
         case .brown: return NSColor(calibratedRed: 0.55, green: 0.35, blue: 0.2, alpha: 1)
         }
     }
+
+    static func matching(_ color: NSColor) -> PaletteColor {
+        let target = color.usingColorSpace(.genericRGB) ?? color
+        return allCases.min(by: { a, b in
+            distance(a.color, target) < distance(b.color, target)
+        }) ?? .sky
+    }
+
+    private static func distance(_ a: NSColor, _ b: NSColor) -> CGFloat {
+        let aa = a.usingColorSpace(.genericRGB) ?? a
+        let bb = b.usingColorSpace(.genericRGB) ?? b
+        let dr = aa.redComponent - bb.redComponent
+        let dg = aa.greenComponent - bb.greenComponent
+        let db = aa.blueComponent - bb.blueComponent
+        return dr * dr + dg * dg + db * db
+    }
 }
 
 /// One drawable mark. Geometry is in **selection-local** Cocoa points
@@ -81,6 +129,7 @@ enum PaletteColor: Int, CaseIterable {
 struct Annotation: Equatable {
     enum Kind: Equatable {
         case rectangle
+        case ellipse
     }
 
     let id: UUID
@@ -97,13 +146,25 @@ struct Annotation: Equatable {
 }
 
 enum AnnotationDrawing {
-    /// Stroke annotations into the current graphics context. `rect` is already in context space.
-    static func stroke(_ annotation: Annotation, in rect: CGRect) {
-        let path = NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5))
-        path.lineWidth = annotation.style.strokeWidth
-        path.lineJoinStyle = .miter
-        annotation.style.strokeColor.setStroke()
-        path.stroke()
+    /// Stroke or fill an annotation into the current graphics context. `rect` is already in context space.
+    static func draw(_ annotation: Annotation, in rect: CGRect) {
+        let path: NSBezierPath
+        switch annotation.kind {
+        case .rectangle:
+            path = NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5))
+        case .ellipse:
+            path = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+        }
+
+        if annotation.style.isFilled {
+            annotation.style.strokeColor.setFill()
+            path.fill()
+        } else {
+            path.lineWidth = annotation.style.strokeWidth
+            path.lineJoinStyle = .miter
+            annotation.style.strokeColor.setStroke()
+            path.stroke()
+        }
     }
 
     static func drawHandles(in rect: CGRect, size: CGFloat, accent: NSColor) {
