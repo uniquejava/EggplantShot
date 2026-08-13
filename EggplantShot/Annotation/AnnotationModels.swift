@@ -5,6 +5,7 @@ enum AnnotateTool: Equatable {
     case none
     case rectangle
     case pencil
+    case text
 }
 
 /// Stroke / fill / color used when drawing or editing an annotation.
@@ -189,10 +190,87 @@ enum ShapeKind: Equatable {
     case ellipse
 }
 
+/// Typography / fill used by the text annotate tool.
+struct TextStyle: Equatable {
+    var color: NSColor
+    var fontSize: CGFloat
+    var isBold: Bool
+    var isItalic: Bool
+    /// Solid highlight behind glyphs (Snipaste “A in square”).
+    var hasBackground: Bool
+
+    static let `default` = TextStyle(
+        color: PaletteColor.cyan.color,
+        fontSize: 14,
+        isBold: false,
+        isItalic: false,
+        hasBackground: false
+    )
+
+    static let fontSizeChoices: [CGFloat] = [8, 10, 12, 14, 16, 18, 24, 28, 36]
+    /// Minimum editor / mark width while empty (room for the caret).
+    static let minEditorWidth: CGFloat = 28
+
+    var textPadding: CGFloat { hasBackground ? 4 : 2 }
+
+    /// System UI font with bold / italic traits.
+    func makeFont() -> NSFont {
+        var traits: NSFontTraitMask = []
+        if isBold { traits.insert(.boldFontMask) }
+        if isItalic { traits.insert(.italicFontMask) }
+        let base = NSFont.systemFont(ofSize: fontSize)
+        if traits.isEmpty { return base }
+        let manager = NSFontManager.shared
+        return manager.convert(base, toHaveTrait: traits)
+    }
+
+    func attributes() -> [NSAttributedString.Key: Any] {
+        [
+            .font: makeFont(),
+            .foregroundColor: color,
+        ]
+    }
+}
+
+/// Persisted last-used text annotate prefs (separate from stroke prefs).
+enum TextAnnotationPrefs {
+    private static let colorKey = "annotate.text.palette"
+    private static let fontSizeKey = "annotate.text.fontSize"
+    private static let boldKey = "annotate.text.isBold"
+    private static let italicKey = "annotate.text.isItalic"
+    private static let backgroundKey = "annotate.text.hasBackground"
+
+    static func load() -> TextStyle {
+        let defaults = UserDefaults.standard
+        var style = TextStyle.default
+        if defaults.object(forKey: colorKey) != nil,
+           let swatch = PaletteColor(rawValue: defaults.integer(forKey: colorKey)) {
+            style.color = swatch.color
+        }
+        if defaults.object(forKey: fontSizeKey) != nil {
+            style.fontSize = CGFloat(defaults.double(forKey: fontSizeKey))
+        }
+        style.isBold = defaults.bool(forKey: boldKey)
+        style.isItalic = defaults.bool(forKey: italicKey)
+        style.hasBackground = defaults.bool(forKey: backgroundKey)
+        return style
+    }
+
+    static func save(_ style: TextStyle) {
+        let defaults = UserDefaults.standard
+        defaults.set(PaletteColor.matching(style.color).rawValue, forKey: colorKey)
+        defaults.set(Double(style.fontSize), forKey: fontSizeKey)
+        defaults.set(style.isBold, forKey: boldKey)
+        defaults.set(style.isItalic, forKey: italicKey)
+        defaults.set(style.hasBackground, forKey: backgroundKey)
+    }
+}
+
 /// Extensible mark payload. New tools add cases here without forking history/store.
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
     case pencil(points: [CGPoint], style: AnnotationStyle)
+    case text(string: String, rect: CGRect, style: TextStyle)
 }
 
 /// One drawable mark. Geometry is in **selection-local** Cocoa points
@@ -218,21 +296,31 @@ struct Annotation: Equatable {
         self.payload = .pencil(points: points, style: style)
     }
 
-    /// Disk / tooling type discriminator (`"shape"`, `"pencil"`, …).
+    /// Convenience for the text tool.
+    init(id: UUID = UUID(), string: String, rect: CGRect, style: TextStyle) {
+        self.id = id
+        self.payload = .text(string: string, rect: rect, style: style)
+    }
+
+    /// Disk / tooling type discriminator (`"shape"`, `"pencil"`, `"text"`, …).
     var typeName: String {
         switch payload {
         case .shape: return "shape"
         case .pencil: return "pencil"
+        case .text: return "text"
         }
     }
 
     // MARK: Shared accessors
 
+    /// Stroke style for shape / pencil. No-op get/set for text marks.
     var style: AnnotationStyle {
         get {
             switch payload {
             case .shape(_, _, let style), .pencil(_, let style):
                 return style
+            case .text:
+                return .default
             }
         }
         set {
@@ -241,14 +329,27 @@ struct Annotation: Equatable {
                 payload = .shape(kind, rect: rect, style: newValue)
             case .pencil(let points, _):
                 payload = .pencil(points: points, style: newValue)
+            case .text:
+                break
             }
         }
     }
 
-    /// Axis-aligned bounds in selection-local space (shape rect, or pencil path hull).
+    var textStyle: TextStyle {
+        get {
+            if case .text(_, _, let style) = payload { return style }
+            return .default
+        }
+        set {
+            guard case .text(let string, let rect, _) = payload else { return }
+            payload = .text(string: string, rect: rect, style: newValue)
+        }
+    }
+
+    /// Axis-aligned bounds in selection-local space.
     var boundingRect: CGRect {
         switch payload {
-        case .shape(_, let rect, _):
+        case .shape(_, let rect, _), .text(_, let rect, _):
             return rect
         case .pencil(let points, _):
             return Self.bounds(of: points)
@@ -262,6 +363,11 @@ struct Annotation: Equatable {
 
     var isPencil: Bool {
         if case .pencil = payload { return true }
+        return false
+    }
+
+    var isText: Bool {
+        if case .text = payload { return true }
         return false
     }
 
@@ -281,8 +387,14 @@ struct Annotation: Equatable {
     var rect: CGRect {
         get { boundingRect }
         set {
-            guard case .shape(let kind, _, let style) = payload else { return }
-            payload = .shape(kind, rect: newValue, style: style)
+            switch payload {
+            case .shape(let kind, _, let style):
+                payload = .shape(kind, rect: newValue, style: style)
+            case .text(let string, _, let style):
+                payload = .text(string: string, rect: newValue, style: style)
+            case .pencil:
+                break
+            }
         }
     }
 
@@ -297,6 +409,17 @@ struct Annotation: Equatable {
         }
     }
 
+    var string: String {
+        get {
+            if case .text(let string, _, _) = payload { return string }
+            return ""
+        }
+        set {
+            guard case .text(_, let rect, let style) = payload else { return }
+            payload = .text(string: newValue, rect: rect, style: style)
+        }
+    }
+
     // MARK: Geometry helpers
 
     mutating func translate(by delta: CGSize) {
@@ -306,6 +429,12 @@ struct Annotation: Equatable {
         case .pencil(let points, let style):
             let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
             payload = .pencil(points: moved, style: style)
+        case .text(let string, let rect, let style):
+            payload = .text(
+                string: string,
+                rect: rect.offsetBy(dx: delta.width, dy: delta.height),
+                style: style
+            )
         }
     }
 
@@ -326,7 +455,58 @@ struct Annotation: Equatable {
                 )
             }
             payload = .pencil(points: mapped, style: style)
+        case .text(let string, _, let style):
+            payload = .text(string: string, rect: newBounds, style: style)
         }
+    }
+
+    /// Fitted rect for `string` with `style`, anchored at click `origin` (selection-local, top ≈ origin).
+    /// Width grows with glyphs; wraps only when exceeding `maxWidth`.
+    static func fittedTextRect(
+        string: String,
+        style: TextStyle,
+        origin: CGPoint,
+        maxWidth: CGFloat = 10_000
+    ) -> CGRect {
+        let size = fittingTextSize(string: string, style: style, maxWidth: maxWidth)
+        return CGRect(
+            x: origin.x,
+            y: origin.y - size.height,
+            width: size.width,
+            height: size.height
+        )
+    }
+
+    /// Box size: grow with content width; soft-wrap only past `maxWidth`.
+    static func fittingTextSize(
+        string: String,
+        style: TextStyle,
+        maxWidth: CGFloat = 10_000
+    ) -> CGSize {
+        let display = string.isEmpty ? " " : string
+        let pad = style.textPadding
+        let attributed = NSAttributedString(string: display, attributes: style.attributes())
+        let natural = attributed.boundingRect(
+            with: CGSize(width: 10_000, height: 10_000),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        let naturalW = ceil(natural.width) + pad * 2
+        let minH = style.fontSize + pad * 2
+        if naturalW <= maxWidth {
+            return CGSize(
+                width: max(naturalW, TextStyle.minEditorWidth),
+                height: max(ceil(natural.height) + pad * 2, minH)
+            )
+        }
+        let inner = max(maxWidth - pad * 2, 12)
+        let wrapped = attributed.boundingRect(
+            with: CGSize(width: inner, height: 10_000),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        return CGSize(
+            width: maxWidth,
+            height: max(ceil(wrapped.height) + pad * 2, minH)
+        )
     }
 
     static func bounds(of points: [CGPoint]) -> CGRect {
@@ -352,6 +532,9 @@ enum AnnotationDrawing {
         case .pencil(let points, let style):
             let offset = points.map { CGPoint(x: $0.x + origin.x, y: $0.y + origin.y) }
             drawPencil(points: offset, style: style)
+        case .text(let string, let localRect, let style):
+            let rect = localRect.offsetBy(dx: origin.x, dy: origin.y)
+            drawText(string: string, style: style, in: rect)
         }
     }
 
@@ -360,7 +543,7 @@ enum AnnotationDrawing {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
-        case .pencil:
+        case .pencil, .text:
             draw(annotation, origin: .zero)
         }
     }
@@ -409,6 +592,31 @@ enum AnnotationDrawing {
         }
         style.strokeColor.setStroke()
         path.stroke()
+    }
+
+    private static func drawText(string: String, style: TextStyle, in rect: CGRect) {
+        let display = string.isEmpty ? " " : string
+        let attributed = NSAttributedString(string: display, attributes: style.attributes())
+        let pad = style.textPadding
+
+        if style.hasBackground {
+            let bg = contrastingBackground(for: style.color)
+            bg.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
+        }
+
+        let textRect = rect.insetBy(dx: pad, dy: pad)
+        // Wrap to the mark’s width (must match the field editor / commit sizing).
+        attributed.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading])
+    }
+
+    /// Light plate behind dark ink; dark plate behind light ink.
+    private static func contrastingBackground(for color: NSColor) -> NSColor {
+        let rgb = color.usingColorSpace(.genericRGB) ?? color
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.55
+            ? NSColor.black.withAlphaComponent(0.55)
+            : NSColor.white.withAlphaComponent(0.85)
     }
 
     private static func applyStroke(_ style: AnnotationStyle, to path: NSBezierPath) {

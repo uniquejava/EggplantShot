@@ -49,6 +49,9 @@ EggplantShot/
   Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift
+  Controllers/RefineToolbarController.swift
+  Controllers/TextAnnotationEditor.swift
+  Controllers/SelectionOverlayPanel.swift
   Controllers/PinBoardController.swift
   Annotation/AnnotationModels.swift + AnnotationDocument.swift + AnnotationCoding.swift + AnnotationCompositor.swift
   History/SnipRecord.swift + SnipHistoryStore.swift
@@ -72,9 +75,10 @@ EggplantShot/
 
 ## Next (not done yet)
 
-→ Remaining annotate tools (arrow / marker / mosaic / text / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Shape + pencil annotate + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in. Split overlay only when annotation needs its own canvas.
+→ Remaining annotate tools (arrow / marker / mosaic / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + pencil + text + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
 
 → Pencil: if dense live sampling causes lag / history bloat, simplify polyline on mouse-up (keep live feel). See deferred note in `docs/selection-refine.md`.
+
 
 ## Prefer
 

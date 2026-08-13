@@ -69,11 +69,12 @@ enum ShapeKind: Equatable { case rectangle, ellipse }
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
     case pencil(points: [CGPoint], style: AnnotationStyle)
-    // later: arrow, marker, mosaic, text, step, …
+    case text(string: String, rect: CGRect, style: TextStyle)
+    // later: arrow, marker, mosaic, step, …
 }
 ```
 
-Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"pencil"`, …). Shape keeps `kind` / `rect`; pencil stores `points` (+ optional hull `rect`). Unknown `type` values are skipped on load.
+Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"pencil"`, `"text"`, …). Shape keeps `kind` / `rect`; pencil stores `points` (+ optional hull `rect`); text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
 
 ### `AnnotationDocument`
 
@@ -353,6 +354,8 @@ New tools add a `AnnotationPayload` case + draw/hit-test; history / store / conf
 
 Pencil: `.pencil(points:style:)` — freehand polyline (dense live sample + tip poll); Shift → straight any angle; no resize chrome / no auto-select after stroke.
 
+Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
+
 ## Relationship to current MVP
 
 | Area | Status |
@@ -361,6 +364,6 @@ Pencil: `.pencil(points:style:)` — freehand polyline (dense live sample + tip 
 | Confirm | Bake + disk `SnipRecord` |
 | `,` / `.` | History playback |
 | Pin window | Flat image (no layer reopen) |
-| Mark model | `AnnotationPayload` (`shape`, `pencil`) |
+| Mark model | `AnnotationPayload` (`shape`, `pencil`, `text`) |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

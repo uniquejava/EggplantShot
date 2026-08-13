@@ -76,9 +76,21 @@ final class SelectionOverlayController {
     private var annotationStyle: AnnotationStyle = AnnotationPrefs.load().style
     /// Sub-toolbar rect / oval switch (next draw + selected mark).
     private var annotationKind: ShapeKind = AnnotationPrefs.load().kind
+    private var textStyle: TextStyle = TextAnnotationPrefs.load()
     private let annotationHistory = AnnotationHistory()
     /// In-progress mark while dragging (selection-local geometry).
     private var draftAnnotation: Annotation?
+    /// Text click-to-place / click-to-edit (resolved on mouse-up if drag is tiny).
+    private var textClickCandidate: (id: UUID?, start: CGPoint, wasSelected: Bool)?
+    /// Active inline text editor (selection-local mark id).
+    private var editingTextID: UUID?
+    private var textEditorHost: SelectionPanel?
+    /// Bordered transparent chrome hosting the field editor (CALayer borders on clear scrolls are unreliable).
+    private var textChromeView: TextEditChromeView?
+    private var textEditor: AnnotationTextView?
+    private var textEditBaselineString: String = ""
+    private var textEditBaselineRect: CGRect = .null
+    private let textClickDragThreshold: CGFloat = 4
 
     private var annotations: [Annotation] { annotationHistory.document.marks }
     private var selectedAnnotationID: UUID? { annotationHistory.document.selectedID }
@@ -142,6 +154,7 @@ final class SelectionOverlayController {
     }
 
     private func confirm(_ action: ConfirmAction) {
+        endTextEditing(commit: true)
         guard !currentRect.isNull,
               currentRect.width >= minSelection,
               currentRect.height >= minSelection
@@ -150,6 +163,8 @@ final class SelectionOverlayController {
             finish(.cancelled)
             return
         }
+        // Crop stays the blue selection (Snipaste): marks outside are kept in the document
+        // for `,` / `.` edit, but clipped out of the baked pin/copy/save image.
         let rect = currentRect
         let document = annotationHistory.document
         let image: NSImage?
@@ -227,8 +242,11 @@ final class SelectionOverlayController {
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
         annotationKind = prefs.kind
+        textStyle = TextAnnotationPrefs.load()
         annotationHistory.reset()
         draftAnnotation = nil
+        textClickCandidate = nil
+        discardTextEditor()
         stopPencilSampling()
         historyCursor = nil
         playbackBaseImage = nil
@@ -247,6 +265,10 @@ final class SelectionOverlayController {
                 NSCursor.arrow.set()
                 return event
             }
+            // Pass through while interacting with the inline text editor.
+            if self.isPointInTextEditor(NSEvent.mouseLocation) {
+                return event
+            }
             self.handleMouse(event)
             return nil
         }) {
@@ -259,6 +281,9 @@ final class SelectionOverlayController {
                 NSCursor.arrow.set()
                 return
             }
+            if self.isPointInTextEditor(NSEvent.mouseLocation) {
+                return
+            }
             self.handleMouse(event)
         }) {
             eventMonitors.append(mon)
@@ -267,9 +292,34 @@ final class SelectionOverlayController {
         if let mon = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
             guard let self else { return event }
             if event.keyCode == 53 { // Esc
+                if self.editingTextID != nil {
+                    self.endTextEditing(commit: true)
+                    return nil
+                }
                 self.tearDownOverlays()
                 self.finish(.cancelled)
                 return nil
+            }
+            // While editing text: keep typing in the field editor; route ⌘Z to its
+            // *private* undo manager (never the shared app one — that crashes after
+            // the editor is torn down with stale `_undoRedoTextOperation:` targets).
+            if self.editingTextID != nil {
+                if event.modifierFlags.contains(.command),
+                   let chars = event.charactersIgnoringModifiers?.lowercased() {
+                    if chars == "z" {
+                        if event.modifierFlags.contains(.shift) {
+                            self.textEditor?.undoManager?.redo()
+                        } else {
+                            self.textEditor?.undoManager?.undo()
+                        }
+                        return nil
+                    }
+                    if chars == "y" {
+                        self.textEditor?.undoManager?.redo()
+                        return nil
+                    }
+                }
+                return event
             }
             // `,` / `.` snip-history browse (any phase while overlay is up).
             if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
@@ -404,6 +454,19 @@ final class SelectionOverlayController {
     }
 
     private func handleRefineMouseDown(at point: CGPoint) {
+        // Finish any open text editor before starting a new gesture (unless clicking it).
+        if editingTextID != nil {
+            if let chrome = textChromeView,
+               let host = textEditorHost,
+               chrome.frame.contains(CGPoint(
+                x: point.x - host.screenFrame.minX,
+                y: point.y - host.screenFrame.minY
+               )) {
+                return
+            }
+            endTextEditing(commit: true)
+        }
+
         // Annotate tool: handle → resize; stroke/border → move; interior → draw (nested OK).
         if annotateTool != .none {
             switch annotationPointerTarget(at: point) {
@@ -417,14 +480,24 @@ final class SelectionOverlayController {
 
             case .border(let id):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
+                let wasSelected = (selectedAnnotationID == id)
                 annotationHistory.select(id)
                 syncToolbar(from: ann)
                 annotationHistory.beginGesture()
                 dragKind = .annotateMove(id: id, start: ann, startPoint: point)
+                if annotateTool == .text, ann.isText {
+                    textClickCandidate = (id, point, wasSelected)
+                }
                 NSCursor.closedHand.set()
                 updateHighlight(showHandles: true)
 
             case .draw:
+                if annotateTool == .text {
+                    // Click-to-place resolved on mouse-up (ignore tiny drag).
+                    textClickCandidate = (nil, point, false)
+                    updateHighlight(showHandles: true)
+                    return
+                }
                 annotationHistory.select(nil)
                 let local = toLocal(point)
                 dragKind = .annotateDraw(startLocal: local)
@@ -527,9 +600,9 @@ final class SelectionOverlayController {
                 point: point,
                 minSize: minAnnotation
             )
-            var local = clampAnnotationRect(toLocal(resizedGlobal))
+            // Annotate marks may live outside the selection — don't clamp into the blue rect.
             var next = start
-            next.mapBoundingRect(to: local)
+            next.mapBoundingRect(to: toLocal(resizedGlobal))
             updateAnnotation(id: id) { $0.payload = next.payload }
             updateHighlight(showHandles: true)
         }
@@ -592,6 +665,22 @@ final class SelectionOverlayController {
             default:
                 break
             }
+
+            // Text: click-to-place / click-to-re-edit when drag stayed tiny.
+            if let candidate = textClickCandidate {
+                textClickCandidate = nil
+                let moved = hypot(point.x - candidate.start.x, point.y - candidate.start.y)
+                if moved < textClickDragThreshold {
+                    if let id = candidate.id {
+                        if candidate.wasSelected {
+                            startTextEditing(id: id)
+                        }
+                    } else if annotateTool == .text {
+                        placeAndEditText(at: candidate.start)
+                    }
+                }
+            }
+
             updateHighlight(showHandles: true)
             repositionToolbar()
             updateOverlayCursor(at: point)
@@ -635,15 +724,9 @@ final class SelectionOverlayController {
         return r
     }
 
-    /// Keep mark geometry inside the selection without changing its size when possible.
+    /// Marks may live outside the blue selection (fullscreen annotate). No clamp.
     private func clampAnnotationInSelection(_ annotation: inout Annotation) {
-        let bounds = annotation.boundingRect
-        guard !bounds.isNull else { return }
-        let maxX = max(0, currentRect.width - bounds.width)
-        let maxY = max(0, currentRect.height - bounds.height)
-        let ox = min(max(bounds.origin.x, 0), maxX)
-        let oy = min(max(bounds.origin.y, 0), maxY)
-        annotation.translate(by: CGSize(width: ox - bounds.origin.x, height: oy - bounds.origin.y))
+        _ = annotation
     }
 
     /// Axis-aligned square / circle bounding box from drag start toward `toward`.
@@ -657,6 +740,11 @@ final class SelectionOverlayController {
     }
 
     private func syncToolbar(from annotation: Annotation) {
+        if annotation.isText {
+            textStyle = annotation.textStyle
+            toolbar?.syncTextStyle(textStyle)
+            return
+        }
         annotationStyle = annotation.style
         if annotation.isShape {
             annotationKind = annotation.kind
@@ -670,6 +758,9 @@ final class SelectionOverlayController {
             var style = annotationStyle
             style.isFilled = false
             return Annotation(points: [local], style: style)
+        case .text:
+            let rect = Annotation.fittedTextRect(string: "", style: textStyle, origin: local)
+            return Annotation(string: "", rect: rect, style: textStyle)
         case .rectangle, .none:
             return Annotation(
                 kind: annotationKind,
@@ -680,9 +771,9 @@ final class SelectionOverlayController {
     }
 
     private func appendPencilOrShapeDraft(startLocal: CGPoint, globalPoint: CGPoint) {
-        let end = clampLocal(toLocal(globalPoint))
-        let start = clampLocal(startLocal)
-        draftAnnotation = updatedDraft(from: start, to: end)
+        // Selection-local, may extend outside the blue rect.
+        let end = toLocal(globalPoint)
+        draftAnnotation = updatedDraft(from: startLocal, to: end)
         updateHighlight(showHandles: true)
     }
 
@@ -735,6 +826,10 @@ final class SelectionOverlayController {
             }
             return Annotation(points: points, style: style)
 
+        case .text:
+            // Text is click-to-place; drag-draw is unused.
+            return makeDraftAnnotation(startingAt: start)
+
         case .rectangle, .none:
             var draft = CGRect(
                 x: min(start.x, end.x),
@@ -758,6 +853,8 @@ final class SelectionOverlayController {
             guard points.count >= 2, let first = points.first, let last = points.last else { return false }
             return hypot(last.x - first.x, last.y - first.y) >= minAnnotation
                 || pathLength(points) >= minAnnotation
+        case .text:
+            return true
         }
     }
 
@@ -773,10 +870,11 @@ final class SelectionOverlayController {
     private func finalizedDraft(_ draft: Annotation) -> Annotation {
         switch draft.payload {
         case .shape(let kind, let rect, let style):
-            return Annotation(kind: kind, rect: clampAnnotationRect(rect), style: style)
+            return Annotation(kind: kind, rect: rect, style: style)
         case .pencil(let points, let style):
-            let clamped = points.map(clampLocal)
-            return Annotation(points: clamped, style: style)
+            return Annotation(points: points, style: style)
+        case .text(let string, let rect, let style):
+            return Annotation(string: string, rect: rect, style: style)
         }
     }
 
@@ -788,6 +886,7 @@ final class SelectionOverlayController {
     }
 
     private func deleteSelectedAnnotation() {
+        endTextEditing(commit: false)
         guard let id = selectedAnnotationID else { return }
         annotationHistory.commit { doc in
             doc.marks.removeAll { $0.id == id }
@@ -798,23 +897,26 @@ final class SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// Priority: selected handles → any stroke/border (topmost) → draw zone inside selection.
+    /// Priority: selected handles → any stroke/border (topmost) → draw on freeze overlay.
+    /// Annotate tools work fullscreen (Snipaste), not only inside the blue selection.
     private func annotationPointerTarget(at point: CGPoint) -> AnnotationPointerTarget {
         guard annotateTool != .none else { return .outside }
-        guard currentRect.contains(point) else { return .outside }
 
         if let id = selectedAnnotationID,
+           id != editingTextID,
            let ann = annotations.first(where: { $0.id == id }),
            let handle = hitTestAnnotationHandle(at: point, annotation: ann) {
             return .handle(id: id, handle: handle)
         }
 
         for ann in annotations.reversed() {
+            if ann.id == editingTextID { continue }
             if isOnAnnotationStroke(ann, at: point) {
                 return .border(id: ann.id)
             }
         }
 
+        // Any point on the overlay is a draw target while a tool is active.
         return .draw
     }
 
@@ -844,6 +946,10 @@ final class SelectionOverlayController {
             let local = toLocal(globalPoint)
             let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
             return AnnotationDrawing.distance(from: local, toPolyline: points) <= tolerance
+
+        case .text(_, let localRect, _):
+            // Whole body is the move / select target (Snipaste text).
+            return toGlobal(localRect).insetBy(dx: -2, dy: -2).contains(globalPoint)
         }
     }
 
@@ -926,10 +1032,13 @@ final class SelectionOverlayController {
         case .draw:
             if annotateTool == .pencil {
                 AnnotationCursors.pencilCrosshair(color: annotationStyle.strokeColor).set()
+            } else if annotateTool == .text {
+                NSCursor.iBeam.set()
             } else {
                 AnnotationCursors.whitePlus.set()
             }
         case .outside:
+            // Should be rare while a tool is active (draw covers the overlay).
             NSCursor.arrow.set()
         }
     }
@@ -950,6 +1059,9 @@ final class SelectionOverlayController {
     }
 
     private func setAnnotateTool(_ tool: AnnotateTool) {
+        if tool != annotateTool {
+            endTextEditing(commit: true)
+        }
         annotateTool = tool
         if tool == .none {
             annotationHistory.select(nil)
@@ -972,7 +1084,8 @@ final class SelectionOverlayController {
         annotationStyle = next
         AnnotationPrefs.save(style: next, kind: annotationKind)
         if let id = selectedAnnotationID,
-           let selected = annotations.first(where: { $0.id == id }) {
+           let selected = annotations.first(where: { $0.id == id }),
+           !selected.isText {
             var applied = next
             // Don't push fill onto a pencil mark.
             if selected.isPencil {
@@ -981,6 +1094,25 @@ final class SelectionOverlayController {
             annotationHistory.commit { doc in
                 guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
                 doc.marks[idx].style = applied
+            }
+            updateHighlight(showHandles: true)
+            refreshHistoryChrome()
+        }
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
+
+    private func applyTextStyle(_ style: TextStyle) {
+        textStyle = style
+        TextAnnotationPrefs.save(style)
+        if let id = selectedAnnotationID,
+           let selected = annotations.first(where: { $0.id == id }),
+           selected.isText {
+            annotationHistory.commit { doc in
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+                doc.marks[idx].textStyle = style
+            }
+            if editingTextID == id {
+                applyTextStyleToEditor(style)
             }
             updateHighlight(showHandles: true)
             refreshHistoryChrome()
@@ -1016,6 +1148,7 @@ final class SelectionOverlayController {
     }
 
     private func syncAfterHistoryChange() {
+        endTextEditing(commit: false)
         if let id = selectedAnnotationID,
            let ann = annotations.first(where: { $0.id == id }) {
             syncToolbar(from: ann)
@@ -1030,6 +1163,225 @@ final class SelectionOverlayController {
             canUndo: annotationHistory.canUndo,
             canRedo: annotationHistory.canRedo
         )
+    }
+
+    // MARK: - Text editing
+
+    private func placeAndEditText(at globalPoint: CGPoint) {
+        // Selection-local, may be outside the blue rect (Snipaste free placement).
+        let local = toLocal(globalPoint)
+        let rect = Annotation.fittedTextRect(string: "", style: textStyle, origin: local)
+        let ann = Annotation(string: "", rect: rect, style: textStyle)
+        annotationHistory.commit { doc in
+            doc.marks.append(ann)
+            doc.selectedID = ann.id
+        }
+        refreshHistoryChrome()
+        updateHighlight(showHandles: true)
+        startTextEditing(id: ann.id)
+    }
+
+    private func startTextEditing(id: UUID) {
+        guard let ann = annotations.first(where: { $0.id == id }), ann.isText else { return }
+        if editingTextID == id { return }
+        endTextEditing(commit: true)
+
+        let globalRect = toGlobal(ann.boundingRect)
+        guard let panel = panels.first(where: { $0.screenFrame.contains(CGPoint(x: globalRect.midX, y: globalRect.midY)) })
+                ?? panels.first(where: { $0.screenFrame.intersects(globalRect) })
+                ?? panels.first
+        else { return }
+
+        editingTextID = id
+        textEditBaselineString = ann.string
+        textEditBaselineRect = ann.boundingRect
+        textEditorHost = panel
+
+        let size = Annotation.fittingTextSize(string: ann.string, style: ann.textStyle)
+        let localInPanel = CGRect(
+            x: globalRect.origin.x - panel.screenFrame.origin.x,
+            y: globalRect.maxY - size.height - panel.screenFrame.origin.y,
+            width: size.width,
+            height: size.height
+        )
+
+        // Draw border in `draw(_:)` — layer borders on clear NSScrollView often don't show.
+        let chrome = TextEditChromeView(frame: localInPanel)
+        let inset: CGFloat = 2
+        let tv = AnnotationTextView(frame: chrome.bounds.insetBy(dx: inset, dy: inset))
+        tv.autoresizingMask = [.width, .height]
+        tv.string = ann.string
+        tv.isRichText = false
+        tv.allowsUndo = true
+        tv.font = ann.textStyle.makeFont()
+        tv.textColor = ann.textStyle.color
+        tv.insertionPointColor = ann.textStyle.color
+        tv.backgroundColor = .clear
+        tv.drawsBackground = false
+        // Only the explicit “background” style toggle fills behind glyphs.
+        if ann.textStyle.hasBackground {
+            tv.drawsBackground = true
+            tv.backgroundColor = Self.textEditorBackground(for: ann.textStyle.color)
+        }
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = true
+        tv.textContainer?.widthTracksTextView = false
+        tv.textContainer?.heightTracksTextView = false
+        tv.textContainer?.containerSize = CGSize(width: 10_000, height: 10_000)
+        tv.textContainerInset = NSSize(
+            width: ann.textStyle.textPadding,
+            height: ann.textStyle.textPadding
+        )
+        tv.delegate = TextEditingBridge.shared
+        TextEditingBridge.shared.owner = self
+
+        chrome.addSubview(tv)
+        panel.contentView?.addSubview(chrome)
+        panel.makeKeyAndOrderFront(nil)
+        tv.window?.makeFirstResponder(tv)
+
+        textChromeView = chrome
+        textEditor = tv
+        resizeTextEditorToFit()
+        updateHighlight(showHandles: true)
+    }
+
+    private func endTextEditing(commit: Bool) {
+        guard let id = editingTextID else { return }
+        let string = textEditor?.string ?? textEditBaselineString
+        let editorFrame = textChromeView?.frame
+        let host = textEditorHost
+        let style = annotations.first(where: { $0.id == id })?.textStyle ?? textStyle
+        discardTextEditor()
+
+        guard commit else {
+            updateHighlight(showHandles: true)
+            return
+        }
+
+        let trimmedEmpty = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if trimmedEmpty {
+            annotationHistory.commit { doc in
+                doc.marks.removeAll { $0.id == id }
+                if doc.selectedID == id { doc.selectedID = nil }
+            }
+            refreshHistoryChrome()
+            updateHighlight(showHandles: true)
+            return
+        }
+
+        // Size to content (same as the live editor), anchored at the editor’s top-left.
+        var newRect = textEditBaselineRect
+        if let editorFrame, let host {
+            let globalTopLeft = CGPoint(
+                x: editorFrame.minX + host.screenFrame.minX,
+                y: editorFrame.maxY + host.screenFrame.minY
+            )
+            let maxW = max(40, host.screenFrame.maxX - (editorFrame.minX + host.screenFrame.minX) - 4)
+            let size = Annotation.fittingTextSize(string: string, style: style, maxWidth: maxW)
+            newRect = CGRect(
+                x: globalTopLeft.x - currentRect.minX,
+                y: globalTopLeft.y - size.height - currentRect.minY,
+                width: size.width,
+                height: size.height
+            )
+        } else {
+            newRect = Annotation.fittedTextRect(
+                string: string,
+                style: style,
+                origin: CGPoint(x: textEditBaselineRect.minX, y: textEditBaselineRect.maxY)
+            )
+        }
+
+        let baselineString = textEditBaselineString
+        let baselineRect = textEditBaselineRect
+        if string != baselineString || newRect != baselineRect {
+            annotationHistory.commit { doc in
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+                doc.marks[idx].string = string
+                doc.marks[idx].rect = newRect
+                doc.selectedID = id
+            }
+            refreshHistoryChrome()
+        } else {
+            annotationHistory.select(id)
+        }
+        updateHighlight(showHandles: true)
+    }
+
+    private func discardTextEditor() {
+        if let tv = textEditor {
+            // Drop typing undo before releasing the view — shared/stale targets crash on ⌘Z.
+            tv.clearIsolatedUndo()
+            tv.window?.makeFirstResponder(nil)
+        }
+        textChromeView?.removeFromSuperview()
+        textChromeView = nil
+        textEditor = nil
+        textEditorHost = nil
+        editingTextID = nil
+        TextEditingBridge.shared.owner = nil
+    }
+
+    private func applyTextStyleToEditor(_ style: TextStyle) {
+        guard let tv = textEditor else { return }
+        tv.font = style.makeFont()
+        tv.textColor = style.color
+        tv.insertionPointColor = style.color
+        if style.hasBackground {
+            tv.drawsBackground = true
+            tv.backgroundColor = Self.textEditorBackground(for: style.color)
+            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textPadding)
+        } else {
+            tv.drawsBackground = false
+            tv.backgroundColor = .clear
+            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textPadding)
+        }
+        resizeTextEditorToFit()
+    }
+
+    func resizeTextEditorToFit() {
+        guard let tv = textEditor, let chrome = textChromeView, let host = textEditorHost else { return }
+        let style: TextStyle = {
+            if let id = editingTextID,
+               let ann = annotations.first(where: { $0.id == id }) {
+                return ann.textStyle
+            }
+            return textStyle
+        }()
+        // Grow with glyphs; wrap only near the trailing screen edge.
+        let maxW = max(40, host.screenFrame.width - chrome.frame.minX - 4)
+        let size = Annotation.fittingTextSize(string: tv.string, style: style, maxWidth: maxW)
+
+        var frame = chrome.frame
+        let top = frame.maxY
+        frame.size.width = size.width
+        frame.size.height = size.height
+        frame.origin.y = top - size.height
+
+        let screen = host.screenFrame
+        frame.origin.x = min(max(frame.origin.x, 0), max(0, screen.width - frame.width))
+        if frame.maxY > screen.height {
+            frame.origin.y = screen.height - frame.height
+        }
+        if frame.minY < 0 {
+            frame.origin.y = 0
+        }
+
+        chrome.frame = frame
+        let inset: CGFloat = 2
+        tv.frame = chrome.bounds.insetBy(dx: inset, dy: inset)
+        tv.textContainer?.containerSize = CGSize(width: max(frame.width, maxW), height: 10_000)
+        tv.textContainer?.widthTracksTextView = false
+        chrome.needsDisplay = true
+    }
+
+    private static func textEditorBackground(for color: NSColor) -> NSColor {
+        let rgb = color.usingColorSpace(.genericRGB) ?? color
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.55
+            ? NSColor.black.withAlphaComponent(0.55)
+            : NSColor.white.withAlphaComponent(0.85)
     }
 
     // MARK: - Geometry
@@ -1215,14 +1567,17 @@ final class SelectionOverlayController {
     }
 
     private func restoreRecord(_ record: SnipRecord) {
+        endTextEditing(commit: false)
         dragKind = nil
         pendingWindowPick = nil
         hoveredWindowRect = nil
         draftAnnotation = nil
+        textClickCandidate = nil
         annotateTool = .none
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
         annotationKind = prefs.kind
+        textStyle = TextAnnotationPrefs.load()
         NSCursor.arrow.set()
 
         currentRect = record.selection
@@ -1238,6 +1593,15 @@ final class SelectionOverlayController {
 
     // MARK: - Drawing / toolbar
 
+    private func isPointInTextEditor(_ point: CGPoint) -> Bool {
+        guard let chrome = textChromeView, let host = textEditorHost else { return false }
+        let local = CGPoint(
+            x: point.x - host.screenFrame.minX,
+            y: point.y - host.screenFrame.minY
+        )
+        return chrome.frame.contains(local)
+    }
+
     private func updateHighlight(showHandles: Bool) {
         let selected = selectedAnnotationID.flatMap { id in annotations.first(where: { $0.id == id }) }
         for panel in panels {
@@ -1249,7 +1613,8 @@ final class SelectionOverlayController {
                 draftAnnotation: draftAnnotation,
                 selectedAnnotation: selected,
                 annotationHandleSize: annotationHandleVisualSize,
-                playbackImage: playbackBaseImage
+                playbackImage: playbackBaseImage,
+                editingAnnotationID: editingTextID
             )
         }
     }
@@ -1260,7 +1625,8 @@ final class SelectionOverlayController {
             primaryAction: primaryAction,
             initialTool: annotateTool,
             initialStyle: annotationStyle,
-            initialKind: annotationKind
+            initialKind: annotationKind,
+            initialTextStyle: textStyle
         ) { [weak self] event in
             guard let self else { return }
             switch event {
@@ -1277,6 +1643,8 @@ final class SelectionOverlayController {
                 self.setAnnotateTool(tool)
             case .styleChanged(let style):
                 self.applyStyle(style)
+            case .textStyleChanged(let style):
+                self.applyTextStyle(style)
             case .kindChanged(let kind):
                 self.applyKind(kind)
             case .undo:
@@ -1297,1021 +1665,5 @@ final class SelectionOverlayController {
         // Dragging on the full-screen overlay can raise it above the toolbar;
         // keep the bar strictly in front after every move/resize.
         toolbar.orderFront()
-    }
-}
-
-// MARK: - Toolbar
-
-@MainActor
-private final class RefineToolbarController: NSObject {
-    enum ConfirmAction {
-        case pin
-        case copy
-        case save
-        case cancel
-    }
-
-    enum Event {
-        case confirm(ConfirmAction)
-        case selectTool(AnnotateTool)
-        case styleChanged(AnnotationStyle)
-        case kindChanged(ShapeKind)
-        case undo
-        case redo
-    }
-
-    private let panel: NSPanel
-    private let onEvent: (Event) -> Void
-    private var style: AnnotationStyle
-    private var tool: AnnotateTool
-    private var kind: ShapeKind
-
-    private let rootStack = NSStackView()
-    private var shapeButton: NSButton!
-    private var pencilButton: NSButton!
-    private var undoButton: NSButton!
-    private var redoButton: NSButton!
-    private var subToolbarContainer: NSView!
-    /// Shape-only chrome (fill + rect/oval). Hidden for pencil.
-    private var shapeOnlyViews: [NSView] = []
-    private var strokeButtons: [NSButton] = []
-    private var fillButton: NSButton!
-    private var rectKindButton: NSButton!
-    private var ovalKindButton: NSButton!
-    private var lineStyleButton: NSButton!
-    private var colorPreview: NSView!
-
-    init(
-        primaryAction: SelectionOverlayController.ConfirmAction,
-        initialTool: AnnotateTool,
-        initialStyle: AnnotationStyle,
-        initialKind: ShapeKind,
-        onEvent: @escaping (Event) -> Void
-    ) {
-        self.onEvent = onEvent
-        self.style = initialStyle
-        self.tool = initialTool
-        self.kind = initialKind
-        self.panel = NSPanel(
-            contentRect: .zero,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        super.init()
-
-        let content = RefineToolbarView(frame: .zero)
-        content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.clear.cgColor
-
-        rootStack.orientation = .vertical
-        rootStack.alignment = .leading
-        // Snipaste: two separate chrome cards with a small gap (~4pt).
-        rootStack.spacing = 4
-        rootStack.translatesAutoresizingMaskIntoConstraints = false
-
-        let mainCard = makeChromeCard()
-        let mainRow = buildMainRow(primaryAction: primaryAction)
-        embed(mainRow, in: mainCard)
-
-        let optionsCard = makeChromeCard()
-        let subRow = buildSubToolbar()
-        embed(subRow, in: optionsCard)
-        subToolbarContainer = optionsCard
-        subToolbarContainer.isHidden = (initialTool == .none)
-
-        rootStack.addArrangedSubview(mainCard)
-        rootStack.addArrangedSubview(subToolbarContainer)
-
-        content.addSubview(rootStack)
-        NSLayoutConstraint.activate([
-            rootStack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            rootStack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            rootStack.topAnchor.constraint(equalTo: content.topAnchor),
-            rootStack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-        ])
-
-        refreshSelectionChrome()
-        layoutPanel(content: content)
-
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.ignoresMouseEvents = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        panel.isReleasedWhenClosed = false
-        panel.hidesOnDeactivate = false
-        panel.contentView = content
-    }
-
-    private func buildMainRow(primaryAction: SelectionOverlayController.ConfirmAction) -> NSView {
-        shapeButton = iconButton(
-            systemName: "rectangle",
-            tooltip: "Rectangle",
-            enabled: true,
-            action: #selector(shapeTapped)
-        )
-        pencilButton = iconButton(
-            systemName: "pencil",
-            tooltip: "Pen",
-            enabled: true,
-            action: #selector(pencilTapped)
-        )
-
-        let annotateViews: [NSView] = [
-            shapeButton,
-            iconButton(systemName: "arrow.up.right", tooltip: "Arrow", enabled: false, action: nil),
-            pencilButton,
-            iconButton(systemName: "paintbrush.pointed", tooltip: "Marker", enabled: false, action: nil),
-            iconButton(systemName: "square.grid.3x3", tooltip: "Mosaic", enabled: false, action: nil),
-            iconButton(systemName: "textformat", tooltip: "Text", enabled: false, action: nil),
-            iconButton(systemName: "1.circle", tooltip: "Step", enabled: false, action: nil),
-            iconButton(systemName: "magnifyingglass", tooltip: "Magnifier", enabled: false, action: nil),
-            iconButton(systemName: "eraser", tooltip: "Eraser", enabled: false, action: nil),
-        ]
-        undoButton = iconButton(
-            systemName: "arrow.uturn.backward",
-            tooltip: "Undo",
-            enabled: false,
-            action: #selector(undoTapped)
-        )
-        redoButton = iconButton(
-            systemName: "arrow.uturn.forward",
-            tooltip: "Redo",
-            enabled: false,
-            action: #selector(redoTapped)
-        )
-        let editViews: [NSView] = [
-            iconButton(systemName: "doc.text.viewfinder", tooltip: "OCR", enabled: false, action: nil),
-            undoButton,
-            redoButton,
-        ]
-
-        let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
-        let pin = iconButton(systemName: "pin.fill", tooltip: "Pin", enabled: true, action: #selector(pinTapped))
-        let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save", enabled: true, action: #selector(saveTapped))
-        let copy = iconButton(systemName: "doc.on.doc", tooltip: "Copy", enabled: true, action: #selector(copyTapped))
-        let more = iconButton(systemName: "ellipsis", tooltip: "More", enabled: false, action: nil)
-
-        let primary: NSButton
-        switch primaryAction {
-        case .pin, .save:
-            primary = pin
-        case .copy:
-            primary = copy
-        }
-        primary.keyEquivalent = "\r"
-        panel.defaultButtonCell = primary.cell as? NSButtonCell
-
-        let stack = NSStackView(views: [])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 2
-        stack.edgeInsets = NSEdgeInsets(top: 3, left: 6, bottom: 3, right: 6)
-
-        for v in annotateViews { stack.addArrangedSubview(v) }
-        stack.addArrangedSubview(divider())
-        for v in editViews { stack.addArrangedSubview(v) }
-        stack.addArrangedSubview(divider())
-        for v in [cancel, pin, save, copy, more] { stack.addArrangedSubview(v) }
-        return stack
-    }
-
-    private func buildSubToolbar() -> NSView {
-        let stack = NSStackView(views: [])
-        stack.orientation = .horizontal
-        stack.alignment = .centerY
-        stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
-
-        // Switch group 1: three stroke widths + fill (mutually exclusive).
-        strokeButtons = StrokeWidthOption.allCases.map { option in
-            let button = NSButton(frame: .zero)
-            button.bezelStyle = .inline
-            button.isBordered = false
-            button.setButtonType(.momentaryChange)
-            button.imagePosition = .imageOnly
-            button.toolTip = "Stroke"
-            button.target = self
-            button.action = #selector(strokeTapped(_:))
-            button.tag = option.rawValue
-            button.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                button.widthAnchor.constraint(equalToConstant: 22),
-                button.heightAnchor.constraint(equalToConstant: 22),
-            ])
-            button.image = strokeDotImage(diameter: option.previewDiameter, selected: false)
-            return button
-        }
-        for b in strokeButtons { stack.addArrangedSubview(b) }
-
-        fillButton = NSButton(frame: .zero)
-        fillButton.bezelStyle = .inline
-        fillButton.isBordered = false
-        fillButton.setButtonType(.momentaryChange)
-        fillButton.imagePosition = .imageOnly
-        fillButton.toolTip = "Fill"
-        fillButton.target = self
-        fillButton.action = #selector(fillTapped)
-        fillButton.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            fillButton.widthAnchor.constraint(equalToConstant: 22),
-            fillButton.heightAnchor.constraint(equalToConstant: 22),
-        ])
-        fillButton.image = fillSwatchImage(selected: false)
-        stack.addArrangedSubview(fillButton)
-
-        let afterFillDivider = miniDivider()
-        stack.addArrangedSubview(afterFillDivider)
-
-        // Switch group 2: rectangle ↔ ellipse / circle.
-        rectKindButton = iconButton(
-            systemName: "rectangle",
-            tooltip: "Rectangle",
-            enabled: true,
-            action: #selector(rectKindTapped)
-        )
-        ovalKindButton = iconButton(
-            systemName: "oval",
-            tooltip: "Ellipse / Circle",
-            enabled: true,
-            action: #selector(ovalKindTapped)
-        )
-        stack.addArrangedSubview(rectKindButton)
-        stack.addArrangedSubview(ovalKindButton)
-
-        let afterKindDivider = miniDivider()
-        stack.addArrangedSubview(afterKindDivider)
-
-        // Shared by shape + pencil: hide fill / kind for pencil (Snipaste pen options).
-        // Keep `afterKindDivider` visible so stroke → line-style stays separated.
-        shapeOnlyViews = [fillButton, afterFillDivider, rectKindButton, ovalKindButton]
-
-        // Item 7: border line style dropdown (Snipaste 5 patterns).
-        lineStyleButton = NSButton(frame: .zero)
-        lineStyleButton.bezelStyle = .inline
-        lineStyleButton.isBordered = false
-        lineStyleButton.setButtonType(.momentaryChange)
-        lineStyleButton.imagePosition = .imageOnly
-        lineStyleButton.toolTip = "Border style"
-        lineStyleButton.target = self
-        lineStyleButton.action = #selector(lineStyleTapped(_:))
-        lineStyleButton.translatesAutoresizingMaskIntoConstraints = false
-        lineStyleButton.wantsLayer = true
-        lineStyleButton.layer?.cornerRadius = 10
-        lineStyleButton.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1).cgColor
-        lineStyleButton.layer?.borderWidth = 1
-        lineStyleButton.layer?.borderColor = NSColor(calibratedWhite: 0.78, alpha: 1).cgColor
-        NSLayoutConstraint.activate([
-            lineStyleButton.widthAnchor.constraint(equalToConstant: 56),
-            lineStyleButton.heightAnchor.constraint(equalToConstant: 22),
-        ])
-        stack.addArrangedSubview(lineStyleButton)
-
-        stack.addArrangedSubview(miniDivider())
-
-        // Color preview (24pt) + 2×10 grid: chips 11pt, gap 2pt (measured from Snipaste @2x).
-        let preview = NSView(frame: .zero)
-        preview.wantsLayer = true
-        preview.layer?.cornerRadius = 3
-        preview.layer?.borderWidth = 1
-        preview.layer?.borderColor = NSColor(calibratedWhite: 0.35, alpha: 1).cgColor
-        preview.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            preview.widthAnchor.constraint(equalToConstant: 24),
-            preview.heightAnchor.constraint(equalToConstant: 24),
-        ])
-        colorPreview = preview
-        stack.addArrangedSubview(preview)
-
-        let swatchGrid = NSStackView(views: [])
-        swatchGrid.orientation = .vertical
-        swatchGrid.spacing = 2
-        swatchGrid.alignment = .leading
-        swatchGrid.wantsLayer = true
-        swatchGrid.layer?.masksToBounds = false
-
-        let allSwatches = PaletteColor.allCases
-        let columns = 10
-        for rowStart in stride(from: 0, to: allSwatches.count, by: columns) {
-            let row = NSStackView(views: [])
-            row.orientation = .horizontal
-            row.spacing = 2
-            row.wantsLayer = true
-            row.layer?.masksToBounds = false
-            let end = min(rowStart + columns, allSwatches.count)
-            for swatch in allSwatches[rowStart..<end] {
-                let control = PaletteSwatchControl(swatch: swatch) { [weak self] picked in
-                    guard let self else { return }
-                    self.style.strokeColor = picked.color
-                    self.refreshSelectionChrome()
-                    self.onEvent(.styleChanged(self.style))
-                }
-                row.addArrangedSubview(control)
-            }
-            swatchGrid.addArrangedSubview(row)
-        }
-        stack.addArrangedSubview(swatchGrid)
-
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        return stack
-    }
-
-    private func makeChromeCard() -> NSView {
-        let card = NSView(frame: .zero)
-        card.wantsLayer = true
-        card.layer?.backgroundColor = NSColor.white.cgColor
-        card.layer?.cornerRadius = 6
-        card.layer?.masksToBounds = false
-        card.layer?.shadowColor = NSColor.black.cgColor
-        card.layer?.shadowOpacity = 0.18
-        card.layer?.shadowRadius = 6
-        card.layer?.shadowOffset = CGSize(width: 0, height: -1)
-        card.translatesAutoresizingMaskIntoConstraints = false
-        return card
-    }
-
-    private func embed(_ child: NSView, in card: NSView) {
-        child.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(child)
-        NSLayoutConstraint.activate([
-            child.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-            child.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-            child.topAnchor.constraint(equalTo: card.topAnchor),
-            child.bottomAnchor.constraint(equalTo: card.bottomAnchor),
-        ])
-    }
-
-    private func layoutPanel(content: NSView) {
-        content.layoutSubtreeIfNeeded()
-        let fitting = rootStack.fittingSize
-        let size = CGSize(width: max(fitting.width, 280), height: max(fitting.height, 28))
-        content.frame = CGRect(origin: .zero, size: size)
-        panel.setContentSize(size)
-    }
-
-    private func refreshSelectionChrome() {
-        tintSelected(shapeButton, selected: tool == .rectangle)
-        tintSelected(pencilButton, selected: tool == .pencil)
-        colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
-
-        let shapeExtrasVisible = (tool == .rectangle)
-        for view in shapeOnlyViews {
-            view.isHidden = !shapeExtrasVisible
-        }
-
-        let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
-        let treatAsStroke = !style.isFilled || tool == .pencil
-        for button in strokeButtons {
-            let option = StrokeWidthOption(rawValue: button.tag) ?? .medium
-            let on = treatAsStroke && option == selectedStroke
-            button.image = strokeDotImage(diameter: option.previewDiameter, selected: on)
-            tintSelected(button, selected: on)
-        }
-        fillButton.image = fillSwatchImage(selected: style.isFilled && tool == .rectangle)
-        tintSelected(fillButton, selected: style.isFilled && tool == .rectangle)
-
-        tintSelected(rectKindButton, selected: kind == .rectangle)
-        tintSelected(ovalKindButton, selected: kind == .ellipse)
-
-        lineStyleButton.image = lineStylePreviewImage(style.lineStyle)
-        let lineEnabled = treatAsStroke
-        lineStyleButton.isEnabled = lineEnabled
-        lineStyleButton.alphaValue = lineEnabled ? 1 : 0.45
-    }
-
-    private func tintSelected(_ button: NSButton, selected: Bool) {
-        button.contentTintColor = selected
-            ? NSColor.systemBlue
-            : NSColor(calibratedWhite: 0.22, alpha: 1)
-        if selected {
-            button.wantsLayer = true
-            button.layer?.backgroundColor = NSColor.systemBlue.withAlphaComponent(0.12).cgColor
-            button.layer?.cornerRadius = 4
-        } else {
-            button.layer?.backgroundColor = nil
-        }
-    }
-
-    private func strokeDotImage(diameter: CGFloat, selected: Bool) -> NSImage {
-        let size = CGSize(width: 18, height: 18)
-        return NSImage(size: size, flipped: false) { rect in
-            let color = selected ? NSColor.systemBlue : NSColor(calibratedWhite: 0.25, alpha: 1)
-            color.setFill()
-            let r = CGRect(
-                x: (rect.width - diameter) / 2,
-                y: (rect.height - diameter) / 2,
-                width: diameter,
-                height: diameter
-            )
-            NSBezierPath(ovalIn: r).fill()
-            return true
-        }
-    }
-
-    private func fillSwatchImage(selected: Bool) -> NSImage {
-        let size = CGSize(width: 18, height: 18)
-        return NSImage(size: size, flipped: false) { rect in
-            let color = selected ? NSColor.systemBlue : NSColor(calibratedWhite: 0.25, alpha: 1)
-            color.setFill()
-            let r = CGRect(x: 3, y: 3, width: 12, height: 12)
-            NSBezierPath(roundedRect: r, xRadius: 1.5, yRadius: 1.5).fill()
-            return true
-        }
-    }
-
-    /// Compact pill preview: line pattern + chevron (Snipaste-like).
-    private func lineStylePreviewImage(_ lineStyle: StrokeLineStyle) -> NSImage {
-        let size = CGSize(width: 52, height: 18)
-        let previewStroke: CGFloat = 2
-        return NSImage(size: size, flipped: false) { rect in
-            let ink = NSColor(calibratedWhite: 0.28, alpha: 1)
-            ink.setStroke()
-
-            let y = rect.midY
-            let line = NSBezierPath()
-            line.move(to: NSPoint(x: 6, y: y))
-            line.line(to: NSPoint(x: 34, y: y))
-            line.lineWidth = previewStroke
-            line.lineCapStyle = .butt
-            let dash = lineStyle.dashPattern(strokeWidth: previewStroke)
-            if !dash.isEmpty {
-                line.setLineDash(dash, count: dash.count, phase: 0)
-            }
-            line.stroke()
-
-            // Up / down chevrons on the trailing edge.
-            let chevronX: CGFloat = 42
-            let chevron = NSBezierPath()
-            chevron.move(to: NSPoint(x: chevronX, y: y + 4.5))
-            chevron.line(to: NSPoint(x: chevronX + 3.5, y: y + 1.5))
-            chevron.line(to: NSPoint(x: chevronX + 7, y: y + 4.5))
-            chevron.move(to: NSPoint(x: chevronX, y: y - 4.5))
-            chevron.line(to: NSPoint(x: chevronX + 3.5, y: y - 1.5))
-            chevron.line(to: NSPoint(x: chevronX + 7, y: y - 4.5))
-            chevron.lineWidth = 1.2
-            chevron.lineCapStyle = .round
-            chevron.lineJoinStyle = .round
-            ink.setStroke()
-            chevron.stroke()
-            return true
-        }
-    }
-
-    private func iconButton(
-        systemName: String,
-        tooltip: String,
-        enabled: Bool,
-        action: Selector?
-    ) -> NSButton {
-        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
-        button.bezelStyle = .inline
-        button.isBordered = false
-        button.setButtonType(.momentaryChange)
-        button.imagePosition = .imageOnly
-        button.toolTip = tooltip
-        button.isEnabled = enabled
-        button.target = action == nil ? nil : self
-        button.action = action
-        button.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 24),
-            button.heightAnchor.constraint(equalToConstant: 24),
-        ])
-
-        let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .medium)
-        let image = NSImage(systemSymbolName: systemName, accessibilityDescription: tooltip)?
-            .withSymbolConfiguration(config)
-        button.image = image
-        button.contentTintColor = enabled
-            ? NSColor(calibratedWhite: 0.22, alpha: 1)
-            : NSColor(calibratedWhite: 0.55, alpha: 1)
-        return button
-    }
-
-    private func divider() -> NSView {
-        let wrap = NSView(frame: .zero)
-        wrap.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            wrap.widthAnchor.constraint(equalToConstant: 7),
-            wrap.heightAnchor.constraint(equalToConstant: 24),
-        ])
-        let line = NSView(frame: .zero)
-        line.wantsLayer = true
-        line.layer?.backgroundColor = NSColor(calibratedWhite: 0.82, alpha: 1).cgColor
-        line.translatesAutoresizingMaskIntoConstraints = false
-        wrap.addSubview(line)
-        NSLayoutConstraint.activate([
-            line.widthAnchor.constraint(equalToConstant: 1),
-            line.heightAnchor.constraint(equalToConstant: 14),
-            line.centerXAnchor.constraint(equalTo: wrap.centerXAnchor),
-            line.centerYAnchor.constraint(equalTo: wrap.centerYAnchor),
-        ])
-        return wrap
-    }
-
-    private func miniDivider() -> NSView {
-        let wrap = NSView(frame: .zero)
-        wrap.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            wrap.widthAnchor.constraint(equalToConstant: 6),
-            wrap.heightAnchor.constraint(equalToConstant: 20),
-        ])
-        let line = NSView(frame: .zero)
-        line.wantsLayer = true
-        line.layer?.backgroundColor = NSColor(calibratedWhite: 0.82, alpha: 1).cgColor
-        line.translatesAutoresizingMaskIntoConstraints = false
-        wrap.addSubview(line)
-        NSLayoutConstraint.activate([
-            line.widthAnchor.constraint(equalToConstant: 1),
-            line.heightAnchor.constraint(equalToConstant: 12),
-            line.centerXAnchor.constraint(equalTo: wrap.centerXAnchor),
-            line.centerYAnchor.constraint(equalTo: wrap.centerYAnchor),
-        ])
-        return wrap
-    }
-
-    @objc private func shapeTapped() {
-        selectTool(tool == .rectangle ? .none : .rectangle)
-    }
-
-    @objc private func pencilTapped() {
-        selectTool(tool == .pencil ? .none : .pencil)
-    }
-
-    private func selectTool(_ next: AnnotateTool) {
-        tool = next
-        if next == .pencil {
-            style.isFilled = false
-        }
-        subToolbarContainer.isHidden = (next == .none)
-        refreshSelectionChrome()
-        if let content = panel.contentView {
-            layoutPanel(content: content)
-        }
-        onEvent(.selectTool(next))
-    }
-
-    @objc private func strokeTapped(_ sender: NSButton) {
-        let option = StrokeWidthOption(rawValue: sender.tag) ?? .medium
-        style.strokeWidth = option.points
-        style.isFilled = false
-        refreshSelectionChrome()
-        onEvent(.styleChanged(style))
-    }
-
-    @objc private func fillTapped() {
-        guard tool == .rectangle else { return }
-        style.isFilled = true
-        refreshSelectionChrome()
-        onEvent(.styleChanged(style))
-    }
-
-    @objc private func rectKindTapped() {
-        kind = .rectangle
-        refreshSelectionChrome()
-        onEvent(.kindChanged(kind))
-    }
-
-    @objc private func ovalKindTapped() {
-        kind = .ellipse
-        refreshSelectionChrome()
-        onEvent(.kindChanged(kind))
-    }
-
-    @objc private func lineStyleTapped(_ sender: NSButton) {
-        guard !style.isFilled else { return }
-        let menu = NSMenu()
-        for option in StrokeLineStyle.allCases {
-            let item = NSMenuItem(
-                title: "",
-                action: #selector(lineStyleMenuPicked(_:)),
-                keyEquivalent: ""
-            )
-            item.target = self
-            item.tag = option.rawValue
-            item.state = (option == style.lineStyle) ? .on : .off
-            item.toolTip = option.toolTip
-            item.image = lineStyleMenuImage(option)
-            menu.addItem(item)
-        }
-        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
-        menu.popUp(positioning: nil, at: point, in: sender)
-    }
-
-    @objc private func lineStyleMenuPicked(_ sender: NSMenuItem) {
-        guard let option = StrokeLineStyle(rawValue: sender.tag) else { return }
-        style.lineStyle = option
-        style.isFilled = false
-        refreshSelectionChrome()
-        onEvent(.styleChanged(style))
-    }
-
-    private func lineStyleMenuImage(_ lineStyle: StrokeLineStyle) -> NSImage {
-        let size = CGSize(width: 56, height: 14)
-        let previewStroke: CGFloat = 2
-        return NSImage(size: size, flipped: false) { rect in
-            NSColor(calibratedWhite: 0.25, alpha: 1).setStroke()
-            let line = NSBezierPath()
-            line.move(to: NSPoint(x: 2, y: rect.midY))
-            line.line(to: NSPoint(x: rect.width - 2, y: rect.midY))
-            line.lineWidth = previewStroke
-            line.lineCapStyle = .butt
-            let dash = lineStyle.dashPattern(strokeWidth: previewStroke)
-            if !dash.isEmpty {
-                line.setLineDash(dash, count: dash.count, phase: 0)
-            }
-            line.stroke()
-            return true
-        }
-    }
-
-    @objc private func pinTapped() { onEvent(.confirm(.pin)) }
-    @objc private func copyTapped() { onEvent(.confirm(.copy)) }
-    @objc private func saveTapped() { onEvent(.confirm(.save)) }
-    @objc private func cancelTapped() { onEvent(.confirm(.cancel)) }
-    @objc private func undoTapped() { onEvent(.undo) }
-    @objc private func redoTapped() { onEvent(.redo) }
-
-    func setAnnotateTool(_ tool: AnnotateTool) {
-        self.tool = tool
-        if tool == .pencil {
-            style.isFilled = false
-        }
-        subToolbarContainer.isHidden = (tool == .none)
-        refreshSelectionChrome()
-        if let content = panel.contentView {
-            layoutPanel(content: content)
-        }
-    }
-
-    func syncStyle(_ style: AnnotationStyle, kind: ShapeKind) {
-        self.style = style
-        self.kind = kind
-        refreshSelectionChrome()
-    }
-
-    func setHistoryAvailability(canUndo: Bool, canRedo: Bool) {
-        setHistoryButton(undoButton, enabled: canUndo)
-        setHistoryButton(redoButton, enabled: canRedo)
-    }
-
-    private func setHistoryButton(_ button: NSButton, enabled: Bool) {
-        button.isEnabled = enabled
-        button.contentTintColor = enabled
-            ? NSColor(calibratedWhite: 0.22, alpha: 1)
-            : NSColor(calibratedWhite: 0.55, alpha: 1)
-    }
-
-    func orderFront() {
-        panel.orderFrontRegardless()
-    }
-
-    func close() {
-        panel.orderOut(nil)
-        panel.close()
-    }
-
-    func containsGlobalPoint(_ point: CGPoint) -> Bool {
-        panel.frame.contains(point)
-    }
-
-    func reposition(around selection: CGRect) {
-        let size = panel.frame.size
-        let gap: CGFloat = 4
-        let screen = NSScreen.screens.first(where: { $0.frame.intersects(selection) })
-            ?? NSScreen.main
-            ?? NSScreen.screens.first
-        guard let screen else { return }
-
-        // Prefer below the selection, right-aligned to the selection’s trailing edge.
-        var origin = CGPoint(
-            x: selection.maxX - size.width,
-            y: selection.minY - size.height - gap
-        )
-        if origin.y < screen.frame.minY + 4 {
-            origin.y = selection.maxY + gap
-        }
-
-        origin.x = min(max(origin.x, screen.frame.minX + 4), screen.frame.maxX - size.width - 4)
-        origin.y = min(max(origin.y, screen.frame.minY + 4), screen.frame.maxY - size.height - 4)
-
-        panel.setFrame(CGRect(origin: origin, size: size), display: true)
-        panel.orderFrontRegardless()
-    }
-}
-
-private final class RefineToolbarView: NSView {
-    override var acceptsFirstResponder: Bool { true }
-    override var isOpaque: Bool { false }
-}
-
-// MARK: - Overlay panels
-
-private final class SelectionPanel: NSPanel {
-    let screenFrame: CGRect
-    private let overlayView: SelectionOverlayNSView
-
-    init(screen: NSScreen, freezeImage: NSImage?) {
-        self.screenFrame = screen.frame
-        self.overlayView = SelectionOverlayNSView(
-            frame: CGRect(origin: .zero, size: screen.frame.size),
-            freezeImage: freezeImage
-        )
-
-        super.init(
-            contentRect: screen.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-
-        level = .screenSaver
-        // Opaque when frozen so live desktop cannot show through.
-        isOpaque = freezeImage != nil
-        backgroundColor = freezeImage != nil ? .black : .clear
-        hasShadow = false
-        ignoresMouseEvents = false
-        acceptsMouseMovedEvents = true
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        isReleasedWhenClosed = false
-        hidesOnDeactivate = false
-        contentView = overlayView
-    }
-
-    func setSelection(
-        _ globalRect: CGRect,
-        showHandles: Bool,
-        handleVisualSize: CGFloat,
-        annotations: [Annotation],
-        draftAnnotation: Annotation?,
-        selectedAnnotation: Annotation?,
-        annotationHandleSize: CGFloat,
-        playbackImage: NSImage?
-    ) {
-        let local: CGRect
-        if globalRect.isNull {
-            local = .null
-        } else {
-            local = CGRect(
-                x: globalRect.origin.x - screenFrame.origin.x,
-                y: globalRect.origin.y - screenFrame.origin.y,
-                width: globalRect.width,
-                height: globalRect.height
-            )
-        }
-        overlayView.selectionRect = local
-        overlayView.showHandles = showHandles
-        overlayView.handleVisualSize = handleVisualSize
-        overlayView.annotations = annotations
-        overlayView.draftAnnotation = draftAnnotation
-        overlayView.selectedAnnotation = selectedAnnotation
-        overlayView.annotationHandleSize = annotationHandleSize
-        overlayView.playbackImage = playbackImage
-        overlayView.needsDisplay = true
-    }
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-}
-
-private final class SelectionOverlayNSView: NSView {
-    var selectionRect: CGRect = .null
-    var showHandles = false
-    var handleVisualSize: CGFloat = 8
-    var annotations: [Annotation] = []
-    var draftAnnotation: Annotation?
-    var selectedAnnotation: Annotation?
-    var annotationHandleSize: CGFloat = 7
-    /// Historical crop drawn inside the selection (`,` / `.` playback).
-    var playbackImage: NSImage?
-
-    private let freezeImage: NSImage?
-    private let accent = NSColor.systemBlue
-
-    init(frame frameRect: NSRect, freezeImage: NSImage?) {
-        self.freezeImage = freezeImage
-        super.init(frame: frameRect)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var acceptsFirstResponder: Bool { true }
-    override var isFlipped: Bool { false }
-    override var isOpaque: Bool { freezeImage != nil }
-
-    override func draw(_ dirtyRect: NSRect) {
-        // Freeze backdrop (Snipaste-style). Without it, fall back to punch-through dim.
-        if let freezeImage {
-            freezeImage.draw(
-                in: bounds,
-                from: CGRect(origin: .zero, size: freezeImage.size),
-                operation: .copy,
-                fraction: 1
-            )
-        }
-
-        let dimPath = NSBezierPath(rect: bounds)
-        if !selectionRect.isNull, selectionRect.width > 0, selectionRect.height > 0 {
-            dimPath.append(NSBezierPath(rect: selectionRect))
-            dimPath.windingRule = .evenOdd
-        }
-        NSColor.black.withAlphaComponent(0.45).setFill()
-        dimPath.fill()
-
-        guard !selectionRect.isNull, selectionRect.width > 0, selectionRect.height > 0 else { return }
-
-        // Legacy path when freeze capture failed: clear the hole to the live desktop.
-        if freezeImage == nil {
-            NSGraphicsContext.current?.compositingOperation = .clear
-            selectionRect.fill()
-            NSGraphicsContext.current?.compositingOperation = .sourceOver
-        }
-
-        // History playback: paint archived base inside the selection (rest of screen stays freeze).
-        if let playbackImage {
-            playbackImage.draw(
-                in: selectionRect,
-                from: CGRect(origin: .zero, size: playbackImage.size),
-                operation: .copy,
-                fraction: 1
-            )
-        }
-
-        let border = NSBezierPath(rect: selectionRect.insetBy(dx: 0.5, dy: 0.5))
-        border.lineWidth = 1.5
-        accent.setStroke()
-        border.stroke()
-
-        drawAnnotations()
-
-        if showHandles {
-            drawSelectionHandles()
-        }
-
-        let w = Int(selectionRect.width.rounded())
-        let h = Int(selectionRect.height.rounded())
-        let label = "\(w) × \(h)" as NSString
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
-            .foregroundColor: NSColor.white,
-        ]
-        let size = label.size(withAttributes: attrs)
-        var labelOrigin = CGPoint(
-            x: selectionRect.minX,
-            y: selectionRect.maxY + 8
-        )
-        if labelOrigin.y + size.height + 4 > bounds.maxY {
-            labelOrigin.y = selectionRect.minY - size.height - 8
-        }
-        let bg = CGRect(origin: labelOrigin, size: size).insetBy(dx: -6, dy: -3)
-        NSColor.black.withAlphaComponent(0.72).setFill()
-        NSBezierPath(roundedRect: bg, xRadius: 4, yRadius: 4).fill()
-        label.draw(at: labelOrigin, withAttributes: attrs)
-    }
-
-    private func drawAnnotations() {
-        NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(rect: selectionRect).addClip()
-
-        let origin = selectionRect.origin
-        for ann in annotations {
-            AnnotationDrawing.draw(ann, origin: origin)
-        }
-
-        if let draft = draftAnnotation {
-            AnnotationDrawing.draw(draft, origin: origin)
-        }
-
-        if let selected = selectedAnnotation, !selected.isPencil {
-            let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
-            AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
-        }
-
-        NSGraphicsContext.restoreGraphicsState()
-    }
-
-    private func drawSelectionHandles() {
-        let centers: [CGPoint] = [
-            CGPoint(x: selectionRect.minX, y: selectionRect.maxY),
-            CGPoint(x: selectionRect.midX, y: selectionRect.maxY),
-            CGPoint(x: selectionRect.maxX, y: selectionRect.maxY),
-            CGPoint(x: selectionRect.minX, y: selectionRect.midY),
-            CGPoint(x: selectionRect.maxX, y: selectionRect.midY),
-            CGPoint(x: selectionRect.minX, y: selectionRect.minY),
-            CGPoint(x: selectionRect.midX, y: selectionRect.minY),
-            CGPoint(x: selectionRect.maxX, y: selectionRect.minY),
-        ]
-        let s = handleVisualSize
-        for c in centers {
-            let r = CGRect(x: c.x - s / 2, y: c.y - s / 2, width: s, height: s)
-            NSColor.white.setFill()
-            NSBezierPath(ovalIn: r).fill()
-            accent.setStroke()
-            let stroke = NSBezierPath(ovalIn: r.insetBy(dx: 0.5, dy: 0.5))
-            stroke.lineWidth = 1.5
-            stroke.stroke()
-        }
-    }
-}
-
-// MARK: - Palette swatch (Snipaste-like hover grow)
-
-/// Fixed layout cell; chip starts small and scales up on hover.
-/// Fill is drawn flush to the 1pt border (no CALayer inset gap).
-private final class PaletteSwatchControl: NSView {
-    /// Snipaste @2x: 22 device-px → 11pt chip; 4px gap → 2pt (via stack spacing).
-    static let cellSize: CGFloat = 11
-    private static let restSize: CGFloat = 11
-    private static let hoverSize: CGFloat = 13.5
-
-    private let swatch: PaletteColor
-    private let onPick: (PaletteColor) -> Void
-    private let chip = PaletteSwatchChip()
-    private var trackingArea: NSTrackingArea?
-
-    init(swatch: PaletteColor, onPick: @escaping (PaletteColor) -> Void) {
-        self.swatch = swatch
-        self.onPick = onPick
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.masksToBounds = false
-        translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: Self.cellSize),
-            heightAnchor.constraint(equalToConstant: Self.cellSize),
-        ])
-
-        chip.swatchColor = swatch.color
-        addSubview(chip)
-        layoutChip(size: Self.restSize)
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingArea { removeTrackingArea(trackingArea) }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        trackingArea = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        animateChip(size: Self.hoverSize)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        animateChip(size: Self.restSize)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        onPick(swatch)
-    }
-
-    private func animateChip(size: CGFloat) {
-        let origin = (Self.cellSize - size) / 2
-        let target = CGRect(x: origin, y: origin, width: size, height: size)
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.09
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            chip.animator().frame = target
-        }
-        chip.needsDisplay = true
-    }
-
-    private func layoutChip(size: CGFloat) {
-        let origin = (Self.cellSize - size) / 2
-        chip.frame = CGRect(x: origin, y: origin, width: size, height: size)
-        chip.needsDisplay = true
-    }
-}
-
-private final class PaletteSwatchChip: NSView {
-    var swatchColor: NSColor = .black
-
-    override func draw(_ dirtyRect: NSRect) {
-        let radius: CGFloat = max(1.75, bounds.width * 0.22)
-        let fillPath = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
-        swatchColor.setFill()
-        fillPath.fill()
-
-        // Stroke on the same rect edge — no gap between fill and border.
-        let strokePath = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-            xRadius: max(radius - 0.5, 0.5),
-            yRadius: max(radius - 0.5, 0.5)
-        )
-        strokePath.lineWidth = 1
-        NSColor(calibratedWhite: 0.55, alpha: 1).setStroke()
-        strokePath.stroke()
     }
 }

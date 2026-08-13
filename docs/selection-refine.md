@@ -1,44 +1,28 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate: **shape** (rect / ellipse) + **pencil** (freehand; Shift → straight any angle) + **in-session undo/redo**. Other annotate / OCR remain stubs.
+Annotate live: **shape**, **pencil**, **text** (+ in-session undo/redo). Arrow / marker / mosaic / step / OCR / magnifier remain stubs.
 
-Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4 done).
+Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
-## Behaviour
+When a tool’s section grows past ~40–50 lines or a new tool lands, spin it out to `docs/annotate-<tool>.md` and leave a one-line link here. **Do not split yet.**
 
-1. F1 / **Snip** → freeze each display → dim overlay on frozen backdrop → drag region.
-2. On mouse-up (if large enough) → **refine mode** (no capture yet):
-   - Blue selection rect + **8 circular** resize handles.
-   - Drag inside rect to move; drag handles to resize.
-   - Size label near the rect (`W × H`).
-   - **Toolbar**: white rounded-rect (≈6pt corner radius), icon row with dividers, **right-aligned** to the selection, **≈4pt** gap below (flips above if near screen bottom).
-3. Working toolbar actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** (+ Esc / Return for primary).
-4. **Shape annotate** (main toolbar rectangle button):
-   - Opens a sub-toolbar with stroke / shape / line-style / color:
-     1. **Stroke / fill** (items 1–4): thin / medium / thick outline, or fill. Mutually exclusive.
-     2. **Shape kind** (items 5–6): rectangle ↔ ellipse. Mutually exclusive. Hold **Shift** while dragging for square / circle.
-     3. **Border style** (item 7): dropdown — Snipaste 5 patterns: solid / long dash / short dash / long–short / long–short–short (disabled while fill is selected).
-     4. **Color**: current swatch preview + 2×10 Snipaste-like preset grid.
-   - Pointer zones on an existing mark:
-     - **Interior** → white “＋” cursor; drag draws a new shape (nesting allowed); does **not** move.
-     - **Border** → open-hand cursor; drag moves the mark.
-     - **Handles** → resize cursors; drag adjusts size.
-   - Stroke / fill / line style / color / kind changes apply to the selected mark (or the next one drawn).
-   - Delete removes the selected mark.
-   - Confirm composites annotations onto the capture before pin / copy / save.
-5. **Pencil annotate** (main toolbar pencil button):
-   - Same sub-toolbar **stroke / line-style / color** (fill + rect/oval hidden).
-   - Hover: stroke-colored reticle (center dot + four thin arms). Mouse-down hides the cursor; only the ink tip shows.
-   - Freehand polyline (dense live sampling + 120Hz tip poll). Hold **Shift** for a straight line that follows the tip at any angle.
-   - No resize handles (keeps freehand uncluttered). Hit the stroke to move; Delete works if selected.
-   - After mouse-up, the stroke is **not** auto-selected (ready to draw the next segment).
-6. On confirm → crop final rect from freeze snapshot → tear down overlay → (optional annotate bake) → pin, clipboard, or save panel.
-7. Esc in refine cancels the whole snip.
+## Shared rules (all annotate tools)
 
-### Deferred (pencil)
+- Annotate works on the **full freeze overlay**, not only inside the blue selection.
+- Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
+- Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
+- Confirm composites marks onto the crop, then tears down the overlay.
+- Esc in refine (not editing text) cancels the whole snip.
+- Delete removes the selected mark. Undo / redo: toolbar + ⌘Z / ⇧⌘Z.
 
-- Live sampling is dense (~0.15pt + 120Hz poll) for follow-feel. If long strokes lag or history JSON bloats, **simplify the polyline on mouse-up** (e.g. Ramer–Douglas–Peucker) while keeping live sampling dense.
+## Refine shell
+
+1. F1 / **Snip** → freeze each display → dim overlay → drag region (or click-lock window).
+2. Mouse-up (large enough) → **refine** (no capture yet):
+   - Blue selection + **8 circular** handles; interior moves; handles resize; size label `W × H`.
+   - Toolbar: white rounded card (≈6pt), icon row + dividers, **right-aligned** under selection (≈4pt gap; flips above near bottom).
+3. Actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** (+ Esc / Return for primary).
 
 ### Snip vs Snip and copy
 
@@ -47,44 +31,63 @@ Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-do
 | **Snip** / F1 | Pin | Copy still on toolbar |
 | **Snip and copy** / ⌘F1 | Copy | Pin still on toolbar |
 
+## Toolbar layout (Snipaste parity)
+
+```
+[ shape† | arrow | pen† | marker | mosaic | T‡ | step | magnifier | eraser ]
+| [ OCR | undo | redo ]
+| [ ✕ | pin | save | copy | …§ ]
+
+† Shape: [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ preview 24 + palette 2×10 ]
+  Pen: same card without fill / rect / oval
+  Palette chips ≈11pt, gap ≈2pt
+‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
+§ More stub / disabled
+```
+
+## Tools
+
+### Shape
+
+- Sub-toolbar: stroke widths / fill | rect ↔ oval | line-style (5 Snipaste dashes; disabled when filled) | color grid.
+- Shift while dragging → square / circle.
+- Hit zones: interior → draw nested (white ＋); border → move; handles → resize.
+- Style / kind changes apply to selection (or next draw).
+
+### Pencil
+
+- Sub-toolbar: stroke + line-style + color (no fill / kind).
+- Color reticle; mouse-down hides cursor. Freehand; Shift → straight any angle.
+- No resize chrome; hit stroke to move. No auto-select after stroke.
+- Deferred: if dense sampling (~0.15pt + 120Hz) lags or bloats history, simplify polyline on mouse-up (RDP).
+
+### Text
+
+- Sub-toolbar: Bold / Italic / background | font size | color (system UI font; no family / rotation yet).
+- Click anywhere on freeze → place + inline edit; **white border only** (transparent fill unless bg toggle).
+- Frame **grows with text width**; soft-wrap only near screen edge.
+- Esc ends edit only; Return = newline (not confirm). Empty on end-edit → drop mark.
+
 ## Pin chrome
 
-- Soft outer glow ≈ CSS `box-shadow: 0 0 blur color` (`CALayer.shadowRadius`); **no hard border**.
-- Active: blue glow; inactive: gray glow.
-- Draggable (`performDrag`); Esc / double-click closes.
-- Window level `.statusBar` (above normal apps; below snip overlay).
-
-## Toolbar layout (parity with Snipaste)
-
-```
-[ shape† | arrow | pen† | marker | mosaic | T | step | magnifier | eraser ]
-| [ OCR | undo | redo ]
-| [ ✕ | pin | save | copy | …‡ ]
-
-† Shape expands options: [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ preview 24 + palette 2×10 ]
-  Pen reuses the same card without fill / rect / oval: [ thin | med | thick ] | [ line-style ▾ ] | [ palette ]
-  Palette chips ≈11pt, gap ≈2pt (Snipaste-measured).
-‡ More is stub / disabled today.
-```
+- Soft glow (`CALayer.shadowRadius`); no hard border. Active blue / inactive gray.
+- Drag; Esc / double-click closes. Level `.statusBar` (above apps; below snip overlay).
 
 ## Code
 
-- Overlay + toolbar: [`SelectionOverlayController.swift`](../EggplantShot/Controllers/SelectionOverlayController.swift)
-- Annotation model / bake / history: [`Annotation/`](../EggplantShot/Annotation/)
-- Capture after confirm: [`SnipController.swift`](../EggplantShot/Controllers/SnipController.swift)
-- Save panel: [`ImageFileSaver.swift`](../EggplantShot/Capture/ImageFileSaver.swift)
-- Pin glow / drag: [`PinBoardController.swift`](../EggplantShot/Controllers/PinBoardController.swift)
+- Overlay controller: [`SelectionOverlayController.swift`](../EggplantShot/Controllers/SelectionOverlayController.swift)
+- Overlay panels: [`SelectionOverlayPanel.swift`](../EggplantShot/Controllers/SelectionOverlayPanel.swift)
+- Toolbar (+ palette): [`RefineToolbarController.swift`](../EggplantShot/Controllers/RefineToolbarController.swift)
+- Text field editor: [`TextAnnotationEditor.swift`](../EggplantShot/Controllers/TextAnnotationEditor.swift)
+- Model / bake / history: [`Annotation/`](../EggplantShot/Annotation/)
+- Confirm: [`SnipController.swift`](../EggplantShot/Controllers/SnipController.swift)
+- Save: [`ImageFileSaver.swift`](../EggplantShot/Capture/ImageFileSaver.swift)
+- Pin: [`PinBoardController.swift`](../EggplantShot/Controllers/PinBoardController.swift)
 
 ## Acceptance checklist
 
-- [x] Mouse-up after drag shows blue rect + 8 handles; no pin/clipboard yet
-- [x] Handles resize; interior drag moves; size label updates
-- [x] Toolbar under (or above) selection, right-aligned; Pin / Save / Copy / Cancel work
-- [x] Esc cancels refine without capturing
-- [x] Confirm crops from freeze snapshot, then tears down overlay
-- [x] ⌘F1 entry; primary action matches mode
+- [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
+- [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
-- [x] Shape tool: stroke/fill + rect/oval + line-style dropdown + 2×10 palette; draw / move / resize, bake into capture
-- [x] Pencil tool: stroke + line-style + palette; color reticle; freehand / Shift any-angle; move (no resize chrome); bake into capture
-- [x] Undo / Redo toolbar + ⌘Z / ⇧⌘Z restore annotation document states
-- [x] Debug build succeeds
+- [x] Shape / pencil / text: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] Undo / redo; debug build succeeds

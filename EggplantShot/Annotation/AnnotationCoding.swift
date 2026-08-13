@@ -31,10 +31,13 @@ enum AnnotationCoding {
         var id: String
         var type: String
         var kind: String?
-        /// Shape bounding rect; also written for pencil as the path hull (optional on decode).
+        /// Shape / text bounding rect; also written for pencil as the path hull (optional on decode).
         var rect: RectDTO?
         var points: [PointDTO]?
-        var style: StyleDTO
+        /// Text mark body (type == "text").
+        var string: String?
+        var style: StyleDTO?
+        var textStyle: TextStyleDTO?
     }
 
     struct PointDTO: Codable {
@@ -55,6 +58,14 @@ enum AnnotationCoding {
         var strokeWidth: Double
         var isFilled: Bool
         var lineStyle: Int
+        var color: ColorDTO
+    }
+
+    struct TextStyleDTO: Codable {
+        var fontSize: Double
+        var isBold: Bool
+        var isItalic: Bool
+        var hasBackground: Bool
         var color: ColorDTO
     }
 
@@ -128,7 +139,9 @@ enum AnnotationCoding {
                 kind: kindString(kind),
                 rect: RectDTO(rect),
                 points: nil,
-                style: encode(style)
+                string: nil,
+                style: encode(style),
+                textStyle: nil
             )
         case .pencil(let points, let style):
             return MarkDTO(
@@ -137,7 +150,20 @@ enum AnnotationCoding {
                 kind: nil,
                 rect: RectDTO(annotation.boundingRect),
                 points: points.map(PointDTO.init),
-                style: encode(style)
+                string: nil,
+                style: encode(style),
+                textStyle: nil
+            )
+        case .text(let string, let rect, let style):
+            return MarkDTO(
+                id: annotation.id.uuidString,
+                type: "text",
+                kind: nil,
+                rect: RectDTO(rect),
+                points: nil,
+                string: string,
+                style: nil,
+                textStyle: encode(style)
             )
         }
     }
@@ -149,23 +175,32 @@ enum AnnotationCoding {
         }
         switch dto.type {
         case "shape":
-            guard let rect = dto.rect?.cgRect else {
-                NSLog("SnipHistory: skipping shape mark without rect")
+            guard let rect = dto.rect?.cgRect, let styleDTO = dto.style else {
+                NSLog("SnipHistory: skipping shape mark without rect/style")
                 return nil
             }
             let kind = kindFromString(dto.kind) ?? .rectangle
             return Annotation(
                 id: id,
-                payload: .shape(kind, rect: rect, style: decode(dto.style))
+                payload: .shape(kind, rect: rect, style: decode(styleDTO))
             )
         case "pencil":
-            guard let points = dto.points, points.count >= 2 else {
-                NSLog("SnipHistory: skipping pencil mark without points")
+            guard let points = dto.points, points.count >= 2, let styleDTO = dto.style else {
+                NSLog("SnipHistory: skipping pencil mark without points/style")
                 return nil
             }
             return Annotation(
                 id: id,
-                payload: .pencil(points: points.map(\.cgPoint), style: decode(dto.style))
+                payload: .pencil(points: points.map(\.cgPoint), style: decode(styleDTO))
+            )
+        case "text":
+            guard let rect = dto.rect?.cgRect, let textDTO = dto.textStyle else {
+                NSLog("SnipHistory: skipping text mark without rect/textStyle")
+                return nil
+            }
+            return Annotation(
+                id: id,
+                payload: .text(string: dto.string ?? "", rect: rect, style: decode(textDTO))
             )
         default:
             NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
@@ -188,6 +223,26 @@ enum AnnotationCoding {
             strokeColor: decode(dto.color),
             isFilled: dto.isFilled,
             lineStyle: StrokeLineStyle(rawValue: dto.lineStyle) ?? .solid
+        )
+    }
+
+    static func encode(_ style: TextStyle) -> TextStyleDTO {
+        TextStyleDTO(
+            fontSize: Double(style.fontSize),
+            isBold: style.isBold,
+            isItalic: style.isItalic,
+            hasBackground: style.hasBackground,
+            color: encode(style.color)
+        )
+    }
+
+    static func decode(_ dto: TextStyleDTO) -> TextStyle {
+        TextStyle(
+            color: decode(dto.color),
+            fontSize: CGFloat(dto.fontSize),
+            isBold: dto.isBold,
+            isItalic: dto.isItalic,
+            hasBackground: dto.hasBackground
         )
     }
 
