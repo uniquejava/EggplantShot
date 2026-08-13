@@ -19,6 +19,7 @@
 		B10000000000000000000008 /* SnipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000008 /* SnipController.swift */; };
 		B10000000000000000000010 /* AnnotationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000010 /* AnnotationModels.swift */; };
 		B10000000000000000000011 /* AnnotationCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* AnnotationCompositor.swift */; };
+		B10000000000000000000013 /* AnnotationDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000013 /* AnnotationDocument.swift */; };
 		B10000000000000000000009 /* StatusMenuContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000009 /* StatusMenuContent.swift */; };
 		B1000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* SettingsView.swift */; };
 		B10000000000000000000012 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* AboutView.swift */; };
@@ -39,6 +40,7 @@
 		C10000000000000000000008 /* SnipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipController.swift; sourceTree = "<group>"; };
 		C10000000000000000000010 /* AnnotationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationModels.swift; sourceTree = "<group>"; };
 		C10000000000000000000011 /* AnnotationCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCompositor.swift; sourceTree = "<group>"; };
+		C10000000000000000000013 /* AnnotationDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationDocument.swift; sourceTree = "<group>"; };
 		C10000000000000000000009 /* StatusMenuContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMenuContent.swift; sourceTree = "<group>"; };
 		C1000000000000000000000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C10000000000000000000012 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -124,6 +126,7 @@
 			isa = PBXGroup;
 			children = (
 				C10000000000000000000010 /* AnnotationModels.swift */,
+				C10000000000000000000013 /* AnnotationDocument.swift */,
 				C10000000000000000000011 /* AnnotationCompositor.swift */,
 			);
 			path = Annotation;
@@ -219,6 +222,7 @@
 				B10000000000000000000007 /* PinBoardController.swift in Sources */,
 				B10000000000000000000008 /* SnipController.swift in Sources */,
 				B10000000000000000000010 /* AnnotationModels.swift in Sources */,
+				B10000000000000000000013 /* AnnotationDocument.swift in Sources */,
 				B10000000000000000000011 /* AnnotationCompositor.swift in Sources */,
 				B10000000000000000000009 /* StatusMenuContent.swift in Sources */,
 				B1000000000000000000000A /* SettingsView.swift in Sources */,

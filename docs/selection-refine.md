@@ -1,7 +1,9 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / color, draw / move / resize). Other annotate / OCR / undo remain stubs.
+Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / color, draw / move / resize) + **in-session undo/redo**. Other annotate / OCR remain stubs.
+
+Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-document-architecture.md`](snip-document-architecture.md) (P0 done; P1–P4 pending).
 
 ## Behaviour
 
@@ -58,7 +60,7 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
 ## Code
 
 - Overlay + toolbar: [`SelectionOverlayController.swift`](../EggplantShot/Controllers/SelectionOverlayController.swift)
-- Annotation model / bake: [`Annotation/`](../EggplantShot/Annotation/)
+- Annotation model / bake / history: [`Annotation/`](../EggplantShot/Annotation/)
 - Capture after confirm: [`SnipController.swift`](../EggplantShot/Controllers/SnipController.swift)
 - Save panel: [`ImageFileSaver.swift`](../EggplantShot/Capture/ImageFileSaver.swift)
 - Pin glow / drag: [`PinBoardController.swift`](../EggplantShot/Controllers/PinBoardController.swift)
@@ -73,4 +75,5 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
 - [x] ⌘F1 entry; primary action matches mode
 - [x] Pin soft glow + drag
 - [x] Shape tool: stroke/fill + rect/oval + line-style dropdown + 2×10 palette; draw / move / resize, bake into capture
+- [x] Undo / Redo toolbar + ⌘Z / ⇧⌘Z restore annotation document states
 - [x] Debug build succeeds

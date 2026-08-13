@@ -65,10 +65,12 @@ final class SelectionOverlayController {
     private var annotationStyle: AnnotationStyle = AnnotationPrefs.load().style
     /// Sub-toolbar rect / oval switch (next draw + selected mark).
     private var annotationKind: Annotation.Kind = AnnotationPrefs.load().kind
-    private var annotations: [Annotation] = []
-    private var selectedAnnotationID: UUID?
+    private let annotationHistory = AnnotationHistory()
     /// In-progress shape while dragging (selection-local).
     private var draftAnnotationRect: CGRect?
+
+    private var annotations: [Annotation] { annotationHistory.document.marks }
+    private var selectedAnnotationID: UUID? { annotationHistory.document.selectedID }
 
     private let handleVisualSize: CGFloat = 8
     private let annotationHandleVisualSize: CGFloat = 7
@@ -185,8 +187,7 @@ final class SelectionOverlayController {
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
         annotationKind = prefs.kind
-        annotations = []
-        selectedAnnotationID = nil
+        annotationHistory.reset()
         draftAnnotationRect = nil
         phase = .idle
         NSCursor.arrow.set()
@@ -227,17 +228,34 @@ final class SelectionOverlayController {
                 self.finish(.cancelled)
                 return nil
             }
-            // Delete / Forward Delete removes the selected annotation.
-            if self.phase == .refining,
-               (event.keyCode == 51 || event.keyCode == 117),
-               self.selectedAnnotationID != nil {
-                self.deleteSelectedAnnotation()
-                return nil
-            }
-            // Return / keypad Enter confirms primary action while refining.
-            if self.phase == .refining, event.keyCode == 36 || event.keyCode == 76 {
-                self.confirm(self.primaryAction)
-                return nil
+            if self.phase == .refining {
+                // ⌘Z undo; ⇧⌘Z / ⌘Y redo.
+                if event.modifierFlags.contains(.command),
+                   let chars = event.charactersIgnoringModifiers?.lowercased() {
+                    if chars == "z" {
+                        if event.modifierFlags.contains(.shift) {
+                            self.performRedo()
+                        } else {
+                            self.performUndo()
+                        }
+                        return nil
+                    }
+                    if chars == "y" {
+                        self.performRedo()
+                        return nil
+                    }
+                }
+                // Delete / Forward Delete removes the selected annotation.
+                if (event.keyCode == 51 || event.keyCode == 117),
+                   self.selectedAnnotationID != nil {
+                    self.deleteSelectedAnnotation()
+                    return nil
+                }
+                // Return / keypad Enter confirms primary action while refining.
+                if event.keyCode == 36 || event.keyCode == 76 {
+                    self.confirm(self.primaryAction)
+                    return nil
+                }
             }
             return event
         }) {
@@ -336,10 +354,11 @@ final class SelectionOverlayController {
             switch annotationPointerTarget(at: point) {
             case .handle(let id, let handle):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
-                selectedAnnotationID = id
+                annotationHistory.select(id)
                 annotationStyle = ann.style
                 annotationKind = ann.kind
                 toolbar?.syncStyle(ann.style, kind: ann.kind)
+                annotationHistory.beginGesture()
                 dragKind = .annotateResize(
                     id: id,
                     handle: handle,
@@ -350,16 +369,17 @@ final class SelectionOverlayController {
 
             case .border(let id):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
-                selectedAnnotationID = id
+                annotationHistory.select(id)
                 annotationStyle = ann.style
                 annotationKind = ann.kind
                 toolbar?.syncStyle(ann.style, kind: ann.kind)
+                annotationHistory.beginGesture()
                 dragKind = .annotateMove(id: id, startRect: ann.rect, startPoint: point)
                 NSCursor.closedHand.set()
                 updateHighlight(showHandles: true)
 
             case .draw:
-                selectedAnnotationID = nil
+                annotationHistory.select(nil)
                 let local = toLocal(point)
                 dragKind = .annotateDraw(startLocal: local)
                 draftAnnotationRect = CGRect(origin: local, size: .zero)
@@ -375,10 +395,10 @@ final class SelectionOverlayController {
 
         // Selection refine (no annotate tool).
         if let handle = hitTestHandle(at: point) {
-            selectedAnnotationID = nil
+            annotationHistory.select(nil)
             dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
         } else if currentRect.contains(point) {
-            selectedAnnotationID = nil
+            annotationHistory.select(nil)
             dragKind = .move(startRect: currentRect, startPoint: point)
         } else {
             // Start a new rough selection (or window pick again). Clears annotations.
@@ -386,8 +406,10 @@ final class SelectionOverlayController {
             toolbar = nil
             phase = .idle
             dragKind = nil
-            annotations = []
-            selectedAnnotationID = nil
+            annotationHistory.commit { doc in
+                doc.marks = []
+                doc.selectedID = nil
+            }
             draftAnnotationRect = nil
             annotateTool = .none
             let prefs = AnnotationPrefs.load()
@@ -518,17 +540,28 @@ final class SelectionOverlayController {
             showToolbar()
 
         case .refining:
-            if case .annotateDraw = dragKind, let draft = draftAnnotationRect {
-                draftAnnotationRect = nil
-                if draft.width >= minAnnotation, draft.height >= minAnnotation {
-                    let ann = Annotation(
-                        kind: annotationKind,
-                        rect: clampAnnotationRect(draft),
-                        style: annotationStyle
-                    )
-                    annotations.append(ann)
-                    selectedAnnotationID = ann.id
+            switch dragKind {
+            case .annotateDraw:
+                if let draft = draftAnnotationRect {
+                    draftAnnotationRect = nil
+                    if draft.width >= minAnnotation, draft.height >= minAnnotation {
+                        let ann = Annotation(
+                            kind: annotationKind,
+                            rect: clampAnnotationRect(draft),
+                            style: annotationStyle
+                        )
+                        annotationHistory.commit { doc in
+                            doc.marks.append(ann)
+                            doc.selectedID = ann.id
+                        }
+                        refreshHistoryChrome()
+                    }
                 }
+            case .annotateMove, .annotateResize:
+                annotationHistory.endGesture()
+                refreshHistoryChrome()
+            default:
+                break
             }
             updateHighlight(showHandles: true)
             repositionToolbar()
@@ -584,15 +617,20 @@ final class SelectionOverlayController {
     }
 
     private func updateAnnotation(id: UUID, mutate: (inout Annotation) -> Void) {
-        guard let idx = annotations.firstIndex(where: { $0.id == id }) else { return }
-        mutate(&annotations[idx])
+        annotationHistory.mutateLive { doc in
+            guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+            mutate(&doc.marks[idx])
+        }
     }
 
     private func deleteSelectedAnnotation() {
         guard let id = selectedAnnotationID else { return }
-        annotations.removeAll { $0.id == id }
-        selectedAnnotationID = nil
+        annotationHistory.commit { doc in
+            doc.marks.removeAll { $0.id == id }
+            doc.selectedID = nil
+        }
         updateHighlight(showHandles: true)
+        refreshHistoryChrome()
         updateAnnotateCursor(at: NSEvent.mouseLocation)
     }
 
@@ -713,7 +751,7 @@ final class SelectionOverlayController {
     private func setAnnotateTool(_ tool: AnnotateTool) {
         annotateTool = tool
         if tool == .none {
-            selectedAnnotationID = nil
+            annotationHistory.select(nil)
             NSCursor.arrow.set()
         }
         toolbar?.setAnnotateTool(tool)
@@ -727,19 +765,62 @@ final class SelectionOverlayController {
     private func applyStyle(_ style: AnnotationStyle) {
         annotationStyle = style
         AnnotationPrefs.save(style: style, kind: annotationKind)
-        if let id = selectedAnnotationID {
-            updateAnnotation(id: id) { $0.style = style }
+        if selectedAnnotationID != nil {
+            annotationHistory.commit { doc in
+                guard let id = doc.selectedID,
+                      let idx = doc.marks.firstIndex(where: { $0.id == id })
+                else { return }
+                doc.marks[idx].style = style
+            }
             updateHighlight(showHandles: true)
+            refreshHistoryChrome()
         }
     }
 
     private func applyKind(_ kind: Annotation.Kind) {
         annotationKind = kind
         AnnotationPrefs.save(style: annotationStyle, kind: kind)
-        if let id = selectedAnnotationID {
-            updateAnnotation(id: id) { $0.kind = kind }
+        if selectedAnnotationID != nil {
+            annotationHistory.commit { doc in
+                guard let id = doc.selectedID,
+                      let idx = doc.marks.firstIndex(where: { $0.id == id })
+                else { return }
+                doc.marks[idx].kind = kind
+            }
             updateHighlight(showHandles: true)
+            refreshHistoryChrome()
         }
+    }
+
+    private func performUndo() {
+        guard annotationHistory.canUndo else { return }
+        annotationHistory.undo()
+        syncAfterHistoryChange()
+    }
+
+    private func performRedo() {
+        guard annotationHistory.canRedo else { return }
+        annotationHistory.redo()
+        syncAfterHistoryChange()
+    }
+
+    private func syncAfterHistoryChange() {
+        if let id = selectedAnnotationID,
+           let ann = annotations.first(where: { $0.id == id }) {
+            annotationStyle = ann.style
+            annotationKind = ann.kind
+            toolbar?.syncStyle(ann.style, kind: ann.kind)
+        }
+        updateHighlight(showHandles: true)
+        refreshHistoryChrome()
+        updateAnnotateCursor(at: NSEvent.mouseLocation)
+    }
+
+    private func refreshHistoryChrome() {
+        toolbar?.setHistoryAvailability(
+            canUndo: annotationHistory.canUndo,
+            canRedo: annotationHistory.canRedo
+        )
     }
 
     // MARK: - Geometry
@@ -878,9 +959,14 @@ final class SelectionOverlayController {
                 self.applyStyle(style)
             case .kindChanged(let kind):
                 self.applyKind(kind)
+            case .undo:
+                self.performUndo()
+            case .redo:
+                self.performRedo()
             }
         }
         toolbar = bar
+        refreshHistoryChrome()
         repositionToolbar()
         bar.orderFront()
     }
@@ -910,6 +996,8 @@ private final class RefineToolbarController: NSObject {
         case selectTool(AnnotateTool)
         case styleChanged(AnnotationStyle)
         case kindChanged(Annotation.Kind)
+        case undo
+        case redo
     }
 
     private let panel: NSPanel
@@ -920,6 +1008,8 @@ private final class RefineToolbarController: NSObject {
 
     private let rootStack = NSStackView()
     private var shapeButton: NSButton!
+    private var undoButton: NSButton!
+    private var redoButton: NSButton!
     private var subToolbarContainer: NSView!
     private var strokeButtons: [NSButton] = []
     private var fillButton: NSButton!
@@ -1011,10 +1101,22 @@ private final class RefineToolbarController: NSObject {
             iconButton(systemName: "magnifyingglass", tooltip: "Magnifier", enabled: false, action: nil),
             iconButton(systemName: "eraser", tooltip: "Eraser", enabled: false, action: nil),
         ]
+        undoButton = iconButton(
+            systemName: "arrow.uturn.backward",
+            tooltip: "Undo",
+            enabled: false,
+            action: #selector(undoTapped)
+        )
+        redoButton = iconButton(
+            systemName: "arrow.uturn.forward",
+            tooltip: "Redo",
+            enabled: false,
+            action: #selector(redoTapped)
+        )
         let editViews: [NSView] = [
             iconButton(systemName: "doc.text.viewfinder", tooltip: "OCR", enabled: false, action: nil),
-            iconButton(systemName: "arrow.uturn.backward", tooltip: "Undo", enabled: false, action: nil),
-            iconButton(systemName: "arrow.uturn.forward", tooltip: "Redo", enabled: false, action: nil),
+            undoButton,
+            redoButton,
         ]
 
         let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
@@ -1475,6 +1577,8 @@ private final class RefineToolbarController: NSObject {
     @objc private func copyTapped() { onEvent(.confirm(.copy)) }
     @objc private func saveTapped() { onEvent(.confirm(.save)) }
     @objc private func cancelTapped() { onEvent(.confirm(.cancel)) }
+    @objc private func undoTapped() { onEvent(.undo) }
+    @objc private func redoTapped() { onEvent(.redo) }
 
     func setAnnotateTool(_ tool: AnnotateTool) {
         self.tool = tool
@@ -1489,6 +1593,18 @@ private final class RefineToolbarController: NSObject {
         self.style = style
         self.kind = kind
         refreshSelectionChrome()
+    }
+
+    func setHistoryAvailability(canUndo: Bool, canRedo: Bool) {
+        setHistoryButton(undoButton, enabled: canUndo)
+        setHistoryButton(redoButton, enabled: canRedo)
+    }
+
+    private func setHistoryButton(_ button: NSButton, enabled: Bool) {
+        button.isEnabled = enabled
+        button.contentTintColor = enabled
+            ? NSColor(calibratedWhite: 0.22, alpha: 1)
+            : NSColor(calibratedWhite: 0.55, alpha: 1)
     }
 
     func orderFront() {

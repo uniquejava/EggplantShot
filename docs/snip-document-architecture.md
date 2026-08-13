@@ -1,0 +1,358 @@
+# Snip Document architecture
+
+Status: **P0 implemented** (document + in-session undo/redo). P1–P4 not started.  
+Related UI behaviour: [`selection-refine.md`](selection-refine.md).
+
+This document defines the extensible model for annotations, session undo/redo, and Snipaste-like snip history playback (`,` / `.`), including on-disk persistence.
+
+## Goals
+
+1. **One editable document** for all annotate tools so undo/redo and history playback stay tool-agnostic.
+2. **Non-destructive until confirm**: Pin / Copy / Save bake a flat image for the outside world; the app keeps an editable `SnipRecord` (base image + document).
+3. **Snipaste-style history**: during an active snip, `,` / `.` step through prior records and continue editing.
+4. **Survive relaunch**: records live in Application Support (memory cache + disk).
+
+## Non-goals
+
+- Restoring the **undo/redo stack** when loading a `SnipRecord` (fresh empty history after restore).
+- Re-splitting layers from an already-baked **pin window** or exported PNG/JPEG.
+- Snipaste **`R`** (restore last selection rect only) — separate task if needed.
+- Changing App Sandbox (remains OFF).
+
+## Locked decisions
+
+| Topic | Choice |
+|-------|--------|
+| Persistence | Memory + disk under Application Support |
+| `,` / `.` restore | Base image + selection + `AnnotationDocument` only |
+| Undo strategy | Whole-document snapshots via `AnnotationHistory` |
+| When to append history | Only on successful Pin / Copy / Save confirm |
+| Capacity | Default last **20** records; drop oldest |
+
+## Mental model
+
+```mermaid
+flowchart TB
+  subgraph session [Active snip session]
+    Freeze[Freeze snapshots]
+    Sel[Selection rect]
+    Doc[AnnotationDocument]
+    Hist[AnnotationHistory undo/redo]
+    Doc --> Hist
+  end
+  subgraph persist [SnipHistoryStore]
+    Rec[SnipRecord]
+    Disk["Application Support/snip-history/"]
+    Rec --> Disk
+  end
+  Confirm[Pin / Copy / Save]
+  session --> Confirm
+  Confirm -->|"bake flat image"| Out[Pin / Clipboard / File]
+  Confirm -->|"save editable record"| Rec
+  Comma[", / . in snip"] --> Rec
+  Rec -->|"restore base+rect+doc; fresh undo"| session
+```
+
+- **Session**: live freeze (or restored base), selection, document, undo stacks.
+- **Export**: composite document onto base → flat `NSImage`.
+- **Archive**: same base (unannotated) + document → `SnipRecord` for later `,` / `.`.
+
+## Core types
+
+### `Annotation` (mark)
+
+One drawable mark. Geometry is **selection-local** Cocoa points (origin = selection bottom-left), same as today.
+
+Today: `kind` is rectangle / ellipse plus `rect` + `AnnotationStyle`.
+
+**P4 target**: replace narrow `Kind` with an extensible payload so new tools do not fork history/store code:
+
+```swift
+enum AnnotationPayload: Equatable, Codable {
+    case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
+    // later: arrow, stroke (pen/marker), mosaic, text, step, …
+}
+```
+
+Until P4, serialize the current shape fields with a `type` discriminator so the on-disk schema can grow without a break.
+
+### `AnnotationDocument`
+
+The **only** undoable annotation state:
+
+```swift
+struct AnnotationDocument: Equatable {
+    var marks: [Annotation]
+    var selectedID: UUID?
+}
+```
+
+Tool prefs (stroke width, palette, shape kind for *next* draw) stay outside the document (existing `AnnotationPrefs`); changing prefs without touching a selected mark is **not** an undo step. Applying style/kind **to the selected mark** is an undo step.
+
+### `AnnotationHistory`
+
+Owns `document` plus undo/redo snapshot stacks. **All** mark mutations go through this type — never mutate `marks` / `selectedID` from gesture code directly.
+
+Suggested API:
+
+```swift
+@MainActor
+final class AnnotationHistory {
+    private(set) var document: AnnotationDocument
+    var canUndo: Bool { … }
+    var canRedo: Bool { … }
+
+    /// Snapshot current doc, then mutate. Clears redo.
+    func commit(_ body: (inout AnnotationDocument) -> Void)
+
+    /// Drag/resize: remember baseline once; live-mutate `document` without pushing.
+    func beginGesture()
+    /// If document ≠ baseline, push baseline onto undo and clear redo.
+    func endGesture()
+
+    func undo()
+    func redo()
+    func reset(to document: AnnotationDocument) // used by history restore; clears stacks
+}
+```
+
+**What counts as one undo step** (commit or successful endGesture):
+
+| Action | When recorded |
+|--------|----------------|
+| Finish drawing a mark | mouse-up if size ≥ minimum |
+| Move / resize mark | endGesture if rect changed |
+| Style / kind on selection | immediate `commit` |
+| Delete selection | immediate `commit` |
+| Clear marks on re-select | `commit` that empties marks (see below) |
+
+Do **not** push on every mouse-dragged frame.
+
+### `SnipRecord`
+
+Cross-session editable unit:
+
+```swift
+struct SnipRecord: Identifiable {
+    let id: UUID
+    let createdAt: Date
+    /// Unannotated crop (points size matches selection).
+    var baseImage: NSImage
+    /// Selection in **Cocoa global** screen coordinates (bottom-left origin).
+    var selection: CGRect
+    var document: AnnotationDocument
+}
+```
+
+`selection.size` must match `baseImage.size` in points (1× logical; backing scale stored implicitly via PNG pixel size / `NSImage` representations as needed — see Disk format).
+
+### `SnipHistoryStore`
+
+Ordered list of records (newest at end or a documented cursor — pick **newest last**, browse with an index).
+
+Responsibilities:
+
+- `append(_ record:)` → memory + disk; enforce max count
+- `records` / `record(at:)` / `count`
+- `loadFromDisk()` on launch
+- prune oldest directories when over capacity
+
+Owned by `SnipController` (or a small collaborator it holds). Overlay asks the store for prev/next during snip.
+
+## Code ownership (target layout)
+
+```
+EggplantShot/Annotation/
+  AnnotationModels.swift      # Annotation, style, prefs (existing)
+  AnnotationDocument.swift    # Document + History (new)
+  AnnotationCompositor.swift  # bake only (unchanged role)
+  AnnotationCoding.swift      # Codable DTOs / color coding (new, with P2)
+
+EggplantShot/History/         # or under Annotation/
+  SnipRecord.swift
+  SnipHistoryStore.swift
+```
+
+| Piece | Owner |
+|-------|--------|
+| Live `AnnotationHistory` | `SelectionOverlayController` |
+| Confirm → bake + `append` record | `SnipController` (after overlay outcome) |
+| Disk I/O | `SnipHistoryStore` |
+| Composite | `AnnotationCompositor` (marks + base only) |
+
+### Migration from current code
+
+Today:
+
+- [`SelectionOverlayController`](../EggplantShot/Controllers/SelectionOverlayController.swift) keeps `annotations` / `selectedAnnotationID` and mutates them in place.
+- [`SnipController`](../EggplantShot/Controllers/SnipController.swift) composites then pins/copies/saves; no archive.
+
+Target:
+
+- Overlay exposes / returns `AnnotationDocument` (or full `SnipRecord` ingredients: cropped base + selection + document) on confirm.
+- Overlay routes draw / move / resize / style / delete through `AnnotationHistory`.
+- `SnipController` composites for output **and** builds `SnipRecord` with the **pre-bake** image.
+
+## Coordinate conventions
+
+| Space | Use |
+|-------|-----|
+| Cocoa global | Selection rect on screen; multi-display OK; same as current overlay `currentRect` |
+| Selection-local | Annotation geometry; origin = selection bottom-left |
+| Image pixels | `base.png`; write PNG at capture pixel size; `NSImage.size` stays in points |
+
+When restoring a record:
+
+1. Set overlay selection to `record.selection` (global).
+2. Use `record.baseImage` as the refine **content** for that rect (playback mode), not a fresh crop from the current freeze.
+3. `history.reset(to: record.document)`.
+4. Keep or discard the live freeze backdrop outside the selection as convenient; dimmed “rest of screen” may still show the *current* freeze — only the editable crop must come from the record. Prefer: show record base inside the selection; freeze elsewhere can remain current-session freeze for simplicity (document this in the P3 PR if UX differs).
+
+## Session interactions
+
+### Undo / redo (in-session)
+
+- Toolbar Undo / Redo enabled from `canUndo` / `canRedo`.
+- Keys: **⌘Z** undo; **⇧⌘Z** redo (⌘Y optional alias).
+- Selecting a different annotate tool does not itself push history.
+
+### Re-select (click dimmed area, new drag)
+
+Keep current product behaviour: starting a new rough selection **clears** annotations. Implement as `history.commit { $0.marks = []; $0.selectedID = nil }`. Does **not** write a `SnipRecord`.
+
+### Confirm (Pin / Copy / Save)
+
+1. Crop unannotated base from freeze (or use playback base if already a record image).
+2. Read `document` from history.
+3. `AnnotationCompositor.composite(document.marks, onto: base)`.
+4. Tear down overlay; perform pin / clipboard / save with baked image.
+5. `store.append(SnipRecord(baseImage: base, selection: rect, document: document))`.
+
+Esc / cancel: no append.
+
+### History playback (`,` / `.`)
+
+Only while snip overlay is active (Snipaste “snip only” keys).
+
+| Key | Action |
+|-----|--------|
+| `,` | Previous record (older) |
+| `.` | Next record (newer) |
+
+Behaviour:
+
+- If store empty or no neighbour: no-op.
+- Load base + selection + document; **new empty** undo/redo stacks.
+- User may edit further; confirming appends a **new** record (does not overwrite the browsed one unless we later add explicit replace — default: always append).
+
+Browsing index: remember `historyCursor` during the session (into the store). After a new confirm in a later snip, cursor resets to newest.
+
+## Disk format
+
+Root:
+
+```
+~/Library/Application Support/click.yinsb.EggplantShot/snip-history/
+  index.json
+  <uuid>/
+    meta.json
+    base.png
+```
+
+### `index.json`
+
+```json
+{
+  "schemaVersion": 1,
+  "maxCount": 20,
+  "ids": ["uuid-oldest", "…", "uuid-newest"]
+}
+```
+
+### `meta.json`
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "A1B2C3D4-…",
+  "createdAt": "2026-08-13T05:00:00Z",
+  "selection": { "x": 100, "y": 200, "w": 640, "h": 400 },
+  "imagePoints": { "w": 640, "h": 400 },
+  "document": {
+    "selectedID": null,
+    "marks": [
+      {
+        "id": "…",
+        "type": "shape",
+        "kind": "rectangle",
+        "rect": { "x": 10, "y": 20, "w": 100, "h": 50 },
+        "style": {
+          "strokeWidth": 3.5,
+          "isFilled": false,
+          "lineStyle": 0,
+          "color": { "r": 0, "g": 0.64, "b": 0.91, "a": 1 }
+        }
+      }
+    ]
+  }
+}
+```
+
+- `lineStyle`: raw value of `StrokeLineStyle`.
+- Unknown `type` on load: skip mark or fail record (prefer **skip mark + log** so one bad mark does not drop the whole history entry).
+- `base.png`: unannotated pixels; must match selection aspect/size.
+
+No sandbox entitlements required (Sandbox OFF).
+
+## Extensibility rules
+
+1. New tools add payload cases + drawing + hit-testing; they **must** mutate only via `AnnotationHistory`.
+2. Prefer storing mosaic/blur as **data** (regions/strokes), not destructive pixels on `baseImage`, so undo and `,` stay cheap.
+3. Bump `schemaVersion` when meta shape changes; keep a single loader switch.
+4. Do not bake into `baseImage` until confirm; playback always edits vectors on the saved base.
+
+## Implementation phases (future sessions)
+
+### P0 — Document + History skeleton
+
+- [x] Add `AnnotationDocument` + `AnnotationHistory`
+- [x] Route shape draw / move / resize / style / kind / delete through commit / gesture
+- [x] Wire toolbar Undo / Redo + ⌘Z / ⇧⌘Z; disabled when stacks empty
+- [x] Acceptance: draw → style → move → undo returns prior states; redo works; Esc still cancels snip
+
+### P1 — Confirm produces in-memory `SnipRecord`
+
+- [ ] On confirm, retain unannotated base + document (before/without relying on bake)
+- [ ] `SnipHistoryStore` in-memory `append` only
+- [ ] Acceptance: after pin, in-debugger / temporary API can read last record marks matching what was drawn
+
+### P2 — Disk `SnipHistoryStore`
+
+- [ ] Write `index.json` + per-record `meta.json` / `base.png`
+- [ ] Load on launch; prune to `maxCount`
+- [ ] Codable path for colors and marks (`schemaVersion` 1)
+- [ ] Acceptance: quit and relaunch; store still lists prior records with images
+
+### P3 — `,` / `.` playback
+
+- [ ] Key handling in overlay (local key monitor alongside existing Esc/Return)
+- [ ] Restore selection + base + document; reset undo stacks
+- [ ] Empty store / ends of list: no-op
+- [ ] Acceptance: F1 → `,` shows last confirm’s crop and marks; edit + Pin appends a new record
+
+### P4 — Extensible annotation payload
+
+- [ ] Introduce `AnnotationPayload` (or equivalent) before arrow/pen land
+- [ ] Update compositor, hit-testing, and disk `type` discriminator together
+- [ ] Acceptance: existing shape records from schema v1 still load
+
+## Relationship to current MVP
+
+| Area | Today | After P0–P3 |
+|------|--------|-------------|
+| Undo / redo toolbar | Stub | Live |
+| Confirm | Bake only | Bake + append `SnipRecord` |
+| `,` / `.` | Unused in snip | History playback |
+| Pin window | Flat image | Still flat (no layer reopen) |
+
+Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.
