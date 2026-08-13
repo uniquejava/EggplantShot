@@ -7,6 +7,46 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B1E000000000000000000000 /* AnnotateTool.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000000 /* AnnotateTool.swift */; };
+		B1E000000000000000000001 /* MosaicTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000001 /* MosaicTypes.swift */; };
+		B1E000000000000000000002 /* MarkerStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000002 /* MarkerStyle.swift */; };
+		B1E000000000000000000003 /* EraserStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000003 /* EraserStyle.swift */; };
+		B1E000000000000000000004 /* ArrowStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000004 /* ArrowStyle.swift */; };
+		B1E000000000000000000005 /* AnnotationStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000005 /* AnnotationStyle.swift */; };
+		B1E000000000000000000006 /* AnnotationPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000006 /* AnnotationPrefs.swift */; };
+		B1E000000000000000000007 /* TextAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000007 /* TextAnnotation.swift */; };
+		B1E000000000000000000008 /* StepAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000008 /* StepAnnotation.swift */; };
+		B1E000000000000000000009 /* MagnifierAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000009 /* MagnifierAnnotation.swift */; };
+		B1E00000000000000000000A /* Annotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000A /* Annotation.swift */; };
+		B1E00000000000000000000B /* PolylineSimplifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000B /* PolylineSimplifier.swift */; };
+		B1E00000000000000000000C /* AnnotationDrawing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000C /* AnnotationDrawing.swift */; };
+		B1E00000000000000000000D /* AnnotationDrawing+Shape.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000D /* AnnotationDrawing+Shape.swift */; };
+		B1E00000000000000000000E /* AnnotationDrawing+Arrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000E /* AnnotationDrawing+Arrow.swift */; };
+		B1E00000000000000000000F /* AnnotationDrawing+Pencil.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000F /* AnnotationDrawing+Pencil.swift */; };
+		B1E000000000000000000010 /* AnnotationDrawing+Marker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000010 /* AnnotationDrawing+Marker.swift */; };
+		B1E000000000000000000011 /* AnnotationDrawing+Eraser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000011 /* AnnotationDrawing+Eraser.swift */; };
+		B1E000000000000000000012 /* AnnotationDrawing+Mosaic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000012 /* AnnotationDrawing+Mosaic.swift */; };
+		B1E000000000000000000013 /* AnnotationDrawing+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000013 /* AnnotationDrawing+Text.swift */; };
+		B1E000000000000000000014 /* AnnotationDrawing+Magnifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000014 /* AnnotationDrawing+Magnifier.swift */; };
+		B1E000000000000000000015 /* AnnotationDrawing+Step.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000015 /* AnnotationDrawing+Step.swift */; };
+		B1E000000000000000000016 /* AnnotationDrawing+HitTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000016 /* AnnotationDrawing+HitTest.swift */; };
+		B1E000000000000000000017 /* AnnotationCursors.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E000000000000000000017 /* AnnotationCursors.swift */; };
+		B1F000000000000000000000 /* RefineToolbarViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000000 /* RefineToolbarViews.swift */; };
+		B1F000000000000000000001 /* RefineToolbar+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000001 /* RefineToolbar+Text.swift */; };
+		B1F000000000000000000002 /* RefineToolbar+Mosaic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000002 /* RefineToolbar+Mosaic.swift */; };
+		B1F000000000000000000003 /* RefineToolbar+Marker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000003 /* RefineToolbar+Marker.swift */; };
+		B1F000000000000000000004 /* RefineToolbar+Eraser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000004 /* RefineToolbar+Eraser.swift */; };
+		B1F000000000000000000005 /* RefineToolbar+Step.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000005 /* RefineToolbar+Step.swift */; };
+		B1F000000000000000000006 /* RefineToolbar+Magnifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000006 /* RefineToolbar+Magnifier.swift */; };
+		B1F000000000000000000007 /* RefineToolbar+Arrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000007 /* RefineToolbar+Arrow.swift */; };
+		B1F000000000000000000008 /* RefineToolbar+Icons.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000008 /* RefineToolbar+Icons.swift */; };
+		B1F000000000000000000009 /* SelectionOverlay+AnnotateDraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000009 /* SelectionOverlay+AnnotateDraft.swift */; };
+		B1F00000000000000000000A /* SelectionOverlay+HitTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000A /* SelectionOverlay+HitTest.swift */; };
+		B1F00000000000000000000B /* SelectionOverlay+AnnotateStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000B /* SelectionOverlay+AnnotateStyle.swift */; };
+		B1F00000000000000000000C /* SelectionOverlay+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000C /* SelectionOverlay+Text.swift */; };
+		B1F00000000000000000000D /* SelectionOverlay+Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000D /* SelectionOverlay+Geometry.swift */; };
+		B1F00000000000000000000E /* SelectionOverlay+History.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000E /* SelectionOverlay+History.swift */; };
+		B1F00000000000000000000F /* SelectionOverlay+Toolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000F /* SelectionOverlay+Toolbar.swift */; };
 		B10000000000000000000001 /* EggplantShotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000001 /* EggplantShotApp.swift */; };
 		B10000000000000000000002 /* HotkeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000002 /* HotkeyMonitor.swift */; };
 		B10000000000000000000003 /* HotkeyShortcut.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000003 /* HotkeyShortcut.swift */; };
@@ -23,7 +63,6 @@
 		B10000000000000000000019 /* SelectionOverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000019 /* SelectionOverlayPanel.swift */; };
 		B10000000000000000000007 /* PinBoardController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000007 /* PinBoardController.swift */; };
 		B10000000000000000000008 /* SnipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000008 /* SnipController.swift */; };
-		B10000000000000000000010 /* AnnotationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000010 /* AnnotationModels.swift */; };
 		B1000000000000000000001D /* ContrastChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001D /* ContrastChrome.swift */; };
 		B10000000000000000000011 /* AnnotationCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* AnnotationCompositor.swift */; };
 		B10000000000000000000013 /* AnnotationDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000013 /* AnnotationDocument.swift */; };
@@ -37,6 +76,46 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		C1E000000000000000000000 /* AnnotateTool.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotateTool.swift; sourceTree = "<group>"; };
+		C1E000000000000000000001 /* MosaicTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MosaicTypes.swift; sourceTree = "<group>"; };
+		C1E000000000000000000002 /* MarkerStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkerStyle.swift; sourceTree = "<group>"; };
+		C1E000000000000000000003 /* EraserStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EraserStyle.swift; sourceTree = "<group>"; };
+		C1E000000000000000000004 /* ArrowStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArrowStyle.swift; sourceTree = "<group>"; };
+		C1E000000000000000000005 /* AnnotationStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationStyle.swift; sourceTree = "<group>"; };
+		C1E000000000000000000006 /* AnnotationPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationPrefs.swift; sourceTree = "<group>"; };
+		C1E000000000000000000007 /* TextAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextAnnotation.swift; sourceTree = "<group>"; };
+		C1E000000000000000000008 /* StepAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepAnnotation.swift; sourceTree = "<group>"; };
+		C1E000000000000000000009 /* MagnifierAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MagnifierAnnotation.swift; sourceTree = "<group>"; };
+		C1E00000000000000000000A /* Annotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Annotation.swift; sourceTree = "<group>"; };
+		C1E00000000000000000000B /* PolylineSimplifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolylineSimplifier.swift; sourceTree = "<group>"; };
+		C1E00000000000000000000C /* AnnotationDrawing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationDrawing.swift; sourceTree = "<group>"; };
+		C1E00000000000000000000D /* AnnotationDrawing+Shape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Shape.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000E /* AnnotationDrawing+Arrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Arrow.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000F /* AnnotationDrawing+Pencil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Pencil.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000010 /* AnnotationDrawing+Marker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Marker.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000011 /* AnnotationDrawing+Eraser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Eraser.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000012 /* AnnotationDrawing+Mosaic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Mosaic.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000013 /* AnnotationDrawing+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Text.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000014 /* AnnotationDrawing+Magnifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Magnifier.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000015 /* AnnotationDrawing+Step.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+Step.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000016 /* AnnotationDrawing+HitTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationDrawing+HitTest.swift"; sourceTree = "<group>"; };
+		C1E000000000000000000017 /* AnnotationCursors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCursors.swift; sourceTree = "<group>"; };
+		C1F000000000000000000000 /* RefineToolbarViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefineToolbarViews.swift; sourceTree = "<group>"; };
+		C1F000000000000000000001 /* RefineToolbar+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Text.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000002 /* RefineToolbar+Mosaic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Mosaic.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000003 /* RefineToolbar+Marker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Marker.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000004 /* RefineToolbar+Eraser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Eraser.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000005 /* RefineToolbar+Step.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Step.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000006 /* RefineToolbar+Magnifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Magnifier.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000007 /* RefineToolbar+Arrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Arrow.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000008 /* RefineToolbar+Icons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Icons.swift"; sourceTree = "<group>"; };
+		C1F000000000000000000009 /* SelectionOverlay+AnnotateDraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+AnnotateDraft.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000A /* SelectionOverlay+HitTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+HitTest.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000B /* SelectionOverlay+AnnotateStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+AnnotateStyle.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000C /* SelectionOverlay+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+Text.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000D /* SelectionOverlay+Geometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+Geometry.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000E /* SelectionOverlay+History.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+History.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000F /* SelectionOverlay+Toolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+Toolbar.swift"; sourceTree = "<group>"; };
 		A30000000000000000000001 /* EggplantShot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EggplantShot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10000000000000000000001 /* EggplantShotApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EggplantShotApp.swift; sourceTree = "<group>"; };
 		C10000000000000000000002 /* HotkeyMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyMonitor.swift; sourceTree = "<group>"; };
@@ -54,7 +133,6 @@
 		C10000000000000000000019 /* SelectionOverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOverlayPanel.swift; sourceTree = "<group>"; };
 		C10000000000000000000007 /* PinBoardController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinBoardController.swift; sourceTree = "<group>"; };
 		C10000000000000000000008 /* SnipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipController.swift; sourceTree = "<group>"; };
-		C10000000000000000000010 /* AnnotationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationModels.swift; sourceTree = "<group>"; };
 		C1000000000000000000001D /* ContrastChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContrastChrome.swift; sourceTree = "<group>"; };
 		C10000000000000000000011 /* AnnotationCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCompositor.swift; sourceTree = "<group>"; };
 		C10000000000000000000013 /* AnnotationDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationDocument.swift; sourceTree = "<group>"; };
@@ -139,6 +217,22 @@
 		A50000000000000000000006 /* Controllers */ = {
 			isa = PBXGroup;
 			children = (
+				C1F000000000000000000000 /* RefineToolbarViews.swift */,
+				C1F000000000000000000001 /* RefineToolbar+Text.swift */,
+				C1F000000000000000000002 /* RefineToolbar+Mosaic.swift */,
+				C1F000000000000000000003 /* RefineToolbar+Marker.swift */,
+				C1F000000000000000000004 /* RefineToolbar+Eraser.swift */,
+				C1F000000000000000000005 /* RefineToolbar+Step.swift */,
+				C1F000000000000000000006 /* RefineToolbar+Magnifier.swift */,
+				C1F000000000000000000007 /* RefineToolbar+Arrow.swift */,
+				C1F000000000000000000008 /* RefineToolbar+Icons.swift */,
+				C1F000000000000000000009 /* SelectionOverlay+AnnotateDraft.swift */,
+				C1F00000000000000000000A /* SelectionOverlay+HitTest.swift */,
+				C1F00000000000000000000B /* SelectionOverlay+AnnotateStyle.swift */,
+				C1F00000000000000000000C /* SelectionOverlay+Text.swift */,
+				C1F00000000000000000000D /* SelectionOverlay+Geometry.swift */,
+				C1F00000000000000000000E /* SelectionOverlay+History.swift */,
+				C1F00000000000000000000F /* SelectionOverlay+Toolbar.swift */,
 				C10000000000000000000006 /* SelectionOverlayController.swift */,
 				C10000000000000000000017 /* RefineToolbarController.swift */,
 				C10000000000000000000018 /* TextAnnotationEditor.swift */,
@@ -152,7 +246,30 @@
 		A50000000000000000000008 /* Annotation */ = {
 			isa = PBXGroup;
 			children = (
-				C10000000000000000000010 /* AnnotationModels.swift */,
+				C1E000000000000000000000 /* AnnotateTool.swift */,
+				C1E000000000000000000001 /* MosaicTypes.swift */,
+				C1E000000000000000000002 /* MarkerStyle.swift */,
+				C1E000000000000000000003 /* EraserStyle.swift */,
+				C1E000000000000000000004 /* ArrowStyle.swift */,
+				C1E000000000000000000005 /* AnnotationStyle.swift */,
+				C1E000000000000000000006 /* AnnotationPrefs.swift */,
+				C1E000000000000000000007 /* TextAnnotation.swift */,
+				C1E000000000000000000008 /* StepAnnotation.swift */,
+				C1E000000000000000000009 /* MagnifierAnnotation.swift */,
+				C1E00000000000000000000A /* Annotation.swift */,
+				C1E00000000000000000000B /* PolylineSimplifier.swift */,
+				C1E00000000000000000000C /* AnnotationDrawing.swift */,
+				C1E00000000000000000000D /* AnnotationDrawing+Shape.swift */,
+				C1E00000000000000000000E /* AnnotationDrawing+Arrow.swift */,
+				C1E00000000000000000000F /* AnnotationDrawing+Pencil.swift */,
+				C1E000000000000000000010 /* AnnotationDrawing+Marker.swift */,
+				C1E000000000000000000011 /* AnnotationDrawing+Eraser.swift */,
+				C1E000000000000000000012 /* AnnotationDrawing+Mosaic.swift */,
+				C1E000000000000000000013 /* AnnotationDrawing+Text.swift */,
+				C1E000000000000000000014 /* AnnotationDrawing+Magnifier.swift */,
+				C1E000000000000000000015 /* AnnotationDrawing+Step.swift */,
+				C1E000000000000000000016 /* AnnotationDrawing+HitTest.swift */,
+				C1E000000000000000000017 /* AnnotationCursors.swift */,
 				C1000000000000000000001D /* ContrastChrome.swift */,
 				C10000000000000000000013 /* AnnotationDocument.swift */,
 				C10000000000000000000016 /* AnnotationCoding.swift */,
@@ -258,6 +375,46 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B1E000000000000000000000 /* AnnotateTool.swift in Sources */,
+				B1E000000000000000000001 /* MosaicTypes.swift in Sources */,
+				B1E000000000000000000002 /* MarkerStyle.swift in Sources */,
+				B1E000000000000000000003 /* EraserStyle.swift in Sources */,
+				B1E000000000000000000004 /* ArrowStyle.swift in Sources */,
+				B1E000000000000000000005 /* AnnotationStyle.swift in Sources */,
+				B1E000000000000000000006 /* AnnotationPrefs.swift in Sources */,
+				B1E000000000000000000007 /* TextAnnotation.swift in Sources */,
+				B1E000000000000000000008 /* StepAnnotation.swift in Sources */,
+				B1E000000000000000000009 /* MagnifierAnnotation.swift in Sources */,
+				B1E00000000000000000000A /* Annotation.swift in Sources */,
+				B1E00000000000000000000B /* PolylineSimplifier.swift in Sources */,
+				B1E00000000000000000000C /* AnnotationDrawing.swift in Sources */,
+				B1E00000000000000000000D /* AnnotationDrawing+Shape.swift in Sources */,
+				B1E00000000000000000000E /* AnnotationDrawing+Arrow.swift in Sources */,
+				B1E00000000000000000000F /* AnnotationDrawing+Pencil.swift in Sources */,
+				B1E000000000000000000010 /* AnnotationDrawing+Marker.swift in Sources */,
+				B1E000000000000000000011 /* AnnotationDrawing+Eraser.swift in Sources */,
+				B1E000000000000000000012 /* AnnotationDrawing+Mosaic.swift in Sources */,
+				B1E000000000000000000013 /* AnnotationDrawing+Text.swift in Sources */,
+				B1E000000000000000000014 /* AnnotationDrawing+Magnifier.swift in Sources */,
+				B1E000000000000000000015 /* AnnotationDrawing+Step.swift in Sources */,
+				B1E000000000000000000016 /* AnnotationDrawing+HitTest.swift in Sources */,
+				B1E000000000000000000017 /* AnnotationCursors.swift in Sources */,
+				B1F000000000000000000000 /* RefineToolbarViews.swift in Sources */,
+				B1F000000000000000000001 /* RefineToolbar+Text.swift in Sources */,
+				B1F000000000000000000002 /* RefineToolbar+Mosaic.swift in Sources */,
+				B1F000000000000000000003 /* RefineToolbar+Marker.swift in Sources */,
+				B1F000000000000000000004 /* RefineToolbar+Eraser.swift in Sources */,
+				B1F000000000000000000005 /* RefineToolbar+Step.swift in Sources */,
+				B1F000000000000000000006 /* RefineToolbar+Magnifier.swift in Sources */,
+				B1F000000000000000000007 /* RefineToolbar+Arrow.swift in Sources */,
+				B1F000000000000000000008 /* RefineToolbar+Icons.swift in Sources */,
+				B1F000000000000000000009 /* SelectionOverlay+AnnotateDraft.swift in Sources */,
+				B1F00000000000000000000A /* SelectionOverlay+HitTest.swift in Sources */,
+				B1F00000000000000000000B /* SelectionOverlay+AnnotateStyle.swift in Sources */,
+				B1F00000000000000000000C /* SelectionOverlay+Text.swift in Sources */,
+				B1F00000000000000000000D /* SelectionOverlay+Geometry.swift in Sources */,
+				B1F00000000000000000000E /* SelectionOverlay+History.swift in Sources */,
+				B1F00000000000000000000F /* SelectionOverlay+Toolbar.swift in Sources */,
 				B10000000000000000000001 /* EggplantShotApp.swift in Sources */,
 				B10000000000000000000002 /* HotkeyMonitor.swift in Sources */,
 				B10000000000000000000003 /* HotkeyShortcut.swift in Sources */,
@@ -273,7 +430,6 @@
 				B10000000000000000000019 /* SelectionOverlayPanel.swift in Sources */,
 				B10000000000000000000007 /* PinBoardController.swift in Sources */,
 				B10000000000000000000008 /* SnipController.swift in Sources */,
-				B10000000000000000000010 /* AnnotationModels.swift in Sources */,
 				B1000000000000000000001D /* ContrastChrome.swift in Sources */,
 				B10000000000000000000013 /* AnnotationDocument.swift in Sources */,
 				B10000000000000000000016 /* AnnotationCoding.swift in Sources */,

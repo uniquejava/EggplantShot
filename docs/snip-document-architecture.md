@@ -168,12 +168,14 @@ Owned by `SnipController` (or a small collaborator it holds). Overlay asks the s
 
 ```
 EggplantShot/Annotation/
-  AnnotationModels.swift      # Annotation, style, prefs (existing)
-  AnnotationDocument.swift    # Document + History (new)
-  AnnotationCompositor.swift  # bake only (unchanged role)
-  AnnotationCoding.swift      # Codable DTOs / color coding (new, with P2)
+  AnnotateTool / *Style / *Annotation / AnnotationPrefs / Annotation.swift
+  AnnotationDrawing.swift + AnnotationDrawing+{Shape,Arrow,Pencil,Marker,Mosaic,Eraser,Text,Step,Magnifier,HitTest}.swift
+  AnnotationCursors.swift / PolylineSimplifier.swift
+  AnnotationDocument.swift    # Document + History
+  AnnotationCompositor.swift  # bake only
+  AnnotationCoding.swift      # Codable DTOs / color coding
 
-EggplantShot/History/         # or under Annotation/
+EggplantShot/History/
   SnipRecord.swift
   SnipHistoryStore.swift
 ```
@@ -365,7 +367,7 @@ Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Itali
 
 Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius, linear ~0.7…14 pt); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
-Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **multiply** color fill (Snipaste highlighter; near-white → sourceOver wash) instead of blur; region chrome = solid while draw/move/resize, handles-only when idle, dashed on non-selected hover; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
+Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **sourceOver wash** (~40% alpha highlighter; multiply skipped on the transparent marks layer — it read as opaque fill) instead of blur; region chrome = solid while draw/move/resize, handles-only when idle, dashed on non-selected hover; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
 
 Eraser: `.eraser(geometry:style:)` — same first-five modes as mosaic (brush 14/18/24 + rect/oval); punches prior marks via `destinationOut` on a marks layer (never mutates `baseImage`); region auto-select + mosaic-like hairline chrome; disk `eraserStyle` (brushWidth).
 

@@ -48,12 +48,12 @@ EggplantShot/
   Hotkey/HotkeyMonitor.swift + HotkeyShortcut.swift
   Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift
   Controllers/SnipController.swift
-  Controllers/SelectionOverlayController.swift
-  Controllers/RefineToolbarController.swift
+  Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (draft / hit-test / style / text / geometry / history / toolbar)
+  Controllers/RefineToolbarController.swift + RefineToolbar+*.swift + RefineToolbarViews.swift
   Controllers/TextAnnotationEditor.swift
   Controllers/SelectionOverlayPanel.swift
   Controllers/PinBoardController.swift
-  Annotation/AnnotationModels.swift + AnnotationDocument.swift + AnnotationCoding.swift + AnnotationCompositor.swift + ContrastChrome.swift
+  Annotation/  # per-tool types + AnnotationDrawing(+Tool) + Document/Coding/Compositor + ContrastChrome
   History/SnipRecord.swift + SnipHistoryStore.swift
   UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift
   Assets.xcassets/

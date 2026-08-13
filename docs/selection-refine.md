@@ -83,7 +83,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to highlight an area) | **color card** (preview 24 + palette 2×10) — same layout as mosaic, with color instead of blur intensity.
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
 - Region: drag like mosaic; Shift → square / circle; entire rect/oval is highlighted. **Edit chrome**: while drawing / moving / resizing → **1 device-pixel solid** contrast hairline; after mouse-up (selected idle) → **handles only** (no border); **mouseover** on a non-selected region → dashed contrast outline (like text hover). Hit mark to move; handles resize.
-- Effect: **multiply** blend (Snipaste highlighter — keeps contrast on dark UIs; light glyphs tint brightly; black occludes). Near-white swatches fall back to sourceOver wash. **Vector** stroke/region data only (P4). Default color yellow.
+- Effect: **sourceOver wash** at ~40% alpha (highlighter translucency). Multiply was dropped because marks paint on a transparent offscreen layer for eraser; multiply-against-clear composites as opaque fill. **Vector** stroke/region data only (P4). Default color yellow.
 - Toolbar icon: SF Symbol `paintbrush.pointed`.
 - Disk: `type: "marker"` with `markerStyle` (brushWidth / color) plus either stroke `points` or region `kind` + `rect`.
 
