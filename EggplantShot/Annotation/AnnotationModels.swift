@@ -698,7 +698,7 @@ struct MagnifierStyle: Equatable {
     var color: NSColor
     /// When true, sample freeze/base **plus prior marks** into the lens (excludes self).
     var includeAnnotations: Bool
-    /// Preferred / displayed zoom (`lens / source`). Geometry remains source of truth while editing.
+    /// Authoritative zoom (`lens / source`). Only changed via the scale slider (not by frame resize).
     var scale: CGFloat
 
     static let scaleRange: ClosedRange<CGFloat> = 1...6
@@ -1430,7 +1430,19 @@ struct Annotation: Equatable {
         }
     }
 
+    /// Resizes the lens; source scales proportionally about its center so `style.scale` stays fixed.
+    mutating func resizeMagnifierLens(to newLens: CGRect) {
+        guard case .magnifier(let kind, let source, _, let style) = payload else { return }
+        let syncedSource = Self.scaledMagnifierSource(
+            lens: newLens,
+            scale: style.scale,
+            center: CGPoint(x: source.midX, y: source.midY)
+        )
+        payload = .magnifier(kind: kind, source: syncedSource, lens: newLens, style: style)
+    }
+
     /// Average width/height zoom of lens vs source (clamped to `MagnifierStyle.scaleRange`).
+    /// Used only as a fallback when a stored `scale` is missing (legacy disk records).
     static func magnifierScale(source: CGRect, lens: CGRect) -> CGFloat {
         guard source.width > 0.5, source.height > 0.5 else { return MagnifierStyle.defaultScale }
         let sx = lens.width / source.width
@@ -1452,6 +1464,19 @@ struct Annotation: Equatable {
         let s = MagnifierStyle.clampedScale(scale)
         let w = max(source.width * s, 1)
         let h = max(source.height * s, 1)
+        return CGRect(
+            x: center.x - w / 2,
+            y: center.y - h / 2,
+            width: w,
+            height: h
+        )
+    }
+
+    /// Source sized to `lens / scale`, centered on `center` (keeps sample focus when lens resizes).
+    static func scaledMagnifierSource(lens: CGRect, scale: CGFloat, center: CGPoint) -> CGRect {
+        let s = MagnifierStyle.clampedScale(scale)
+        let w = max(lens.width / s, 1)
+        let h = max(lens.height / s, 1)
         return CGRect(
             x: center.x - w / 2,
             y: center.y - h / 2,

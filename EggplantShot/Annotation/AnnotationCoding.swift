@@ -61,7 +61,7 @@ enum AnnotationCoding {
         var strokeWidth: Double
         var color: ColorDTO
         var includeAnnotations: Bool
-        /// Optional for backward compatibility; geometry remains source of truth on load.
+        /// Optional for backward compatibility; missing → derive from lens/source geometry.
         var scale: Double?
     }
 
@@ -574,8 +574,10 @@ enum AnnotationCoding {
                 return nil
             }
             var style = decode(magDTO)
-            // Geometry is authoritative for zoom; keep style.scale in sync for toolbar / prefs.
-            style.scale = Annotation.magnifierScale(source: source, lens: lens)
+            // Prefer stored scale; derive from geometry only for legacy records without scale.
+            if magDTO.scale == nil {
+                style.scale = Annotation.magnifierScale(source: source, lens: lens)
+            }
             return Annotation(
                 id: id,
                 magnifierKind: kindFromString(dto.kind) ?? .rectangle,

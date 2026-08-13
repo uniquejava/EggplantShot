@@ -341,7 +341,7 @@ final class SelectionOverlayNSView: NSView {
                 }
                 AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
             } else if case .magnifier(_, _, let lens, _) = selected.payload {
-                // Source is move-only; resize handles only on the lens.
+                // Source is move-only; lens handles resize both frames at fixed scale.
                 let lensR = lens.offsetBy(dx: origin.x, dy: origin.y)
                 AnnotationDrawing.drawHandles(in: lensR, size: annotationHandleSize, accent: accent)
             } else {

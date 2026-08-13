@@ -129,7 +129,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ### Magnifier
 
 - Drag defines the **source** sample rect; on mouse-up, a concentric **lens** is created at the current **scale** (default **2.5×**, same center). Shift → square/circle source.
-- Zoom is `lens / source` (avg of width & height ratios). **Scale slider** (1.00…6.00, two decimals) resizes the lens about its center; **lens handles** also change zoom. **Source is move-only** (no resize); lens is resizable. Move each frame independently.
+- Zoom is **only** via the **scale slider** (1.00…6.00, two decimals): resizes the lens about its center; source size stays put. **Lens resize** changes selection area only — source scales proportionally about its center so zoom stays fixed. **Source is move-only** (no resize handles). Move each frame independently.
 - Connector links nearest edges **only when source and lens are fully disjoint**; any overlap / nesting → no line.
 - **Source border vs lens:** portion of the source outline **inside** the lens → **1 device-pixel dashed** hairline (same color); portion **outside** → thick solid stroke (`strokeWidth`). Fully nested → all dashed; fully outside → all thick; crossing → hybrid per segment. Lens always thick solid.
 - Sub-toolbar: stroke widths | rect ↔ oval | **include annotations** toggle (`rectangle.on.rectangle`) | **scale** (solid preview dot + slider + value) | color grid.

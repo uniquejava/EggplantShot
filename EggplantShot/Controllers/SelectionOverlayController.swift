@@ -779,9 +779,9 @@ final class SelectionOverlayController {
 
         case .annotateResize(let id, let handle, let start, let startPoint, let magnifierPart):
             var next = start
-            if let magnifierPart, start.isMagnifier {
-                let startLocal = magnifierPart == .source ? start.magnifierSource : start.magnifierLens
-                let startGlobal = toGlobal(startLocal)
+            if magnifierPart != nil, start.isMagnifier {
+                // Lens handles only: resize selection area; source syncs at fixed scale.
+                let startGlobal = toGlobal(start.magnifierLens)
                 let resizedGlobal = resizedRect(
                     handle: handle,
                     startRect: startGlobal,
@@ -789,12 +789,7 @@ final class SelectionOverlayController {
                     point: point,
                     minSize: minAnnotation
                 )
-                next.mapMagnifierPart(magnifierPart, to: toLocal(resizedGlobal))
-                var style = next.magnifierStyle
-                style.scale = Annotation.magnifierScale(source: next.magnifierSource, lens: next.magnifierLens)
-                next.magnifierStyle = style
-                magnifierStyle = style
-                toolbar?.syncMagnifier(kind: magnifierKind, style: magnifierStyle)
+                next.resizeMagnifierLens(to: toLocal(resizedGlobal))
             } else {
                 let startGlobal = toGlobal(start.boundingRect)
                 let resizedGlobal = resizedRect(
@@ -889,9 +884,6 @@ final class SelectionOverlayController {
                 }
             case .annotateMove, .annotateResize, .annotateEndpoint:
                 annotationHistory.endGesture()
-                if case .annotateResize(_, _, let start, _, _) = dragKind, start.isMagnifier {
-                    MagnifierAnnotationPrefs.save(kind: magnifierKind, style: magnifierStyle)
-                }
                 refreshHistoryChrome()
             default:
                 break
@@ -984,12 +976,7 @@ final class SelectionOverlayController {
             return
         }
         if annotation.isMagnifier {
-            var style = annotation.magnifierStyle
-            style.scale = Annotation.magnifierScale(
-                source: annotation.magnifierSource,
-                lens: annotation.magnifierLens
-            )
-            magnifierStyle = style
+            magnifierStyle = annotation.magnifierStyle
             magnifierKind = annotation.magnifierKind
             toolbar?.syncMagnifier(kind: magnifierKind, style: magnifierStyle)
             return
@@ -1701,7 +1688,7 @@ final class SelectionOverlayController {
         annotation: Annotation
     ) -> (part: MagnifierPart, handle: Handle)? {
         guard case .magnifier(_, _, let lens, _) = annotation.payload else { return nil }
-        // Source is move-only (no resize handles); only the lens is resizable.
+        // Source is move-only; lens handles resize selection area (source syncs at fixed scale).
         for handle in Handle.allCases {
             if handleHitRect(handle, in: toGlobal(lens)).contains(point) {
                 return (.lens, handle)
