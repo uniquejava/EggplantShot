@@ -31,13 +31,16 @@ enum AnnotationCoding {
         var id: String
         var type: String
         var kind: String?
-        /// Shape / text bounding rect; also written for pencil as the path hull (optional on decode).
+        /// Shape / text bounding rect; also written for pencil / arrow as the path hull (optional on decode).
         var rect: RectDTO?
         var points: [PointDTO]?
         /// Text mark body (type == "text").
         var string: String?
         var style: StyleDTO?
         var textStyle: TextStyleDTO?
+        /// Arrow start / end caps (type == "arrow"); omitted → defaults.
+        var startCap: Int?
+        var endCap: Int?
     }
 
     struct PointDTO: Codable {
@@ -141,7 +144,22 @@ enum AnnotationCoding {
                 points: nil,
                 string: nil,
                 style: encode(style),
-                textStyle: nil
+                textStyle: nil,
+                startCap: nil,
+                endCap: nil
+            )
+        case .arrow(let start, let end, let style, let caps):
+            return MarkDTO(
+                id: annotation.id.uuidString,
+                type: "arrow",
+                kind: nil,
+                rect: RectDTO(annotation.boundingRect),
+                points: [PointDTO(start), PointDTO(end)],
+                string: nil,
+                style: encode(style),
+                textStyle: nil,
+                startCap: caps.start.rawValue,
+                endCap: caps.end.rawValue
             )
         case .pencil(let points, let style):
             return MarkDTO(
@@ -152,7 +170,9 @@ enum AnnotationCoding {
                 points: points.map(PointDTO.init),
                 string: nil,
                 style: encode(style),
-                textStyle: nil
+                textStyle: nil,
+                startCap: nil,
+                endCap: nil
             )
         case .text(let string, let rect, let style):
             return MarkDTO(
@@ -163,7 +183,9 @@ enum AnnotationCoding {
                 points: nil,
                 string: string,
                 style: nil,
-                textStyle: encode(style)
+                textStyle: encode(style),
+                startCap: nil,
+                endCap: nil
             )
         }
     }
@@ -183,6 +205,24 @@ enum AnnotationCoding {
             return Annotation(
                 id: id,
                 payload: .shape(kind, rect: rect, style: decode(styleDTO))
+            )
+        case "arrow":
+            guard let points = dto.points, points.count >= 2, let styleDTO = dto.style else {
+                NSLog("SnipHistory: skipping arrow mark without points/style")
+                return nil
+            }
+            let caps = ArrowCaps(
+                start: ArrowCapStyle(rawValue: dto.startCap ?? 0) ?? .none,
+                end: ArrowCapStyle(rawValue: dto.endCap ?? ArrowCapStyle.openArrow.rawValue) ?? .openArrow
+            )
+            return Annotation(
+                id: id,
+                payload: .arrow(
+                    start: points[0].cgPoint,
+                    end: points[1].cgPoint,
+                    style: decode(styleDTO),
+                    caps: caps
+                )
             )
         case "pencil":
             guard let points = dto.points, points.count >= 2, let styleDTO = dto.style else {

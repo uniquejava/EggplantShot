@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 
 // MARK: - Toolbar
 
@@ -17,6 +18,7 @@ final class RefineToolbarController: NSObject {
         case styleChanged(AnnotationStyle)
         case textStyleChanged(TextStyle)
         case kindChanged(ShapeKind)
+        case arrowCapsChanged(ArrowCaps)
         case undo
         case redo
     }
@@ -27,25 +29,36 @@ final class RefineToolbarController: NSObject {
     private var textStyle: TextStyle
     private var tool: AnnotateTool
     private var kind: ShapeKind
+    private var arrowCaps: ArrowCaps
 
     private let rootStack = NSStackView()
     private var shapeButton: NSButton!
+    private var arrowButton: NSButton!
     private var pencilButton: NSButton!
     private var textButton: NSButton!
     private var undoButton: NSButton!
     private var redoButton: NSButton!
     private var subToolbarContainer: NSView!
-    /// Shape/pencil options row (stroke / fill / kind / line / palette).
+    /// Shape/pencil/arrow options row (stroke / fill / kind / line / palette).
     private var strokeOptionsRow: NSView!
     /// Text options row (B / I / bg / size / palette).
     private var textOptionsRow: NSView!
-    /// Shape-only chrome (fill + rect/oval). Hidden for pencil.
+    /// Shape-only chrome (fill + rect/oval). Hidden for pencil / arrow.
     private var shapeOnlyViews: [NSView] = []
+    /// Divider after shape kind group; visible for shape/pencil, hidden for arrow.
+    private var afterKindDivider: NSView!
+    /// Arrow-only chrome (start / end caps + double Switch). Hidden for shape / pencil.
+    private var arrowOnlyViews: [NSView] = []
     private var strokeButtons: [NSButton] = []
     private var fillButton: NSButton!
     private var rectKindButton: NSButton!
     private var ovalKindButton: NSButton!
     private var lineStyleButton: NSButton!
+    private var arrowStartCapButton: NSButton!
+    private var arrowEndCapButton: NSButton!
+    private var arrowDoubleButton: NSButton!
+    /// Caps to restore when Switch toggles arrows back on (Snipaste memory).
+    private var lastArrowedCaps: ArrowCaps = .default
     private var colorPreview: NSView!
     private var textBoldButton: NSButton!
     private var textItalicButton: NSButton!
@@ -58,6 +71,7 @@ final class RefineToolbarController: NSObject {
         initialTool: AnnotateTool,
         initialStyle: AnnotationStyle,
         initialKind: ShapeKind,
+        initialArrowCaps: ArrowCaps,
         initialTextStyle: TextStyle,
         onEvent: @escaping (Event) -> Void
     ) {
@@ -66,6 +80,10 @@ final class RefineToolbarController: NSObject {
         self.textStyle = initialTextStyle
         self.tool = initialTool
         self.kind = initialKind
+        self.arrowCaps = initialArrowCaps
+        if initialArrowCaps.hasCaps {
+            self.lastArrowedCaps = initialArrowCaps
+        }
         self.panel = NSPanel(
             contentRect: .zero,
             styleMask: [.borderless, .nonactivatingPanel],
@@ -133,6 +151,12 @@ final class RefineToolbarController: NSObject {
             enabled: true,
             action: #selector(shapeTapped)
         )
+        arrowButton = iconButton(
+            systemName: "arrow.up.right",
+            tooltip: "Arrow",
+            enabled: true,
+            action: #selector(arrowTapped)
+        )
         pencilButton = iconButton(
             systemName: "pencil",
             tooltip: "Pen",
@@ -148,7 +172,7 @@ final class RefineToolbarController: NSObject {
 
         let annotateViews: [NSView] = [
             shapeButton,
-            iconButton(systemName: "arrow.up.right", tooltip: "Arrow", enabled: false, action: nil),
+            arrowButton,
             pencilButton,
             iconButton(systemName: "paintbrush.pointed", tooltip: "Marker", enabled: false, action: nil),
             iconButton(systemName: "square.grid.3x3", tooltip: "Mosaic", enabled: false, action: nil),
@@ -268,20 +292,29 @@ final class RefineToolbarController: NSObject {
         stack.addArrangedSubview(rectKindButton)
         stack.addArrangedSubview(ovalKindButton)
 
-        let afterKindDivider = miniDivider()
+        afterKindDivider = miniDivider()
         stack.addArrangedSubview(afterKindDivider)
 
         // Shared by shape + pencil: hide fill / kind for pencil (Snipaste pen options).
-        // Keep `afterKindDivider` visible so stroke → line-style stays separated.
+        // Keep `afterKindDivider` visible for shape/pencil so stroke → line-style stays separated.
         shapeOnlyViews = [fillButton, afterFillDivider, rectKindButton, ovalKindButton]
 
-        // Item 7: border line style dropdown (Snipaste 5 patterns).
+        // Arrow start-cap dropdown (Snipaste left picker).
+        let beforeArrowDivider = miniDivider()
+        stack.addArrangedSubview(beforeArrowDivider)
+        arrowStartCapButton = makeCapDropdownButton(
+            tooltip: "Start style",
+            action: #selector(arrowStartCapTapped(_:))
+        )
+        stack.addArrangedSubview(arrowStartCapButton)
+
+        // Body / border line style dropdown (Snipaste middle picker + shape/pen).
         lineStyleButton = NSButton(frame: .zero)
         lineStyleButton.bezelStyle = .inline
         lineStyleButton.isBordered = false
         lineStyleButton.setButtonType(.momentaryChange)
         lineStyleButton.imagePosition = .imageOnly
-        lineStyleButton.toolTip = "Border style"
+        lineStyleButton.toolTip = "Line style"
         lineStyleButton.target = self
         lineStyleButton.action = #selector(lineStyleTapped(_:))
         lineStyleButton.translatesAutoresizingMaskIntoConstraints = false
@@ -295,6 +328,40 @@ final class RefineToolbarController: NSObject {
             lineStyleButton.heightAnchor.constraint(equalToConstant: 22),
         ])
         stack.addArrangedSubview(lineStyleButton)
+
+        // Arrow end-cap dropdown (Snipaste right picker).
+        arrowEndCapButton = makeCapDropdownButton(
+            tooltip: "End style",
+            action: #selector(arrowEndCapTapped(_:))
+        )
+        stack.addArrangedSubview(arrowEndCapButton)
+
+        // Caps on/off Switch: stacked “current” / “plain” previews (Snipaste).
+        let switchBtn = ArrowCapsSwitchButton(frame: .zero)
+        switchBtn.bezelStyle = .inline
+        switchBtn.isBordered = false
+        switchBtn.setButtonType(.momentaryChange)
+        switchBtn.imagePosition = .imageOnly
+        switchBtn.toolTip = "Toggle arrowheads"
+        switchBtn.target = self
+        switchBtn.action = #selector(arrowDoubleTapped)
+        switchBtn.translatesAutoresizingMaskIntoConstraints = false
+        switchBtn.wantsLayer = true
+        NSLayoutConstraint.activate([
+            switchBtn.widthAnchor.constraint(equalToConstant: 24),
+            switchBtn.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        arrowDoubleButton = switchBtn
+        stack.addArrangedSubview(arrowDoubleButton)
+
+        // No divider here — the shared color-section divider below is enough
+        // (otherwise arrow mode shows a double rule before the palette).
+        arrowOnlyViews = [
+            beforeArrowDivider,
+            arrowStartCapButton,
+            arrowEndCapButton,
+            arrowDoubleButton,
+        ]
 
         stack.addArrangedSubview(miniDivider())
 
@@ -485,6 +552,7 @@ final class RefineToolbarController: NSObject {
 
     private func refreshSelectionChrome() {
         tintSelected(shapeButton, selected: tool == .rectangle)
+        tintSelected(arrowButton, selected: tool == .arrow)
         tintSelected(pencilButton, selected: tool == .pencil)
         tintSelected(textButton, selected: tool == .text)
         colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
@@ -494,13 +562,18 @@ final class RefineToolbarController: NSObject {
         strokeOptionsRow.isHidden = isText
         textOptionsRow.isHidden = !isText
 
+        let isArrow = (tool == .arrow)
         let shapeExtrasVisible = (tool == .rectangle)
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
+        afterKindDivider.isHidden = isArrow || isText
+        for view in arrowOnlyViews {
+            view.isHidden = !isArrow
+        }
 
         let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
-        let treatAsStroke = !style.isFilled || tool == .pencil
+        let treatAsStroke = !style.isFilled || tool == .pencil || tool == .arrow
         for button in strokeButtons {
             let option = StrokeWidthOption(rawValue: button.tag) ?? .medium
             let on = treatAsStroke && option == selectedStroke
@@ -514,9 +587,20 @@ final class RefineToolbarController: NSObject {
         tintSelected(ovalKindButton, selected: kind == .ellipse)
 
         lineStyleButton.image = lineStylePreviewImage(style.lineStyle)
+        lineStyleButton.toolTip = isArrow ? "Line style" : "Border style"
         let lineEnabled = treatAsStroke
         lineStyleButton.isEnabled = lineEnabled
         lineStyleButton.alphaValue = lineEnabled ? 1 : 0.45
+
+        arrowStartCapButton.image = arrowCapPreviewImage(cap: arrowCaps.start, pointing: .left)
+        arrowEndCapButton.image = arrowCapPreviewImage(cap: arrowCaps.end, pointing: .right)
+        if arrowCaps.hasCaps {
+            lastArrowedCaps = arrowCaps
+        }
+        arrowDoubleButton.image = arrowCapsSwitchImage()
+        // Don’t use the blue selected chrome — Switch uses black / light gray glyphs.
+        arrowDoubleButton.contentTintColor = nil
+        arrowDoubleButton.layer?.backgroundColor = nil
 
         tintSelected(textBoldButton, selected: textStyle.isBold)
         tintSelected(textItalicButton, selected: textStyle.isItalic)
@@ -717,6 +801,10 @@ final class RefineToolbarController: NSObject {
         selectTool(tool == .rectangle ? .none : .rectangle)
     }
 
+    @objc private func arrowTapped() {
+        selectTool(tool == .arrow ? .none : .arrow)
+    }
+
     @objc private func pencilTapped() {
         selectTool(tool == .pencil ? .none : .pencil)
     }
@@ -727,7 +815,7 @@ final class RefineToolbarController: NSObject {
 
     private func selectTool(_ next: AnnotateTool) {
         tool = next
-        if next == .pencil {
+        if next == .pencil || next == .arrow {
             style.isFilled = false
         }
         subToolbarContainer.isHidden = (next == .none)
@@ -834,6 +922,152 @@ final class RefineToolbarController: NSObject {
         onEvent(.styleChanged(style))
     }
 
+    private func makeCapDropdownButton(tooltip: String, action: Selector) -> NSButton {
+        let button = NSButton(frame: .zero)
+        button.bezelStyle = .inline
+        button.isBordered = false
+        button.setButtonType(.momentaryChange)
+        button.imagePosition = .imageOnly
+        button.toolTip = tooltip
+        button.target = self
+        button.action = action
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.wantsLayer = true
+        // Cap chips are narrower than the body line-style pill; leave room for padding.
+        button.layer?.cornerRadius = 5
+        button.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1).cgColor
+        button.layer?.borderWidth = 1
+        button.layer?.borderColor = NSColor(calibratedWhite: 0.78, alpha: 1).cgColor
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 32),
+            button.heightAnchor.constraint(equalToConstant: 22),
+        ])
+        return button
+    }
+
+    private enum CapPreviewDirection {
+        case left
+        case right
+    }
+
+    /// Chip icon: short stub + small tip, inset so the glyph isn’t edge-to-edge.
+    private func arrowCapPreviewImage(cap: ArrowCapStyle, pointing: CapPreviewDirection) -> NSImage {
+        let size = CGSize(width: 26, height: 14)
+        return NSImage(size: size, flipped: false) { rect in
+            AnnotationDrawing.drawCapPreview(
+                cap,
+                in: rect.insetBy(dx: 3, dy: 2),
+                pointingLeft: pointing == .left,
+                color: NSColor(calibratedWhite: 0.28, alpha: 1),
+                strokeWidth: 1.5
+            )
+            return true
+        }
+    }
+
+    @objc private func arrowStartCapTapped(_ sender: NSButton) {
+        presentCapMenu(for: .start, from: sender)
+    }
+
+    @objc private func arrowEndCapTapped(_ sender: NSButton) {
+        presentCapMenu(for: .end, from: sender)
+    }
+
+    private func presentCapMenu(for endpoint: ArrowEndpoint, from sender: NSButton) {
+        let menu = NSMenu()
+        let current = endpoint == .start ? arrowCaps.start : arrowCaps.end
+        for option in ArrowCapStyle.menuCases {
+            let item = NSMenuItem(
+                title: "",
+                action: #selector(arrowCapMenuPicked(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.tag = option.rawValue
+            item.representedObject = endpoint == .start ? "start" : "end"
+            item.state = (option == current) ? .on : .off
+            item.image = arrowCapMenuImage(
+                option,
+                pointing: endpoint == .start ? .left : .right
+            )
+            menu.addItem(item)
+        }
+        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
+        menu.popUp(positioning: nil, at: point, in: sender)
+    }
+
+    @objc private func arrowCapMenuPicked(_ sender: NSMenuItem) {
+        guard let option = ArrowCapStyle(rawValue: sender.tag),
+              let which = sender.representedObject as? String
+        else { return }
+        if which == "start" {
+            arrowCaps.start = option
+        } else {
+            arrowCaps.end = option
+        }
+        refreshSelectionChrome()
+        onEvent(.arrowCapsChanged(arrowCaps))
+    }
+
+    private func arrowCapMenuImage(_ cap: ArrowCapStyle, pointing: CapPreviewDirection) -> NSImage {
+        // Same footprint for every row; inset so glyphs don’t touch the menu edges.
+        let size = CGSize(width: 28, height: 14)
+        return NSImage(size: size, flipped: false) { rect in
+            AnnotationDrawing.drawCapPreview(
+                cap,
+                in: rect.insetBy(dx: 3, dy: 2),
+                pointingLeft: pointing == .left,
+                color: NSColor(calibratedWhite: 0.25, alpha: 1),
+                strokeWidth: 1.5
+            )
+            return true
+        }
+    }
+
+    @objc private func arrowDoubleTapped() {
+        // Toggle: strip arrowheads ↔ restore last arrowed caps (not force double-ended).
+        if arrowCaps.hasCaps {
+            lastArrowedCaps = arrowCaps
+            arrowCaps = .plainLine()
+        } else {
+            arrowCaps = lastArrowedCaps.hasCaps ? lastArrowedCaps : .default
+        }
+        refreshSelectionChrome()
+        onEvent(.arrowCapsChanged(arrowCaps))
+    }
+
+    /// Snipaste-like stacked Switch: top = armed caps preview, bottom = plain line.
+    /// Active row is dark; inactive row is light gray.
+    private func arrowCapsSwitchImage() -> NSImage {
+        let size = CGSize(width: 20, height: 20)
+        let arrowsActive = arrowCaps.hasCaps
+        let armed = arrowCaps.hasCaps ? arrowCaps : lastArrowedCaps
+        let active = NSColor(calibratedWhite: 0.18, alpha: 1)
+        let inactive = NSColor(calibratedWhite: 0.62, alpha: 1)
+        return NSImage(size: size, flipped: false) { rect in
+            // Pack the two shafts tightly around the vertical center (Snipaste-like).
+            let rowH: CGFloat = 5
+            let rowGap: CGFloat = 1.5
+            let stackH = rowH * 2 + rowGap
+            let bottomOriginY = (rect.height - stackH) / 2
+            let bottom = CGRect(x: 2, y: bottomOriginY, width: rect.width - 4, height: rowH)
+            let top = CGRect(x: 2, y: bottomOriginY + rowH + rowGap, width: rect.width - 4, height: rowH)
+            AnnotationDrawing.drawCapsPairPreview(
+                armed,
+                in: top,
+                color: arrowsActive ? active : inactive,
+                strokeWidth: 1.15
+            )
+            AnnotationDrawing.drawCapsPairPreview(
+                .plainLine(),
+                in: bottom,
+                color: arrowsActive ? inactive : active,
+                strokeWidth: 1.15
+            )
+            return true
+        }
+    }
+
     private func lineStyleMenuImage(_ lineStyle: StrokeLineStyle) -> NSImage {
         let size = CGSize(width: 56, height: 14)
         let previewStroke: CGFloat = 2
@@ -862,7 +1096,7 @@ final class RefineToolbarController: NSObject {
 
     func setAnnotateTool(_ tool: AnnotateTool) {
         self.tool = tool
-        if tool == .pencil {
+        if tool == .pencil || tool == .arrow {
             style.isFilled = false
         }
         subToolbarContainer.isHidden = (tool == .none)
@@ -872,9 +1106,13 @@ final class RefineToolbarController: NSObject {
         }
     }
 
-    func syncStyle(_ style: AnnotationStyle, kind: ShapeKind) {
+    func syncStyle(_ style: AnnotationStyle, kind: ShapeKind, arrowCaps: ArrowCaps = .default) {
         self.style = style
         self.kind = kind
+        self.arrowCaps = arrowCaps
+        if arrowCaps.hasCaps {
+            lastArrowedCaps = arrowCaps
+        }
         refreshSelectionChrome()
     }
 
@@ -930,6 +1168,35 @@ final class RefineToolbarController: NSObject {
 
         panel.setFrame(CGRect(origin: origin, size: size), display: true)
         panel.orderFrontRegardless()
+    }
+}
+
+/// Caps Switch: press nudges the stacked glyphs down; release restores (Snipaste press feel).
+private final class ArrowCapsSwitchButton: NSButton {
+    private let pressTranslationY: CGFloat = -1.5
+
+    override func mouseDown(with event: NSEvent) {
+        wantsLayer = true
+        applyPressOffset(pressTranslationY, animated: true)
+        // Blocks until mouse-up, then sends the action.
+        super.mouseDown(with: event)
+        applyPressOffset(0, animated: true)
+    }
+
+    private func applyPressOffset(_ y: CGFloat, animated: Bool) {
+        wantsLayer = true
+        let apply = {
+            self.layer?.transform = CATransform3DMakeTranslation(0, y, 0)
+        }
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.07
+                ctx.allowsImplicitAnimation = true
+                apply()
+            }
+        } else {
+            apply()
+        }
     }
 }
 

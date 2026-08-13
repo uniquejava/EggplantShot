@@ -199,8 +199,19 @@ final class SelectionOverlayNSView: NSView {
            !selected.isPencil,
            !selected.isText,
            selected.id != editingAnnotationID {
-            let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
-            AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+            if case .arrow(let start, let end, _, _) = selected.payload {
+                let s = CGPoint(x: start.x + origin.x, y: start.y + origin.y)
+                let e = CGPoint(x: end.x + origin.x, y: end.y + origin.y)
+                AnnotationDrawing.drawArrowEndpointHandles(
+                    start: s,
+                    end: e,
+                    size: annotationHandleSize,
+                    accent: accent
+                )
+            } else {
+                let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+            }
         }
 
         if let hid = hoveredTextID,

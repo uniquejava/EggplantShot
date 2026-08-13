@@ -68,13 +68,14 @@ enum ShapeKind: Equatable { case rectangle, ellipse }
 
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
+    case arrow(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps)
     case pencil(points: [CGPoint], style: AnnotationStyle)
     case text(string: String, rect: CGRect, style: TextStyle)
-    // later: arrow, marker, mosaic, step, …
+    // later: marker, mosaic, step, …
 }
 ```
 
-Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"pencil"`, `"text"`, …). Shape keeps `kind` / `rect`; pencil stores `points` (+ optional hull `rect`); text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
+Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"arrow"`, `"pencil"`, `"text"`, …). Shape keeps `kind` / `rect`; arrow stores `points: [start, end]` + `startCap` / `endCap` (+ optional hull `rect`); pencil stores `points` (+ optional hull `rect`); text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
 
 ### `AnnotationDocument`
 
@@ -189,7 +190,7 @@ P0–P4 done:
 - `,` / `.` restore selection + base + document into the active overlay.
 - Marks use `AnnotationPayload` (`shape`, `pencil`); disk `type` discriminator ready for new tools.
 
-Next product work: arrow / marker / … add payload cases + drawing + hit-testing only.
+Next product work: marker / mosaic / … add payload cases + drawing + hit-testing only.
 
 ## Coordinate conventions
 
@@ -364,6 +365,6 @@ Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Itali
 | Confirm | Bake + disk `SnipRecord` |
 | `,` / `.` | History playback |
 | Pin window | Flat image (no layer reopen) |
-| Mark model | `AnnotationPayload` (`shape`, `pencil`, `text`) |
+| Mark model | `AnnotationPayload` (`shape`, `arrow`, `pencil`, `text`) |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

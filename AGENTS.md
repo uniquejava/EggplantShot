@@ -75,7 +75,7 @@ EggplantShot/
 
 ## Next (not done yet)
 
-→ Remaining annotate tools (arrow / marker / mosaic / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + pencil + text + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
+→ Remaining annotate tools (marker / mosaic / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + arrow + pencil + text + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
 
 → Pencil: if dense live sampling causes lag / history bloat, simplify polyline on mouse-up (keep live feel). See deferred note in `docs/selection-refine.md`.
 

@@ -28,10 +28,11 @@ final class SelectionOverlayController {
         case resize(handle: Handle, startRect: CGRect, startPoint: CGPoint)
         /// Outside the selection: opposite edges stay fixed; active edge(s) track the pointer absolutely.
         case expand(handle: Handle, baseRect: CGRect)
-        /// Shape or pencil in-progress stroke (tool decides payload).
+        /// Shape / arrow / pencil in-progress stroke (tool decides payload).
         case annotateDraw(startLocal: CGPoint)
         case annotateMove(id: UUID, start: Annotation, startPoint: CGPoint)
         case annotateResize(id: UUID, handle: Handle, start: Annotation, startPoint: CGPoint)
+        case annotateEndpoint(id: UUID, endpoint: ArrowEndpoint, start: Annotation)
     }
 
     private enum Handle: CaseIterable {
@@ -76,6 +77,7 @@ final class SelectionOverlayController {
     private var annotationStyle: AnnotationStyle = AnnotationPrefs.load().style
     /// Sub-toolbar rect / oval switch (next draw + selected mark).
     private var annotationKind: ShapeKind = AnnotationPrefs.load().kind
+    private var arrowCaps: ArrowCaps = AnnotationPrefs.loadArrowCaps()
     private var textStyle: TextStyle = TextAnnotationPrefs.load()
     private let annotationHistory = AnnotationHistory()
     /// In-progress mark while dragging (selection-local geometry).
@@ -121,6 +123,7 @@ final class SelectionOverlayController {
     /// Where the pointer sits relative to annotations while an annotate tool is active.
     private enum AnnotationPointerTarget {
         case handle(id: UUID, handle: Handle)
+        case arrowEndpoint(id: UUID, endpoint: ArrowEndpoint)
         case border(id: UUID)
         /// Interior of a text mark (text tool): click to edit, not move.
         case interior(id: UUID)
@@ -253,6 +256,7 @@ final class SelectionOverlayController {
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
         annotationKind = prefs.kind
+        arrowCaps = AnnotationPrefs.loadArrowCaps()
         textStyle = TextAnnotationPrefs.load()
         annotationHistory.reset()
         draftAnnotation = nil
@@ -511,6 +515,15 @@ final class SelectionOverlayController {
                 dragKind = .annotateResize(id: id, handle: handle, start: ann, startPoint: point)
                 resizeCursor(for: handle).set()
 
+            case .arrowEndpoint(let id, let endpoint):
+                guard let ann = annotations.first(where: { $0.id == id }) else { return }
+                annotationHistory.select(id)
+                syncToolbar(from: ann)
+                annotationHistory.beginGesture()
+                dragKind = .annotateEndpoint(id: id, endpoint: endpoint, start: ann)
+                AnnotationCursors.move.set()
+                updateHighlight(showHandles: true)
+
             case .border(let id):
                 guard var ann = annotations.first(where: { $0.id == id }) else { return }
                 // While editing, use the live chrome geometry as the move baseline.
@@ -655,6 +668,26 @@ final class SelectionOverlayController {
             next.mapBoundingRect(to: toLocal(resizedGlobal))
             updateAnnotation(id: id) { $0.payload = next.payload }
             updateHighlight(showHandles: true)
+
+        case .annotateEndpoint(let id, let endpoint, let start):
+            let local = toLocal(point)
+            var next = start
+            switch endpoint {
+            case .start:
+                if NSEvent.modifierFlags.contains(.shift) {
+                    next.arrowStart = snappedArrowPoint(from: start.arrowEnd, toward: local)
+                } else {
+                    next.arrowStart = local
+                }
+            case .end:
+                if NSEvent.modifierFlags.contains(.shift) {
+                    next.arrowEnd = snappedArrowPoint(from: start.arrowStart, toward: local)
+                } else {
+                    next.arrowEnd = local
+                }
+            }
+            updateAnnotation(id: id) { $0.payload = next.payload }
+            updateHighlight(showHandles: true)
         }
     }
 
@@ -710,7 +743,7 @@ final class SelectionOverlayController {
                         refreshHistoryChrome()
                     }
                 }
-            case .annotateMove, .annotateResize:
+            case .annotateMove, .annotateResize, .annotateEndpoint:
                 annotationHistory.endGesture()
                 refreshHistoryChrome()
             default:
@@ -800,7 +833,10 @@ final class SelectionOverlayController {
         if annotation.isShape {
             annotationKind = annotation.kind
         }
-        toolbar?.syncStyle(annotation.style, kind: annotationKind)
+        if annotation.isArrow {
+            arrowCaps = annotation.arrowCaps
+        }
+        toolbar?.syncStyle(annotation.style, kind: annotationKind, arrowCaps: arrowCaps)
     }
 
     private func makeDraftAnnotation(startingAt local: CGPoint) -> Annotation {
@@ -809,6 +845,10 @@ final class SelectionOverlayController {
             var style = annotationStyle
             style.isFilled = false
             return Annotation(points: [local], style: style)
+        case .arrow:
+            var style = annotationStyle
+            style.isFilled = false
+            return Annotation(start: local, end: local, style: style, caps: arrowCaps)
         case .text:
             let rect = Annotation.fittedTextRect(
                 string: "",
@@ -882,6 +922,17 @@ final class SelectionOverlayController {
             }
             return Annotation(points: points, style: style)
 
+        case .arrow:
+            var style = annotationStyle
+            style.isFilled = false
+            let tip: CGPoint
+            if NSEvent.modifierFlags.contains(.shift) {
+                tip = snappedArrowPoint(from: start, toward: end)
+            } else {
+                tip = end
+            }
+            return Annotation(start: start, end: tip, style: style, caps: arrowCaps)
+
         case .text:
             // Text is click-to-place; drag-draw is unused.
             return makeDraftAnnotation(startingAt: start)
@@ -905,6 +956,8 @@ final class SelectionOverlayController {
         switch draft.payload {
         case .shape(_, let rect, _):
             return rect.width >= minAnnotation && rect.height >= minAnnotation
+        case .arrow(let start, let end, _, _):
+            return hypot(end.x - start.x, end.y - start.y) >= minAnnotation
         case .pencil(let points, _):
             guard points.count >= 2, let first = points.first, let last = points.last else { return false }
             return hypot(last.x - first.x, last.y - first.y) >= minAnnotation
@@ -927,11 +980,25 @@ final class SelectionOverlayController {
         switch draft.payload {
         case .shape(let kind, let rect, let style):
             return Annotation(kind: kind, rect: rect, style: style)
+        case .arrow(let start, let end, let style, let caps):
+            return Annotation(start: start, end: end, style: style, caps: caps)
         case .pencil(let points, let style):
             return Annotation(points: points, style: style)
         case .text(let string, let rect, let style):
             return Annotation(string: string, rect: rect, style: style)
         }
+    }
+
+    /// Snap `toward` onto the nearest 45° ray from `origin`.
+    private func snappedArrowPoint(from origin: CGPoint, toward point: CGPoint) -> CGPoint {
+        let dx = point.x - origin.x
+        let dy = point.y - origin.y
+        let length = hypot(dx, dy)
+        guard length > 0.01 else { return point }
+        let angle = atan2(dy, dx)
+        let step = CGFloat.pi / 4
+        let snapped = (angle / step).rounded() * step
+        return CGPoint(x: origin.x + cos(snapped) * length, y: origin.y + sin(snapped) * length)
     }
 
     private func updateAnnotation(id: UUID, mutate: (inout Annotation) -> Void) {
@@ -973,9 +1040,13 @@ final class SelectionOverlayController {
         if let id = selectedAnnotationID,
            id != editingTextID,
            let ann = annotations.first(where: { $0.id == id }),
-           !ann.isText,
-           let handle = hitTestAnnotationHandle(at: point, annotation: ann) {
-            return .handle(id: id, handle: handle)
+           !ann.isText {
+            if ann.isArrow, let endpoint = hitTestArrowEndpoint(at: point, annotation: ann) {
+                return .arrowEndpoint(id: id, endpoint: endpoint)
+            }
+            if let handle = hitTestAnnotationHandle(at: point, annotation: ann) {
+                return .handle(id: id, handle: handle)
+            }
         }
 
         for ann in annotations.reversed() {
@@ -1071,20 +1142,54 @@ final class SelectionOverlayController {
             let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
             return AnnotationDrawing.distance(from: local, toPolyline: points) <= tolerance
 
+        case .arrow(let start, let end, let style, let caps):
+            let local = toLocal(globalPoint)
+            let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
+            return AnnotationDrawing.hitsArrow(
+                point: local,
+                start: start,
+                end: end,
+                style: style,
+                caps: caps,
+                tolerance: tolerance
+            )
+
         case .text:
             return false
         }
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
-        // Pencil / text: no resize chrome.
-        guard !annotation.isPencil, !annotation.isText else { return nil }
+        // Pencil / text / arrow: no 8-handle resize chrome.
+        guard !annotation.isPencil, !annotation.isText, !annotation.isArrow else { return nil }
         let global = toGlobal(annotation.boundingRect)
         for handle in Handle.allCases {
             if handleHitRect(handle, in: global).contains(point) {
                 return handle
             }
         }
+        return nil
+    }
+
+    private func hitTestArrowEndpoint(at point: CGPoint, annotation: Annotation) -> ArrowEndpoint? {
+        guard case .arrow(let start, let end, _, _) = annotation.payload else { return nil }
+        let size = handleHitSize
+        let startGlobal = toGlobal(CGRect(origin: start, size: .zero))
+        let endGlobal = toGlobal(CGRect(origin: end, size: .zero))
+        let startRect = CGRect(
+            x: startGlobal.minX - size / 2,
+            y: startGlobal.minY - size / 2,
+            width: size,
+            height: size
+        )
+        let endRect = CGRect(
+            x: endGlobal.minX - size / 2,
+            y: endGlobal.minY - size / 2,
+            width: size,
+            height: size
+        )
+        if startRect.contains(point) { return .start }
+        if endRect.contains(point) { return .end }
         return nil
     }
 
@@ -1156,6 +1261,8 @@ final class SelectionOverlayController {
         switch annotationPointerTarget(at: point) {
         case .handle(_, let handle):
             resizeCursor(for: handle).set()
+        case .arrowEndpoint:
+            AnnotationCursors.move.set()
         case .border:
             AnnotationCursors.move.set()
         case .interior:
@@ -1196,8 +1303,8 @@ final class SelectionOverlayController {
         annotateTool = tool
         if tool == .none {
             annotationHistory.select(nil)
-        } else if tool == .pencil, annotationStyle.isFilled {
-            // Pencil has no fill; fall back to last stroke width.
+        } else if tool == .pencil || tool == .arrow, annotationStyle.isFilled {
+            // Pencil / arrow have no fill; fall back to last stroke width.
             annotationStyle.isFilled = false
             AnnotationPrefs.save(style: annotationStyle, kind: annotationKind)
         }
@@ -1209,7 +1316,7 @@ final class SelectionOverlayController {
 
     private func applyStyle(_ style: AnnotationStyle) {
         var next = style
-        if annotateTool == .pencil {
+        if annotateTool == .pencil || annotateTool == .arrow {
             next.isFilled = false
         }
         annotationStyle = next
@@ -1218,8 +1325,8 @@ final class SelectionOverlayController {
            let selected = annotations.first(where: { $0.id == id }),
            !selected.isText {
             var applied = next
-            // Don't push fill onto a pencil mark.
-            if selected.isPencil {
+            // Don't push fill onto a pencil / arrow mark.
+            if selected.isPencil || selected.isArrow {
                 applied.isFilled = false
             }
             annotationHistory.commit { doc in
@@ -1260,6 +1367,21 @@ final class SelectionOverlayController {
             annotationHistory.commit { doc in
                 guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
                 doc.marks[idx].kind = kind
+            }
+            updateHighlight(showHandles: true)
+            refreshHistoryChrome()
+        }
+    }
+
+    private func applyArrowCaps(_ caps: ArrowCaps) {
+        arrowCaps = caps
+        AnnotationPrefs.saveArrowCaps(caps)
+        if let id = selectedAnnotationID,
+           let selected = annotations.first(where: { $0.id == id }),
+           selected.isArrow {
+            annotationHistory.commit { doc in
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+                doc.marks[idx].arrowCaps = caps
             }
             updateHighlight(showHandles: true)
             refreshHistoryChrome()
@@ -1778,6 +1900,7 @@ final class SelectionOverlayController {
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
         annotationKind = prefs.kind
+        arrowCaps = AnnotationPrefs.loadArrowCaps()
         textStyle = TextAnnotationPrefs.load()
         NSCursor.arrow.set()
 
@@ -1874,6 +1997,7 @@ final class SelectionOverlayController {
             initialTool: annotateTool,
             initialStyle: annotationStyle,
             initialKind: annotationKind,
+            initialArrowCaps: arrowCaps,
             initialTextStyle: textStyle
         ) { [weak self] event in
             guard let self else { return }
@@ -1895,6 +2019,8 @@ final class SelectionOverlayController {
                 self.applyTextStyle(style)
             case .kindChanged(let kind):
                 self.applyKind(kind)
+            case .arrowCapsChanged(let caps):
+                self.applyArrowCaps(caps)
             case .undo:
                 self.performUndo()
             case .redo:

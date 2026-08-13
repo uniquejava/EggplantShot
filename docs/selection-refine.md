@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate live: **shape**, **pencil**, **text** (+ in-session undo/redo). Arrow / marker / mosaic / step / OCR / magnifier remain stubs.
+Annotate live: **shape**, **arrow**, **pencil**, **text** (+ in-session undo/redo). Marker / mosaic / step / OCR / magnifier remain stubs.
 
 Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
@@ -39,6 +39,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 | [ ✕ | pin | save | copy | …§ ]
 
 † Shape: [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ preview 24 + palette 2×10 ]
+  Arrow: [ thin | med | thick ] | [ start ▾≈32 | body ▾ | end ▾≈32 | caps Switch ] | [ preview 24 + palette 2×10 ]
   Pen: same card without fill / rect / oval
   Palette chips ≈11pt, gap ≈2pt
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
@@ -53,6 +54,16 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Shift while dragging → square / circle.
 - Hit zones: interior → draw nested (white ＋); border → move; handles → resize.
 - Style / kind changes apply to selection (or next draw).
+
+### Arrow
+
+- Sub-toolbar: stroke widths | start ▾ (~32pt) | body ▾ (shared line-style pill) | end ▾ (~32pt) | caps Switch | color grid.
+- Cap chips show a **short stub + small tip** with padding (not full-width shafts). Menu rows use the same compact footprint (icon-only, no English labels).
+- Start / end caps: plain, bar, circle, diamond, open chevron (default end; shaft to tip), filled triangle, hollow triangle. Body reuses `StrokeLineStyle` (5 dashes).
+- **Switch** (Snipaste): stacked miniature — top = armed caps (current or last-arrowed), bottom = plain line. Active row dark / inactive light. Tap strips arrowheads ↔ restores last armed caps (does **not** force double-ended). Press nudges glyphs down; release restores. One divider before the palette (no double rule).
+- Geometry: `AnnotationPayload.arrow(start:end:style:caps:)` in selection-local points. Drag start→end; Shift → 45° snap; auto-select after draw.
+- Edit: filled start / hollow end square handles; drag shaft to move; no 8-handle resize chrome.
+- Disk: `type: "arrow"` with `points: [start, end]`, `style`, `startCap` / `endCap` ints (stable raw values).
 
 ### Pencil
 
@@ -91,5 +102,5 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
 - [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
-- [x] Shape / pencil / text: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] Shape / arrow / pencil / text: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] Undo / redo; debug build succeeds

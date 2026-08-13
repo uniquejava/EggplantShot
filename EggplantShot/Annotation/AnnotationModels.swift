@@ -4,8 +4,60 @@ import AppKit
 enum AnnotateTool: Equatable {
     case none
     case rectangle
+    case arrow
     case pencil
     case text
+}
+
+/// Arrowhead / end-cap styles (Snipaste start / end dropdown).
+/// Raw values are stable for disk prefs; `menuCases` order matches the menu.
+enum ArrowCapStyle: Int, CaseIterable {
+    case none = 0
+    case bar = 2
+    case circle = 3
+    case diamond = 4
+    /// Open chevron; shaft runs to the tip so line + wings stay connected.
+    case openArrow = 5
+    /// Kept for older prefs / disk; not shown in the menu (looked like `openArrow`).
+    case openArrowWide = 6
+    /// Filled triangle (default end cap). Raw value 1 kept for existing records.
+    case arrow = 1
+    case hollowArrow = 7
+
+    /// Styles shown in the start / end dropdown (Snipaste order, no near-duplicate).
+    static let menuCases: [ArrowCapStyle] = [
+        .none, .bar, .circle, .diamond, .openArrow, .arrow, .hollowArrow,
+    ]
+
+    /// True for triangle / chevron arrowheads (used by double-ended Switch).
+    var isArrowhead: Bool {
+        switch self {
+        case .openArrow, .openArrowWide, .arrow, .hollowArrow: return true
+        default: return false
+        }
+    }
+}
+
+/// Start / end caps for an arrow mark.
+struct ArrowCaps: Equatable {
+    var start: ArrowCapStyle
+    var end: ArrowCapStyle
+
+    static let `default` = ArrowCaps(start: .none, end: .openArrow)
+
+    /// Both ends plain (Switch “no arrow” row active).
+    var isPlainLine: Bool { start == .none && end == .none }
+
+    /// At least one end has an ornament (Switch “with arrow” row active).
+    var hasCaps: Bool { !isPlainLine }
+
+    static func plainLine() -> ArrowCaps { ArrowCaps(start: .none, end: .none) }
+}
+
+/// Which endpoint is being dragged while editing an arrow.
+enum ArrowEndpoint: Equatable {
+    case start
+    case end
 }
 
 /// Stroke / fill / color used when drawing or editing an annotation.
@@ -33,6 +85,8 @@ enum AnnotationPrefs {
     private static let lineStyleKey = "annotate.lineStyle"
     private static let paletteKey = "annotate.palette"
     private static let kindKey = "annotate.kind"
+    private static let arrowStartCapKey = "annotate.arrow.startCap"
+    private static let arrowEndCapKey = "annotate.arrow.endCap"
 
     static func load() -> (style: AnnotationStyle, kind: ShapeKind) {
         let defaults = UserDefaults.standard
@@ -53,6 +107,18 @@ enum AnnotationPrefs {
         return (style, kind)
     }
 
+    static func loadArrowCaps() -> ArrowCaps {
+        let defaults = UserDefaults.standard
+        let start = ArrowCapStyle(rawValue: defaults.integer(forKey: arrowStartCapKey)) ?? .none
+        let end: ArrowCapStyle
+        if defaults.object(forKey: arrowEndCapKey) != nil {
+            end = ArrowCapStyle(rawValue: defaults.integer(forKey: arrowEndCapKey)) ?? .openArrow
+        } else {
+            end = .openArrow
+        }
+        return ArrowCaps(start: start, end: end)
+    }
+
     static func save(style: AnnotationStyle, kind: ShapeKind) {
         let defaults = UserDefaults.standard
         defaults.set(Double(style.strokeWidth), forKey: strokeWidthKey)
@@ -60,6 +126,12 @@ enum AnnotationPrefs {
         defaults.set(style.lineStyle.rawValue, forKey: lineStyleKey)
         defaults.set(PaletteColor.matching(style.strokeColor).rawValue, forKey: paletteKey)
         defaults.set(kind == .ellipse ? 1 : 0, forKey: kindKey)
+    }
+
+    static func saveArrowCaps(_ caps: ArrowCaps) {
+        let defaults = UserDefaults.standard
+        defaults.set(caps.start.rawValue, forKey: arrowStartCapKey)
+        defaults.set(caps.end.rawValue, forKey: arrowEndCapKey)
     }
 }
 
@@ -270,6 +342,7 @@ enum TextAnnotationPrefs {
 /// Extensible mark payload. New tools add cases here without forking history/store.
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
+    case arrow(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps)
     case pencil(points: [CGPoint], style: AnnotationStyle)
     case text(string: String, rect: CGRect, style: TextStyle)
 }
@@ -291,6 +364,18 @@ struct Annotation: Equatable {
         self.payload = .shape(kind, rect: rect, style: style)
     }
 
+    /// Convenience for the arrow tool.
+    init(
+        id: UUID = UUID(),
+        start: CGPoint,
+        end: CGPoint,
+        style: AnnotationStyle,
+        caps: ArrowCaps = .default
+    ) {
+        self.id = id
+        self.payload = .arrow(start: start, end: end, style: style, caps: caps)
+    }
+
     /// Convenience for the pencil tool.
     init(id: UUID = UUID(), points: [CGPoint], style: AnnotationStyle) {
         self.id = id
@@ -307,6 +392,7 @@ struct Annotation: Equatable {
     var typeName: String {
         switch payload {
         case .shape: return "shape"
+        case .arrow: return "arrow"
         case .pencil: return "pencil"
         case .text: return "text"
         }
@@ -314,11 +400,11 @@ struct Annotation: Equatable {
 
     // MARK: Shared accessors
 
-    /// Stroke style for shape / pencil. No-op get/set for text marks.
+    /// Stroke style for shape / arrow / pencil. No-op get/set for text marks.
     var style: AnnotationStyle {
         get {
             switch payload {
-            case .shape(_, _, let style), .pencil(_, let style):
+            case .shape(_, _, let style), .arrow(_, _, let style, _), .pencil(_, let style):
                 return style
             case .text:
                 return .default
@@ -328,6 +414,8 @@ struct Annotation: Equatable {
             switch payload {
             case .shape(let kind, let rect, _):
                 payload = .shape(kind, rect: rect, style: newValue)
+            case .arrow(let start, let end, _, let caps):
+                payload = .arrow(start: start, end: end, style: newValue, caps: caps)
             case .pencil(let points, _):
                 payload = .pencil(points: points, style: newValue)
             case .text:
@@ -352,6 +440,8 @@ struct Annotation: Equatable {
         switch payload {
         case .shape(_, let rect, _), .text(_, let rect, _):
             return rect
+        case .arrow(let start, let end, let style, let caps):
+            return AnnotationDrawing.arrowBounds(start: start, end: end, style: style, caps: caps)
         case .pencil(let points, _):
             return Self.bounds(of: points)
         }
@@ -359,6 +449,11 @@ struct Annotation: Equatable {
 
     var isShape: Bool {
         if case .shape = payload { return true }
+        return false
+    }
+
+    var isArrow: Bool {
+        if case .arrow = payload { return true }
         return false
     }
 
@@ -393,7 +488,7 @@ struct Annotation: Equatable {
                 payload = .shape(kind, rect: newValue, style: style)
             case .text(let string, _, let style):
                 payload = .text(string: string, rect: newValue, style: style)
-            case .pencil:
+            case .arrow, .pencil:
                 break
             }
         }
@@ -421,12 +516,51 @@ struct Annotation: Equatable {
         }
     }
 
+    // MARK: Arrow accessors
+
+    var arrowStart: CGPoint {
+        get {
+            if case .arrow(let start, _, _, _) = payload { return start }
+            return .zero
+        }
+        set {
+            guard case .arrow(_, let end, let style, let caps) = payload else { return }
+            payload = .arrow(start: newValue, end: end, style: style, caps: caps)
+        }
+    }
+
+    var arrowEnd: CGPoint {
+        get {
+            if case .arrow(_, let end, _, _) = payload { return end }
+            return .zero
+        }
+        set {
+            guard case .arrow(let start, _, let style, let caps) = payload else { return }
+            payload = .arrow(start: start, end: newValue, style: style, caps: caps)
+        }
+    }
+
+    var arrowCaps: ArrowCaps {
+        get {
+            if case .arrow(_, _, _, let caps) = payload { return caps }
+            return .default
+        }
+        set {
+            guard case .arrow(let start, let end, let style, _) = payload else { return }
+            payload = .arrow(start: start, end: end, style: style, caps: newValue)
+        }
+    }
+
     // MARK: Geometry helpers
 
     mutating func translate(by delta: CGSize) {
         switch payload {
         case .shape(let kind, let rect, let style):
             payload = .shape(kind, rect: rect.offsetBy(dx: delta.width, dy: delta.height), style: style)
+        case .arrow(let start, let end, let style, let caps):
+            let s = CGPoint(x: start.x + delta.width, y: start.y + delta.height)
+            let e = CGPoint(x: end.x + delta.width, y: end.y + delta.height)
+            payload = .arrow(start: s, end: e, style: style, caps: caps)
         case .pencil(let points, let style):
             let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
             payload = .pencil(points: moved, style: style)
@@ -446,6 +580,18 @@ struct Annotation: Equatable {
         switch payload {
         case .shape(let kind, _, let style):
             payload = .shape(kind, rect: newBounds, style: style)
+        case .arrow(let start, let end, let style, let caps):
+            let sx = newBounds.width / old.width
+            let sy = newBounds.height / old.height
+            let s = CGPoint(
+                x: newBounds.minX + (start.x - old.minX) * sx,
+                y: newBounds.minY + (start.y - old.minY) * sy
+            )
+            let e = CGPoint(
+                x: newBounds.minX + (end.x - old.minX) * sx,
+                y: newBounds.minY + (end.y - old.minY) * sy
+            )
+            payload = .arrow(start: s, end: e, style: style, caps: caps)
         case .pencil(let points, let style):
             let sx = newBounds.width / old.width
             let sy = newBounds.height / old.height
@@ -541,6 +687,10 @@ enum AnnotationDrawing {
         case .shape(let kind, let localRect, let style):
             let rect = localRect.offsetBy(dx: origin.x, dy: origin.y)
             drawShape(kind: kind, style: style, in: rect)
+        case .arrow(let start, let end, let style, let caps):
+            let s = CGPoint(x: start.x + origin.x, y: start.y + origin.y)
+            let e = CGPoint(x: end.x + origin.x, y: end.y + origin.y)
+            drawArrow(start: s, end: e, style: style, caps: caps)
         case .pencil(let points, let style):
             let offset = points.map { CGPoint(x: $0.x + origin.x, y: $0.y + origin.y) }
             drawPencil(points: offset, style: style)
@@ -555,7 +705,7 @@ enum AnnotationDrawing {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
-        case .pencil, .text:
+        case .arrow, .pencil, .text:
             draw(annotation, origin: .zero)
         }
     }
@@ -575,6 +725,623 @@ enum AnnotationDrawing {
         } else {
             applyStroke(style, to: path)
             style.strokeColor.setStroke()
+            path.stroke()
+        }
+    }
+
+    private static func drawArrow(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps) {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = hypot(dx, dy)
+        guard length > 0.5 else {
+            let r = max(style.strokeWidth / 2, 0.5)
+            style.strokeColor.setFill()
+            NSBezierPath(ovalIn: CGRect(x: start.x - r, y: start.y - r, width: r * 2, height: r * 2)).fill()
+            return
+        }
+
+        let ux = dx / length
+        let uy = dy / length
+        let startInset = shaftInset(for: caps.start, strokeWidth: style.strokeWidth)
+        let endInset = shaftInset(for: caps.end, strokeWidth: style.strokeWidth)
+
+        var shaftStart = start
+        var shaftEnd = end
+        if startInset > 0 {
+            shaftStart = CGPoint(x: start.x + ux * startInset, y: start.y + uy * startInset)
+        }
+        if endInset > 0 {
+            shaftEnd = CGPoint(x: end.x - ux * endInset, y: end.y - uy * endInset)
+        }
+
+        if hypot(shaftEnd.x - shaftStart.x, shaftEnd.y - shaftStart.y) > 0.5 {
+            let path = NSBezierPath()
+            path.move(to: shaftStart)
+            path.line(to: shaftEnd)
+            applyStroke(style, to: path)
+            path.lineCapStyle = .butt
+            style.strokeColor.setStroke()
+            path.stroke()
+        }
+
+        // Outward at start is opposite the shaft; at end along the shaft.
+        drawCap(caps.start, tip: start, directionX: -ux, directionY: -uy, style: style)
+        drawCap(caps.end, tip: end, directionX: ux, directionY: uy, style: style)
+    }
+
+    /// How far the shaft stops short of `tip` for this cap.
+    static func shaftInset(for cap: ArrowCapStyle, strokeWidth: CGFloat) -> CGFloat {
+        switch cap {
+        case .none, .bar:
+            // Open chevrons: shaft runs all the way to the tip so line + arrow stay one piece.
+            return 0
+        case .openArrow, .openArrowWide:
+            return 0
+        case .circle:
+            return circleRadius(strokeWidth: strokeWidth)
+        case .diamond:
+            return diamondHalfLength(strokeWidth: strokeWidth) * 2
+        case .arrow, .hollowArrow:
+            // Meet the triangle base, overlapping slightly so stroke + fill fuse.
+            return max(arrowheadLength(strokeWidth: strokeWidth) - strokeWidth * 0.35, strokeWidth)
+        }
+    }
+
+    private static func drawCap(
+        _ cap: ArrowCapStyle,
+        tip: CGPoint,
+        directionX: CGFloat,
+        directionY: CGFloat,
+        style: AnnotationStyle
+    ) {
+        let w = style.strokeWidth
+        let color = style.strokeColor
+        switch cap {
+        case .none:
+            break
+
+        case .bar:
+            let half = max(w * 1.6, 4)
+            let px = -directionY
+            let py = directionX
+            let a = CGPoint(x: tip.x + px * half, y: tip.y + py * half)
+            let b = CGPoint(x: tip.x - px * half, y: tip.y - py * half)
+            let path = NSBezierPath()
+            path.move(to: a)
+            path.line(to: b)
+            path.lineWidth = w
+            path.lineCapStyle = .butt
+            color.setStroke()
+            path.stroke()
+
+        case .circle:
+            let r = circleRadius(strokeWidth: w)
+            color.setFill()
+            NSBezierPath(ovalIn: CGRect(x: tip.x - r, y: tip.y - r, width: r * 2, height: r * 2)).fill()
+
+        case .diamond:
+            let halfLen = diamondHalfLength(strokeWidth: w)
+            let halfWid = max(w * 1.4, 3.5)
+            let px = -directionY
+            let py = directionX
+            let base = CGPoint(x: tip.x - directionX * halfLen * 2, y: tip.y - directionY * halfLen * 2)
+            let mid = CGPoint(x: tip.x - directionX * halfLen, y: tip.y - directionY * halfLen)
+            let left = CGPoint(x: mid.x + px * halfWid, y: mid.y + py * halfWid)
+            let right = CGPoint(x: mid.x - px * halfWid, y: mid.y - py * halfWid)
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: left)
+            path.line(to: base)
+            path.line(to: right)
+            path.close()
+            color.setFill()
+            path.fill()
+
+        case .openArrow:
+            drawOpenArrowhead(
+                tip: tip,
+                directionX: directionX,
+                directionY: directionY,
+                length: openArrowLength(strokeWidth: w, wide: false),
+                width: openArrowWidth(strokeWidth: w, wide: false),
+                strokeWidth: w,
+                color: color
+            )
+
+        case .openArrowWide:
+            drawOpenArrowhead(
+                tip: tip,
+                directionX: directionX,
+                directionY: directionY,
+                length: openArrowLength(strokeWidth: w, wide: true),
+                width: openArrowWidth(strokeWidth: w, wide: true),
+                strokeWidth: w,
+                color: color
+            )
+
+        case .arrow:
+            drawFilledArrowhead(
+                tip: tip,
+                directionX: directionX,
+                directionY: directionY,
+                length: arrowheadLength(strokeWidth: w),
+                width: arrowheadWidth(strokeWidth: w),
+                color: color
+            )
+
+        case .hollowArrow:
+            drawHollowArrowhead(
+                tip: tip,
+                directionX: directionX,
+                directionY: directionY,
+                length: arrowheadLength(strokeWidth: w),
+                width: arrowheadWidth(strokeWidth: w),
+                strokeWidth: max(w * 0.85, 1.2),
+                color: color
+            )
+        }
+    }
+
+    private static func drawFilledArrowhead(
+        tip: CGPoint,
+        directionX: CGFloat,
+        directionY: CGFloat,
+        length: CGFloat,
+        width: CGFloat,
+        color: NSColor
+    ) {
+        let base = CGPoint(x: tip.x - directionX * length, y: tip.y - directionY * length)
+        let px = -directionY
+        let py = directionX
+        let left = CGPoint(x: base.x + px * width / 2, y: base.y + py * width / 2)
+        let right = CGPoint(x: base.x - px * width / 2, y: base.y - py * width / 2)
+        let path = NSBezierPath()
+        path.move(to: tip)
+        path.line(to: left)
+        path.line(to: right)
+        path.close()
+        color.setFill()
+        path.fill()
+    }
+
+    private static func drawHollowArrowhead(
+        tip: CGPoint,
+        directionX: CGFloat,
+        directionY: CGFloat,
+        length: CGFloat,
+        width: CGFloat,
+        strokeWidth: CGFloat,
+        color: NSColor
+    ) {
+        let base = CGPoint(x: tip.x - directionX * length, y: tip.y - directionY * length)
+        let px = -directionY
+        let py = directionX
+        let left = CGPoint(x: base.x + px * width / 2, y: base.y + py * width / 2)
+        let right = CGPoint(x: base.x - px * width / 2, y: base.y - py * width / 2)
+        let path = NSBezierPath()
+        path.move(to: tip)
+        path.line(to: left)
+        path.line(to: right)
+        path.close()
+        path.lineWidth = strokeWidth
+        path.lineJoinStyle = .miter
+        path.lineCapStyle = .butt
+        color.setStroke()
+        path.stroke()
+    }
+
+    private static func drawOpenArrowhead(
+        tip: CGPoint,
+        directionX: CGFloat,
+        directionY: CGFloat,
+        length: CGFloat,
+        width: CGFloat,
+        strokeWidth: CGFloat,
+        color: NSColor
+    ) {
+        let base = CGPoint(x: tip.x - directionX * length, y: tip.y - directionY * length)
+        let px = -directionY
+        let py = directionX
+        let left = CGPoint(x: base.x + px * width / 2, y: base.y + py * width / 2)
+        let right = CGPoint(x: base.x - px * width / 2, y: base.y - py * width / 2)
+        let path = NSBezierPath()
+        path.move(to: left)
+        path.line(to: tip)
+        path.line(to: right)
+        path.lineWidth = strokeWidth
+        path.lineJoinStyle = .miter
+        path.lineCapStyle = .butt
+        color.setStroke()
+        path.stroke()
+    }
+
+    static func circleRadius(strokeWidth: CGFloat) -> CGFloat {
+        max(strokeWidth * 1.35, 3.5)
+    }
+
+    static func diamondHalfLength(strokeWidth: CGFloat) -> CGFloat {
+        max(strokeWidth * 1.6, 4)
+    }
+
+    static func openArrowLength(strokeWidth: CGFloat, wide: Bool) -> CGFloat {
+        // Shorter depth + wider span → opener V (closer to Snipaste open chevron).
+        wide ? max(strokeWidth * 2.8, 8) : max(strokeWidth * 2.5, 7)
+    }
+
+    static func openArrowWidth(strokeWidth: CGFloat, wide: Bool) -> CGFloat {
+        wide ? max(strokeWidth * 4.6, 12) : max(strokeWidth * 4.2, 11)
+    }
+
+    static func arrowheadLength(strokeWidth: CGFloat) -> CGFloat {
+        max(strokeWidth * 3.2, 8)
+    }
+
+    static func arrowheadWidth(strokeWidth: CGFloat) -> CGFloat {
+        max(strokeWidth * 2.4, 6)
+    }
+
+    /// Axis-aligned bounds including end caps.
+    static func arrowBounds(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps) -> CGRect {
+        var minX = min(start.x, end.x)
+        var maxX = max(start.x, end.x)
+        var minY = min(start.y, end.y)
+        var maxY = max(start.y, end.y)
+        let pad = max(
+            arrowheadWidth(strokeWidth: style.strokeWidth) / 2,
+            openArrowWidth(strokeWidth: style.strokeWidth, wide: true) / 2,
+            circleRadius(strokeWidth: style.strokeWidth),
+            style.strokeWidth * 1.6,
+            style.strokeWidth / 2
+        ) + 1
+        minX -= pad
+        maxX += pad
+        minY -= pad
+        maxY += pad
+        return CGRect(x: minX, y: minY, width: max(maxX - minX, 1), height: max(maxY - minY, 1))
+    }
+
+    /// Expanded hit region for a cap (selection-local). `direction` points outward toward the tip.
+    static func capHitPath(
+        _ cap: ArrowCapStyle,
+        tip: CGPoint,
+        directionX: CGFloat,
+        directionY: CGFloat,
+        strokeWidth: CGFloat
+    ) -> NSBezierPath? {
+        let w = strokeWidth
+        let px = -directionY
+        let py = directionX
+        switch cap {
+        case .none:
+            return nil
+        case .bar:
+            return nil
+        case .circle:
+            let r = circleRadius(strokeWidth: w) + 2
+            return NSBezierPath(ovalIn: CGRect(x: tip.x - r, y: tip.y - r, width: r * 2, height: r * 2))
+        case .diamond:
+            let halfLen = diamondHalfLength(strokeWidth: w)
+            let halfWid = max(w * 1.4, 3.5) + 1
+            let base = CGPoint(x: tip.x - directionX * halfLen * 2, y: tip.y - directionY * halfLen * 2)
+            let mid = CGPoint(x: tip.x - directionX * halfLen, y: tip.y - directionY * halfLen)
+            let left = CGPoint(x: mid.x + px * halfWid, y: mid.y + py * halfWid)
+            let right = CGPoint(x: mid.x - px * halfWid, y: mid.y - py * halfWid)
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: left)
+            path.line(to: base)
+            path.line(to: right)
+            path.close()
+            return path
+        case .openArrow, .openArrowWide:
+            let wide = (cap == .openArrowWide)
+            let length = openArrowLength(strokeWidth: w, wide: wide)
+            let width = openArrowWidth(strokeWidth: w, wide: wide)
+            let base = CGPoint(x: tip.x - directionX * length, y: tip.y - directionY * length)
+            let left = CGPoint(x: base.x + px * width / 2, y: base.y + py * width / 2)
+            let right = CGPoint(x: base.x - px * width / 2, y: base.y - py * width / 2)
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: left)
+            path.line(to: right)
+            path.close()
+            return path
+        case .arrow, .hollowArrow:
+            let length = arrowheadLength(strokeWidth: w)
+            let width = arrowheadWidth(strokeWidth: w)
+            let base = CGPoint(x: tip.x - directionX * length, y: tip.y - directionY * length)
+            let left = CGPoint(x: base.x + px * width / 2, y: base.y + py * width / 2)
+            let right = CGPoint(x: base.x - px * width / 2, y: base.y - py * width / 2)
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: left)
+            path.line(to: right)
+            path.close()
+            return path
+        }
+    }
+
+    /// Miniature full-arrow preview (start + shaft + end) for the caps Switch rows.
+    /// Ornaments are hard-capped to the row height so the top half doesn’t dwarf the plain bottom line.
+    static func drawCapsPairPreview(
+        _ caps: ArrowCaps,
+        in rect: CGRect,
+        color: NSColor,
+        strokeWidth: CGFloat = 1.35
+    ) {
+        guard rect.width > 4, rect.height > 2 else { return }
+        let y = rect.midY
+        let pad: CGFloat = 1.5
+        let left = CGPoint(x: rect.minX + pad, y: y)
+        let right = CGPoint(x: rect.maxX - pad, y: y)
+        // Keep glyphs inside the row: ~half the row height max.
+        let sw = min(strokeWidth, 1.25)
+        let tipLen = min(3.2, rect.height * 0.55)
+        let tipWid = min(3.0, rect.height * 0.5)
+
+        color.setStroke()
+        color.setFill()
+
+        let startInset = miniatureCapInset(caps.start, tipLen: tipLen)
+        let endInset = miniatureCapInset(caps.end, tipLen: tipLen)
+        var shaftStart = left
+        var shaftEnd = right
+        if startInset > 0 { shaftStart = CGPoint(x: left.x + startInset, y: y) }
+        if endInset > 0 { shaftEnd = CGPoint(x: right.x - endInset, y: y) }
+
+        if shaftEnd.x - shaftStart.x > 0.5 {
+            let path = NSBezierPath()
+            path.move(to: shaftStart)
+            path.line(to: shaftEnd)
+            path.lineWidth = sw
+            path.lineCapStyle = .butt
+            path.stroke()
+        }
+
+        drawMiniatureCap(caps.start, tip: left, pointingRight: false, tipLen: tipLen, tipWid: tipWid, stroke: sw, color: color)
+        drawMiniatureCap(caps.end, tip: right, pointingRight: true, tipLen: tipLen, tipWid: tipWid, stroke: sw, color: color)
+    }
+
+    private static func miniatureCapInset(_ cap: ArrowCapStyle, tipLen: CGFloat) -> CGFloat {
+        switch cap {
+        case .none, .bar, .openArrow, .openArrowWide: return 0
+        case .circle: return tipLen * 0.45
+        case .diamond: return tipLen
+        case .arrow, .hollowArrow: return tipLen * 0.85
+        }
+    }
+
+    private static func drawMiniatureCap(
+        _ cap: ArrowCapStyle,
+        tip: CGPoint,
+        pointingRight: Bool,
+        tipLen: CGFloat,
+        tipWid: CGFloat,
+        stroke: CGFloat,
+        color: NSColor
+    ) {
+        let ux: CGFloat = pointingRight ? 1 : -1
+        let y = tip.y
+        color.setStroke()
+        color.setFill()
+
+        switch cap {
+        case .none:
+            break
+        case .bar:
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: tip.x, y: y + tipWid / 2))
+            path.line(to: CGPoint(x: tip.x, y: y - tipWid / 2))
+            path.lineWidth = stroke
+            path.lineCapStyle = .butt
+            path.stroke()
+        case .circle:
+            let r = tipWid * 0.4
+            let c = CGPoint(x: tip.x - ux * r, y: y)
+            NSBezierPath(ovalIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)).fill()
+        case .diamond:
+            let half = tipLen * 0.5
+            let mid = CGPoint(x: tip.x - ux * half, y: y)
+            let base = CGPoint(x: tip.x - ux * tipLen, y: y)
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: CGPoint(x: mid.x, y: y + tipWid / 2))
+            path.line(to: base)
+            path.line(to: CGPoint(x: mid.x, y: y - tipWid / 2))
+            path.close()
+            path.fill()
+        case .openArrow, .openArrowWide:
+            let base = CGPoint(x: tip.x - ux * tipLen, y: y)
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: base.x, y: y + tipWid / 2))
+            path.line(to: tip)
+            path.line(to: CGPoint(x: base.x, y: y - tipWid / 2))
+            path.lineWidth = stroke
+            path.lineJoinStyle = .miter
+            path.lineCapStyle = .butt
+            path.stroke()
+        case .arrow:
+            let base = CGPoint(x: tip.x - ux * tipLen, y: y)
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: CGPoint(x: base.x, y: y + tipWid / 2))
+            path.line(to: CGPoint(x: base.x, y: y - tipWid / 2))
+            path.close()
+            path.fill()
+        case .hollowArrow:
+            let base = CGPoint(x: tip.x - ux * tipLen, y: y)
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: CGPoint(x: base.x, y: y + tipWid / 2))
+            path.line(to: CGPoint(x: base.x, y: y - tipWid / 2))
+            path.close()
+            path.lineWidth = stroke
+            path.lineJoinStyle = .miter
+            path.stroke()
+        }
+    }
+
+    /// Draw a compact horizontal preview of `cap` for toolbar / menu icons.
+    /// Short stub + small tip with padding — not a full-width shaft like the body line-style pill.
+    static func drawCapPreview(
+        _ cap: ArrowCapStyle,
+        in rect: CGRect,
+        pointingLeft: Bool,
+        color: NSColor,
+        strokeWidth: CGFloat = 2
+    ) {
+        guard rect.width > 4, rect.height > 4 else { return }
+
+        let y = rect.midY
+        let sw = min(max(strokeWidth, 1.2), 1.6)
+        // Fixed glyph budget inside `rect` (caller already insets for chip padding).
+        let tipLen: CGFloat = min(6.5, rect.width * 0.38)
+        let stubLen: CGFloat = min(8.5, max(rect.width - tipLen - 1, 5))
+        let total = stubLen + tipLen
+        let originX = rect.midX - total / 2
+
+        let tipX: CGFloat
+        let stubFarX: CGFloat
+        let joinX: CGFloat
+        let ux: CGFloat
+        if pointingLeft {
+            tipX = originX
+            joinX = originX + tipLen
+            stubFarX = joinX + stubLen
+            ux = -1
+        } else {
+            stubFarX = originX
+            joinX = originX + stubLen
+            tipX = joinX + tipLen
+            ux = 1
+        }
+
+        let tip = CGPoint(x: tipX, y: y)
+        let far = CGPoint(x: stubFarX, y: y)
+        let join = CGPoint(x: joinX, y: y)
+
+        color.setStroke()
+        color.setFill()
+
+        // Stub only (short) — never spans the whole chip.
+        let stub = NSBezierPath()
+        stub.move(to: far)
+        stub.line(to: join)
+        stub.lineWidth = sw
+        stub.lineCapStyle = .butt
+        stub.stroke()
+
+        // Tip ornaments stay inside tipLen × modest height (breathing room).
+        let halfH = min(rect.height * 0.32, 3.2)
+        let slot = tipLen
+
+        switch cap {
+        case .none:
+            let ext = NSBezierPath()
+            ext.move(to: join)
+            ext.line(to: tip)
+            ext.lineWidth = sw
+            ext.lineCapStyle = .butt
+            ext.stroke()
+
+        case .bar:
+            let bridge = NSBezierPath()
+            bridge.move(to: join)
+            bridge.line(to: tip)
+            bridge.lineWidth = sw
+            bridge.lineCapStyle = .butt
+            bridge.stroke()
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: tipX, y: y + halfH))
+            path.line(to: CGPoint(x: tipX, y: y - halfH))
+            path.lineWidth = sw
+            path.lineCapStyle = .butt
+            path.stroke()
+
+        case .circle:
+            let r = min(halfH, slot * 0.42)
+            let c = CGPoint(x: tipX - ux * r, y: y)
+            let bridgeEnd = CGPoint(x: c.x - ux * r, y: y)
+            let br = NSBezierPath()
+            br.move(to: join)
+            br.line(to: bridgeEnd)
+            br.lineWidth = sw
+            br.lineCapStyle = .butt
+            br.stroke()
+            NSBezierPath(ovalIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)).fill()
+
+        case .diamond:
+            let halfLen = min(slot * 0.45, 3.2)
+            let halfWid = halfH * 0.9
+            let mid = CGPoint(x: tipX - ux * halfLen, y: y)
+            let base = CGPoint(x: tipX - ux * halfLen * 2, y: y)
+            let br = NSBezierPath()
+            br.move(to: join)
+            br.line(to: base)
+            br.lineWidth = sw
+            br.lineCapStyle = .butt
+            br.stroke()
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: CGPoint(x: mid.x, y: y + halfWid))
+            path.line(to: base)
+            path.line(to: CGPoint(x: mid.x, y: y - halfWid))
+            path.close()
+            path.fill()
+
+        case .openArrow, .openArrowWide:
+            let length = min(slot * 0.85, 5.5)
+            let width = halfH * 1.7
+            let base = CGPoint(x: tipX - ux * length, y: y)
+            let br = NSBezierPath()
+            br.move(to: join)
+            br.line(to: tip)
+            br.lineWidth = sw
+            br.lineCapStyle = .butt
+            br.stroke()
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: base.x, y: y + width / 2))
+            path.line(to: tip)
+            path.line(to: CGPoint(x: base.x, y: y - width / 2))
+            path.lineWidth = sw
+            path.lineJoinStyle = .miter
+            path.lineCapStyle = .butt
+            path.stroke()
+
+        case .arrow:
+            let length = min(slot * 0.88, 5.5)
+            let width = halfH * 1.55
+            let base = CGPoint(x: tipX - ux * length, y: y)
+            let br = NSBezierPath()
+            br.move(to: join)
+            br.line(to: base)
+            br.lineWidth = sw
+            br.lineCapStyle = .butt
+            br.stroke()
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: CGPoint(x: base.x, y: y + width / 2))
+            path.line(to: CGPoint(x: base.x, y: y - width / 2))
+            path.close()
+            path.fill()
+
+        case .hollowArrow:
+            let length = min(slot * 0.88, 5.5)
+            let width = halfH * 1.55
+            let base = CGPoint(x: tipX - ux * length, y: y)
+            let br = NSBezierPath()
+            br.move(to: join)
+            br.line(to: base)
+            br.lineWidth = sw
+            br.lineCapStyle = .butt
+            br.stroke()
+            let path = NSBezierPath()
+            path.move(to: tip)
+            path.line(to: CGPoint(x: base.x, y: y + width / 2))
+            path.line(to: CGPoint(x: base.x, y: y - width / 2))
+            path.close()
+            path.lineWidth = max(sw * 0.9, 1)
+            path.lineJoinStyle = .miter
             path.stroke()
         }
     }
@@ -666,6 +1433,33 @@ enum AnnotationDrawing {
         }
     }
 
+    /// Snipaste-style square endpoint handles (start filled, end hollow).
+    static func drawArrowEndpointHandles(
+        start: CGPoint,
+        end: CGPoint,
+        size: CGFloat,
+        accent: NSColor
+    ) {
+        let half = size / 2
+        // Start: filled accent square.
+        let startRect = CGRect(x: start.x - half, y: start.y - half, width: size, height: size)
+        accent.setFill()
+        NSBezierPath(rect: startRect).fill()
+        NSColor.white.setStroke()
+        let startStroke = NSBezierPath(rect: startRect.insetBy(dx: 0.5, dy: 0.5))
+        startStroke.lineWidth = 1
+        startStroke.stroke()
+
+        // End: hollow white square with accent border.
+        let endRect = CGRect(x: end.x - half, y: end.y - half, width: size, height: size)
+        NSColor.white.setFill()
+        NSBezierPath(rect: endRect).fill()
+        accent.setStroke()
+        let endStroke = NSBezierPath(rect: endRect.insetBy(dx: 0.5, dy: 0.5))
+        endStroke.lineWidth = 1
+        endStroke.stroke()
+    }
+
     /// Distance from `point` to the polyline (selection-local). Used for pencil hit-testing.
     static func distance(from point: CGPoint, toPolyline points: [CGPoint]) -> CGFloat {
         guard let first = points.first else { return .greatestFiniteMagnitude }
@@ -677,7 +1471,7 @@ enum AnnotationDrawing {
         return best
     }
 
-    private static func distance(from point: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> CGFloat {
+    static func distance(from point: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> CGFloat {
         let dx = b.x - a.x
         let dy = b.y - a.y
         let lengthSq = dx * dx + dy * dy
@@ -687,6 +1481,65 @@ enum AnnotationDrawing {
         let t = max(0, min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq))
         let proj = CGPoint(x: a.x + t * dx, y: a.y + t * dy)
         return hypot(point.x - proj.x, point.y - proj.y)
+    }
+
+    /// Hit-test arrow shaft + end caps (selection-local).
+    static func hitsArrow(
+        point: CGPoint,
+        start: CGPoint,
+        end: CGPoint,
+        style: AnnotationStyle,
+        caps: ArrowCaps,
+        tolerance: CGFloat
+    ) -> Bool {
+        if distance(from: point, toSegment: start, end) <= tolerance {
+            return true
+        }
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let length = hypot(dx, dy)
+        guard length > 0.5 else { return false }
+        let ux = dx / length
+        let uy = dy / length
+
+        if hitsCap(caps.start, tip: start, directionX: -ux, directionY: -uy, style: style, point: point, tolerance: tolerance) {
+            return true
+        }
+        if hitsCap(caps.end, tip: end, directionX: ux, directionY: uy, style: style, point: point, tolerance: tolerance) {
+            return true
+        }
+        return false
+    }
+
+    private static func hitsCap(
+        _ cap: ArrowCapStyle,
+        tip: CGPoint,
+        directionX: CGFloat,
+        directionY: CGFloat,
+        style: AnnotationStyle,
+        point: CGPoint,
+        tolerance: CGFloat
+    ) -> Bool {
+        switch cap {
+        case .none:
+            return false
+        case .bar:
+            let half = max(style.strokeWidth * 1.6, 4) + 2
+            let px = -directionY
+            let py = directionX
+            let a = CGPoint(x: tip.x + px * half, y: tip.y + py * half)
+            let b = CGPoint(x: tip.x - px * half, y: tip.y - py * half)
+            return distance(from: point, toSegment: a, b) <= tolerance
+        case .circle, .diamond, .openArrow, .openArrowWide, .arrow, .hollowArrow:
+            guard let path = capHitPath(
+                cap,
+                tip: tip,
+                directionX: directionX,
+                directionY: directionY,
+                strokeWidth: style.strokeWidth
+            ) else { return false }
+            return path.contains(point)
+        }
     }
 }
 
