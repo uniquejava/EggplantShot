@@ -5,6 +5,11 @@ import AppKit
 final class SelectionPanel: NSPanel {
     let screenFrame: CGRect
     private let overlayView: SelectionOverlayNSView
+    /// AppKit asks views to update the cursor; we forward so the controller can re-apply.
+    var onCursorUpdate: (() -> Void)? {
+        get { overlayView.onCursorUpdate }
+        set { overlayView.onCursorUpdate = newValue }
+    }
 
     init(screen: NSScreen, freezeImage: NSImage?) {
         self.screenFrame = screen.frame
@@ -87,6 +92,7 @@ final class SelectionOverlayNSView: NSView {
     var editingAnnotationID: UUID?
     /// Snipaste-style hover: dashed outline while the pointer is over a text mark.
     var hoveredTextID: UUID?
+    var onCursorUpdate: (() -> Void)?
 
     private let freezeImage: NSImage?
     private let accent = NSColor.systemBlue
@@ -102,6 +108,11 @@ final class SelectionOverlayNSView: NSView {
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
     override var isOpaque: Bool { freezeImage != nil }
+
+    override func resetCursorRects() {}
+    override func cursorUpdate(with event: NSEvent) {
+        onCursorUpdate?()
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         // Freeze backdrop (Snipaste-style). Without it, fall back to punch-through dim.

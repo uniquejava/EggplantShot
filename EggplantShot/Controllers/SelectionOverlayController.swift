@@ -92,7 +92,11 @@ final class SelectionOverlayController {
     private var textEditor: AnnotationTextView?
     private var textEditBaselineString: String = ""
     private var textEditBaselineRect: CGRect = .null
+    /// Chrome frame at the start of a live-move while editing (panel-local).
+    private var textChromeDragStartFrame: CGRect?
     private let textClickDragThreshold: CGFloat = 4
+    /// Extra hit outside the text hairline so the border is easy to grab.
+    private let textBorderOutwardSlop: CGFloat = 2
 
     private var annotations: [Annotation] { annotationHistory.document.marks }
     private var selectedAnnotationID: UUID? { annotationHistory.document.selectedID }
@@ -216,6 +220,9 @@ final class SelectionOverlayController {
             let cgImage = imageByScreenID[screen.displayID]
             let backdrop = cgImage.map { NSImage(cgImage: $0, size: screen.frame.size) }
             let panel = SelectionPanel(screen: screen, freezeImage: backdrop)
+            panel.onCursorUpdate = { [weak self] in
+                self?.reassertOverlayCursor()
+            }
             panels.append(panel)
             panel.orderFrontRegardless()
         }
@@ -265,13 +272,24 @@ final class SelectionOverlayController {
         let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved]
         if let mon = NSEvent.addLocalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             guard let self else { return event }
+            let point = NSEvent.mouseLocation
             // Pass through so the floating toolbar can receive clicks.
-            if let toolbar = self.toolbar, toolbar.containsGlobalPoint(NSEvent.mouseLocation) {
+            if let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
                 NSCursor.arrow.set()
                 return event
             }
-            // Pass through while interacting with the inline text editor.
-            if self.isPointInTextEditor(NSEvent.mouseLocation) {
+            // Always drive the cursor ourselves (incl. over the text editor).
+            if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
+                self.updateHoveredText(at: point)
+                self.updateOverlayCursor(at: point)
+            }
+            // Live-moving the editing chrome: swallow so NSTextView cannot steal the drag.
+            if self.isDraggingEditingText {
+                self.handleMouse(event)
+                return nil
+            }
+            // Typing / text-selection inside the editing frame only.
+            if self.shouldPassThroughToTextEditor(at: point, event: event) {
                 return event
             }
             self.handleMouse(event)
@@ -282,11 +300,20 @@ final class SelectionOverlayController {
 
         if let mon = NSEvent.addGlobalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             guard let self else { return }
-            if let toolbar = self.toolbar, toolbar.containsGlobalPoint(NSEvent.mouseLocation) {
+            let point = NSEvent.mouseLocation
+            if let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
                 NSCursor.arrow.set()
                 return
             }
-            if self.isPointInTextEditor(NSEvent.mouseLocation) {
+            if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
+                self.updateHoveredText(at: point)
+                self.updateOverlayCursor(at: point)
+            }
+            if self.isDraggingEditingText {
+                self.handleMouse(event)
+                return
+            }
+            if self.shouldPassThroughToTextEditor(at: point, event: event) {
                 return
             }
             self.handleMouse(event)
@@ -460,17 +487,17 @@ final class SelectionOverlayController {
     }
 
     private func handleRefineMouseDown(at point: CGPoint) {
-        // Finish any open text editor before starting a new gesture (unless clicking it).
-        if editingTextID != nil {
-            if let chrome = textChromeView,
-               let host = textEditorHost,
-               chrome.frame.contains(CGPoint(
-                x: point.x - host.screenFrame.minX,
-                y: point.y - host.screenFrame.minY
-               )) {
+        // Finish any open text editor before starting a new gesture — except live-move on its border.
+        if let editingID = editingTextID {
+            switch annotationPointerTarget(at: point) {
+            case .border(let id) where id == editingID:
+                break // fall through → annotateMove, stay editing
+            case .interior(let id) where id == editingID:
+                // Monitor should pass this through; ignore if it still arrives.
                 return
+            default:
+                endTextEditing(commit: true)
             }
-            endTextEditing(commit: true)
         }
 
         // Annotate tool: handle → resize; stroke/border → move; interior → draw (nested OK).
@@ -485,12 +512,19 @@ final class SelectionOverlayController {
                 resizeCursor(for: handle).set()
 
             case .border(let id):
-                guard let ann = annotations.first(where: { $0.id == id }) else { return }
+                guard var ann = annotations.first(where: { $0.id == id }) else { return }
+                // While editing, use the live chrome geometry as the move baseline.
+                if id == editingTextID, let live = editingTextGlobalRect() {
+                    ann.mapBoundingRect(to: toLocal(live))
+                    textChromeDragStartFrame = textChromeView?.frame
+                } else {
+                    textChromeDragStartFrame = nil
+                }
                 annotationHistory.select(id)
                 syncToolbar(from: ann)
                 annotationHistory.beginGesture()
                 dragKind = .annotateMove(id: id, start: ann, startPoint: point)
-                NSCursor.closedHand.set()
+                AnnotationCursors.move.set()
                 updateHighlight(showHandles: true)
 
             case .interior(let id):
@@ -545,7 +579,7 @@ final class SelectionOverlayController {
             resizeCursor(for: handle).set()
         } else if currentRect.contains(point) {
             dragKind = .move(startRect: currentRect, startPoint: point)
-            NSCursor.closedHand.set()
+            AnnotationCursors.move.set()
         }
     }
 
@@ -601,6 +635,10 @@ final class SelectionOverlayController {
             next.translate(by: CGSize(width: dx, height: dy))
             clampAnnotationInSelection(&next)
             updateAnnotation(id: id) { $0.payload = next.payload }
+            if id == editingTextID {
+                repositionEditingChrome(dragDelta: CGSize(width: dx, height: dy))
+                textEditBaselineRect = next.boundingRect
+            }
             updateHighlight(showHandles: true)
 
         case .annotateResize(let id, let handle, let start, let startPoint):
@@ -624,6 +662,7 @@ final class SelectionOverlayController {
         defer {
             dragKind = nil
             pendingWindowPick = nil
+            textChromeDragStartFrame = nil
         }
 
         if let pending = pendingWindowPick, phase == .idle {
@@ -914,10 +953,22 @@ final class SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// Priority: selected handles → text interior/border → any stroke/border (topmost) → draw.
+    /// Priority: editing text frame → selected handles → text interior/border → any stroke/border (topmost) → draw.
     /// Annotate tools work fullscreen (Snipaste), not only inside the blue selection.
     private func annotationPointerTarget(at point: CGPoint) -> AnnotationPointerTarget {
         guard annotateTool != .none else { return .outside }
+
+        // Live editor chrome wins over the (possibly stale) mark rect.
+        if let id = editingTextID, let live = editingTextGlobalRect() {
+            switch textFrameHit(at: point, globalRect: live) {
+            case .border:
+                return .border(id: id)
+            case .interior:
+                return .interior(id: id)
+            case .none:
+                break
+            }
+        }
 
         if let id = selectedAnnotationID,
            id != editingTextID,
@@ -960,11 +1011,15 @@ final class SelectionOverlayController {
     }
 
     /// Border strip is the move handle; interior is for typing.
-    /// Hits stay *inside* the frame (edge inclusive) so adjacent text marks can sit flush.
+    /// Inward strip (~3pt) plus a small outward slop so the hairline is easy to grab.
     private func textFrameHit(at point: CGPoint, globalRect: CGRect) -> TextFrameHit? {
-        guard globalRect.contains(point) else { return nil }
+        let hitBounds = globalRect.insetBy(dx: -textBorderOutwardSlop, dy: -textBorderOutwardSlop)
+        guard hitBounds.contains(point) else { return nil }
         let inset = min(3, min(globalRect.width, globalRect.height) / 4)
         if globalRect.width <= inset * 2 || globalRect.height <= inset * 2 {
+            return .border
+        }
+        if !globalRect.contains(point) {
             return .border
         }
         let inner = globalRect.insetBy(dx: inset, dy: inset)
@@ -1067,7 +1122,13 @@ final class SelectionOverlayController {
         }
     }
 
-    /// Selection-only refine: open hand to move; resize arrows on border / outside octants.
+    /// Re-apply the hit-tested cursor after AppKit clears it (caret blink, cursor rect invalidation).
+    func reassertOverlayCursor() {
+        guard phase == .refining, dragKind == nil else { return }
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
+
+    /// Selection-only refine: four-arrow move; resize arrows on border / outside octants.
     private func updateRefineCursor(at point: CGPoint) {
         if let toolbar, toolbar.containsGlobalPoint(point) {
             NSCursor.arrow.set()
@@ -1076,7 +1137,7 @@ final class SelectionOverlayController {
         if let handle = refineResizeHandle(at: point) {
             resizeCursor(for: handle).set()
         } else if currentRect.contains(point) {
-            NSCursor.openHand.set()
+            AnnotationCursors.move.set()
         } else {
             NSCursor.arrow.set()
         }
@@ -1096,7 +1157,7 @@ final class SelectionOverlayController {
         case .handle(_, let handle):
             resizeCursor(for: handle).set()
         case .border:
-            NSCursor.openHand.set()
+            AnnotationCursors.move.set()
         case .interior:
             NSCursor.iBeam.set()
         case .draw:
@@ -1403,6 +1464,7 @@ final class SelectionOverlayController {
         textEditor = nil
         textEditorHost = nil
         editingTextID = nil
+        textChromeDragStartFrame = nil
         TextEditingBridge.shared.owner = nil
     }
 
@@ -1732,13 +1794,59 @@ final class SelectionOverlayController {
 
     // MARK: - Drawing / toolbar
 
-    private func isPointInTextEditor(_ point: CGPoint) -> Bool {
-        guard let chrome = textChromeView, let host = textEditorHost else { return false }
-        let local = CGPoint(
-            x: point.x - host.screenFrame.minX,
-            y: point.y - host.screenFrame.minY
+    private var isDraggingEditingText: Bool {
+        guard let id = editingTextID,
+              case .annotateMove(let moveID, _, _) = dragKind
+        else { return false }
+        return moveID == id
+    }
+
+    /// Live chrome frame in Cocoa global coordinates while editing.
+    private func editingTextGlobalRect() -> CGRect? {
+        guard let chrome = textChromeView, let host = textEditorHost else { return nil }
+        return CGRect(
+            x: chrome.frame.minX + host.screenFrame.minX,
+            y: chrome.frame.minY + host.screenFrame.minY,
+            width: chrome.frame.width,
+            height: chrome.frame.height
         )
-        return chrome.frame.contains(local)
+    }
+
+    /// Pass mouse events to `NSTextView` only for interior typing/selection — not border move.
+    private func shouldPassThroughToTextEditor(at point: CGPoint, event: NSEvent) -> Bool {
+        guard let id = editingTextID else { return false }
+        if dragKind != nil { return false }
+        switch event.type {
+        case .leftMouseDown, .leftMouseDragged, .leftMouseUp:
+            if case .interior(let hitID) = annotationPointerTarget(at: point), hitID == id {
+                return true
+            }
+            return false
+        case .mouseMoved:
+            // Cursor already updated by the monitor; let the field editor see moves over interior.
+            if case .interior(let hitID) = annotationPointerTarget(at: point), hitID == id {
+                return true
+            }
+            return false
+        default:
+            return false
+        }
+    }
+
+    private func repositionEditingChrome(dragDelta: CGSize) {
+        guard let chrome = textChromeView,
+              let host = textEditorHost,
+              let startFrame = textChromeDragStartFrame
+        else { return }
+        var frame = startFrame
+        frame.origin.x += dragDelta.width
+        frame.origin.y += dragDelta.height
+        let screen = host.screenFrame
+        frame.origin.x = min(max(frame.origin.x, 0), max(0, screen.width - frame.width))
+        frame.origin.y = min(max(frame.origin.y, 0), max(0, screen.height - frame.height))
+        chrome.frame = frame
+        textEditor?.frame = chrome.bounds
+        chrome.needsDisplay = true
     }
 
     private func updateHighlight(showHandles: Bool) {

@@ -11,6 +11,11 @@ final class TextEditingBridge: NSObject, NSTextViewDelegate {
     func textDidChange(_ notification: Notification) {
         owner?.resizeTextEditorToFit()
     }
+
+    /// AppKit resets to arrow when cursor rects are invalidated (e.g. caret blink); re-apply ours.
+    func reassertOverlayCursor() {
+        owner?.reassertOverlayCursor()
+    }
 }
 
 /// 1 device-pixel stroke, matching the edit-frame hairline.
@@ -27,6 +32,11 @@ final class TextEditChromeView: NSView {
 
     override var isOpaque: Bool { false }
     override var wantsDefaultClipping: Bool { false }
+
+    override func resetCursorRects() {}
+    override func cursorUpdate(with event: NSEvent) {
+        TextEditingBridge.shared.reassertOverlayCursor()
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         let w = textHairlineWidth(in: self)
@@ -88,6 +98,12 @@ final class AnnotationTextView: NSTextView {
 
     override var undoManager: UndoManager? { isolatedUndoManager }
     override var isOpaque: Bool { false }
+
+    /// Overlay drives the cursor via hit-testing; do not let TextKit install an I-beam over the border.
+    override func resetCursorRects() {}
+    override func cursorUpdate(with event: NSEvent) {
+        TextEditingBridge.shared.reassertOverlayCursor()
+    }
 
     override var insertionPointColor: NSColor! {
         get { super.insertionPointColor }
@@ -222,13 +238,17 @@ final class AnnotationTextView: NSTextView {
         hairlineCaret.isHidden = false
         caretBlinkTimer?.invalidate()
         let timer = Timer(timeInterval: 0.53, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            guard self.shouldDrawInsertionPoint else {
-                self.hairlineCaret.isHidden = true
-                return
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard self.shouldDrawInsertionPoint else {
+                    self.hairlineCaret.isHidden = true
+                    return
+                }
+                self.caretOn.toggle()
+                self.hairlineCaret.isHidden = !self.caretOn
+                // Toggling the caret view invalidates cursor rects → AppKit arrow unless we re-apply.
+                TextEditingBridge.shared.reassertOverlayCursor()
             }
-            self.caretOn.toggle()
-            self.hairlineCaret.isHidden = !self.caretOn
         }
         RunLoop.main.add(timer, forMode: .common)
         caretBlinkTimer = timer

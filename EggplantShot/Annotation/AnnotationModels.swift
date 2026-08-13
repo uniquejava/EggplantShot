@@ -692,6 +692,10 @@ enum AnnotationDrawing {
 
 /// Cursors for annotate hit zones (draw / move / resize).
 enum AnnotationCursors {
+    /// System four-arrow “move” cursor (thin; hotspot at center so it doesn’t cover the target).
+    /// Loaded from HIServices — do not call private `NSCursor._moveCursor` (aborts on macOS 15+).
+    static let move: NSCursor = hiServicesMoveCursor() ?? drawnMoveCursor()
+
     /// White “＋” used inside the selection / annotation interior (shape draw mode).
     static let whitePlus: NSCursor = {
         let size: CGFloat = 24
@@ -787,6 +791,64 @@ enum AnnotationCursors {
             )).fill()
             ink.setFill()
             dot.fill()
+            return true
+        }
+        return NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
+    }
+
+    private static func hiServicesMoveCursor() -> NSCursor? {
+        let dir = "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/HIServices.framework/Versions/A/Resources/cursors/move"
+        let info = NSDictionary(contentsOfFile: "\(dir)/info.plist")
+        let hotx = (info?["hotx"] as? NSNumber)?.doubleValue ?? 9
+        let hoty = (info?["hoty"] as? NSNumber)?.doubleValue ?? 9
+        // Prefer PDF (vector); PNG is the 1x bitmap fallback Apple ships alongside it.
+        let image =
+            NSImage(contentsOfFile: "\(dir)/cursor.pdf")
+            ?? NSImage(contentsOfFile: "\(dir)/cursor_1only_.png")
+        guard let image else { return nil }
+        // PDF page is 18×18pt with hotspot (9,9); keep natural size so hotspot stays centered.
+        if abs(image.size.width - 18) > 0.5 || abs(image.size.height - 18) > 0.5 {
+            image.size = NSSize(width: 18, height: 18)
+        }
+        return NSCursor(image: image, hotSpot: NSPoint(x: hotx, y: hoty))
+    }
+
+    /// Drawn four-arrow fallback if HIServices assets are unavailable.
+    private static func drawnMoveCursor() -> NSCursor {
+        let size: CGFloat = 20
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            let mid = NSPoint(x: rect.midX, y: rect.midY)
+            let arm: CGFloat = 7
+            let head: CGFloat = 3
+
+            let path = NSBezierPath()
+            // Cross
+            path.move(to: NSPoint(x: mid.x - arm, y: mid.y))
+            path.line(to: NSPoint(x: mid.x + arm, y: mid.y))
+            path.move(to: NSPoint(x: mid.x, y: mid.y - arm))
+            path.line(to: NSPoint(x: mid.x, y: mid.y + arm))
+            // Arrow heads
+            path.move(to: NSPoint(x: mid.x - arm + head, y: mid.y - head))
+            path.line(to: NSPoint(x: mid.x - arm, y: mid.y))
+            path.line(to: NSPoint(x: mid.x - arm + head, y: mid.y + head))
+            path.move(to: NSPoint(x: mid.x + arm - head, y: mid.y - head))
+            path.line(to: NSPoint(x: mid.x + arm, y: mid.y))
+            path.line(to: NSPoint(x: mid.x + arm - head, y: mid.y + head))
+            path.move(to: NSPoint(x: mid.x - head, y: mid.y - arm + head))
+            path.line(to: NSPoint(x: mid.x, y: mid.y - arm))
+            path.line(to: NSPoint(x: mid.x + head, y: mid.y - arm + head))
+            path.move(to: NSPoint(x: mid.x - head, y: mid.y + arm - head))
+            path.line(to: NSPoint(x: mid.x, y: mid.y + arm))
+            path.line(to: NSPoint(x: mid.x + head, y: mid.y + arm - head))
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .miter
+
+            path.lineWidth = 3
+            NSColor.black.withAlphaComponent(0.55).setStroke()
+            path.stroke()
+            path.lineWidth = 1.5
+            NSColor.white.setStroke()
+            path.stroke()
             return true
         }
         return NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
