@@ -2516,32 +2516,19 @@ final class MosaicIntensityPreviewView: NSView {
         let intensity = MosaicStyle.clampedIntensity(intensity)
         let radius = MosaicStyle.blurRadiusPoints(forIntensity: intensity)
 
-        let useSoft = intensity >= MosaicStyle.softDownsampleIntensityThreshold
-        let down: CGFloat = useSoft ? 0.5 : 1
-        let working = down < 1
-            ? Self.sampleImage.transformed(by: CGAffineTransform(scaleX: down, y: down))
-            : Self.sampleImage
         let filter = CIFilter(name: "CIGaussianBlur")
-        filter?.setValue(working.clampedToExtent(), forKey: kCIInputImageKey)
-        filter?.setValue(max(radius * down * 1.2, 0.35), forKey: kCIInputRadiusKey)
+        filter?.setValue(Self.sampleImage.clampedToExtent(), forKey: kCIInputImageKey)
+        filter?.setValue(max(radius * 1.2, 0.35), forKey: kCIInputRadiusKey)
 
         let shapePath = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
 
         NSGraphicsContext.current?.saveGraphicsState()
         shapePath.addClip()
-        let workingExtent = working.extent
-        if let blurred = filter?.outputImage?.cropped(to: workingExtent) {
-            let up: CIImage = down < 1
-                ? blurred.transformed(by: CGAffineTransform(scaleX: 1 / down, y: 1 / down))
-                : blurred
-            let extent = Self.sampleImage.extent
-            if let cg = Self.ciContext.createCGImage(up.cropped(to: extent), from: extent) {
-                NSImage(cgImage: cg, size: bounds.size)
-                    .draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
-            } else {
-                NSColor(calibratedWhite: 0.85, alpha: 1).setFill()
-                shapePath.fill()
-            }
+        let extent = Self.sampleImage.extent
+        if let blurred = filter?.outputImage?.cropped(to: extent),
+           let cg = Self.ciContext.createCGImage(blurred, from: extent) {
+            NSImage(cgImage: cg, size: bounds.size)
+                .draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
         } else {
             NSColor(calibratedWhite: 0.85, alpha: 1).setFill()
             shapePath.fill()

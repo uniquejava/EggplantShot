@@ -356,13 +356,13 @@ How to try: Pin a snip with shapes → F1 again → press `,` → edit → Pin (
 
 New tools add a `AnnotationPayload` case + draw/hit-test; history / store / confirm paths stay unchanged.
 
-Pencil: `.pencil(points:style:)` — freehand polyline (dense live sample + tip poll); Shift → straight any angle; no resize chrome / no auto-select after stroke.
+Pencil: `.pencil(points:style:)` — freehand polyline (mouse-drag ~2pt samples; **RDP simplify on mouse-up**); Shift → straight any angle; no resize chrome / no auto-select after stroke.
 
 Arrow: `.arrow(start:end:style:caps:)` — segment + Snipaste end-caps; Shift → 45°; endpoint handles; disk `startCap` / `endCap`.
 
 Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
 
-Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
+Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius, linear ~0.7…14 pt); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
 Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **multiply** color fill (Snipaste highlighter; near-white → sourceOver wash) instead of blur; region chrome = solid while draw/move/resize, handles-only when idle, dashed on non-selected hover; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
 

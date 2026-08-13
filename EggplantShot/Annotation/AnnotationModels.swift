@@ -57,17 +57,12 @@ struct MosaicStyle: Equatable {
         min(max(value, intensityRange.lowerBound), intensityRange.upperBound)
     }
 
-    /// Maps Snipaste intensity 3…24 → gaussian radius in **points**.
-    /// Low end (3…5) stays light so body text remains mostly readable; mid/high ramps harder.
+    /// Maps Snipaste intensity 3…24 → gaussian radius in **points** (simple linear).
     static func blurRadiusPoints(forIntensity intensity: CGFloat) -> CGFloat {
         let t = (clampedIntensity(intensity) - intensityRange.lowerBound)
             / (intensityRange.upperBound - intensityRange.lowerBound)
-        // Ease-in: ≈ 0.35 … 20 pt (t=0→0.35, t≈0.1→~0.7, t≈0.33→~3.2, t=1→20)
-        return 0.35 + pow(t, 1.45) * 19.65
+        return 0.7 + t * 13.3 // ≈ 0.7 … 14
     }
-
-    /// Half-res soft pass only above this intensity; below it, full-res keeps fine text.
-    static let softDownsampleIntensityThreshold: CGFloat = 8
 }
 
 /// Marker / highlighter style (brush size for freehand + fill color). Stored on the mark; prefs mirror last-used.
@@ -1416,6 +1411,56 @@ struct Annotation: Equatable {
     }
 }
 
+/// Ramer–Douglas–Peucker polyline simplify (mouse-up). Live sampling stays dense; commit drops near-colinear points.
+enum PolylineSimplifier {
+    static func simplify(_ points: [CGPoint], epsilon: CGFloat) -> [CGPoint] {
+        guard points.count > 2, epsilon > 0 else { return points }
+        var keep = [Bool](repeating: false, count: points.count)
+        keep[0] = true
+        keep[points.count - 1] = true
+        simplifySegment(points, epsilon: epsilon, start: 0, end: points.count - 1, keep: &keep)
+        return zip(points, keep).compactMap { point, keepFlag in keepFlag ? point : nil }
+    }
+
+    private static func simplifySegment(
+        _ points: [CGPoint],
+        epsilon: CGFloat,
+        start: Int,
+        end: Int,
+        keep: inout [Bool]
+    ) {
+        guard end > start + 1 else { return }
+        let a = points[start]
+        let b = points[end]
+        var maxDist: CGFloat = 0
+        var maxIndex = start
+        for i in (start + 1)..<end {
+            let d = perpendicularDistance(points[i], segmentFrom: a, to: b)
+            if d > maxDist {
+                maxDist = d
+                maxIndex = i
+            }
+        }
+        if maxDist > epsilon {
+            keep[maxIndex] = true
+            simplifySegment(points, epsilon: epsilon, start: start, end: maxIndex, keep: &keep)
+            simplifySegment(points, epsilon: epsilon, start: maxIndex, end: end, keep: &keep)
+        }
+    }
+
+    private static func perpendicularDistance(_ p: CGPoint, segmentFrom a: CGPoint, to b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let lenSq = dx * dx + dy * dy
+        if lenSq < 1e-8 {
+            return hypot(p.x - a.x, p.y - a.y)
+        }
+        let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq
+        let proj = CGPoint(x: a.x + t * dx, y: a.y + t * dy)
+        return hypot(p.x - proj.x, p.y - proj.y)
+    }
+}
+
 enum AnnotationDrawing {
     /// Backdrop used to sample pixels for mosaic / blur marks.
     struct MosaicSampleContext {
@@ -1463,6 +1508,7 @@ enum AnnotationDrawing {
     }
 
     /// Renders marks onto a transparent layer so eraser `destinationOut` punches annotations only.
+    /// Mosaic samples the freeze/base image directly (simple path).
     static func renderMarksLayer(
         _ annotations: [Annotation],
         size: CGSize,
@@ -2246,15 +2292,14 @@ enum AnnotationDrawing {
         }
     }
 
-    /// Gaussian-blur the backdrop under a freehand brush or region mask (P4).
+    /// Gaussian-blur the freeze/base under a freehand brush or region mask (simple sample path).
     private static func drawMosaic(
         geometry: MosaicGeometry,
         style: MosaicStyle,
         drawOrigin: CGPoint,
         sample: MosaicSampleContext?
     ) {
-        let intensity = MosaicStyle.clampedIntensity(style.intensity)
-        let radius = MosaicStyle.blurRadiusPoints(forIntensity: intensity)
+        let radius = MosaicStyle.blurRadiusPoints(forIntensity: style.intensity)
 
         switch geometry {
         case .stroke(let localPoints):
@@ -2265,14 +2310,12 @@ enum AnnotationDrawing {
                 drawMosaicFallbackStroke(points: offset, brushWidth: brush)
                 return
             }
-            // ≥3σ pad so neighbors outside the brush bleed into the blur (Snipaste-like).
-            let pad = brush / 2 + radius * 3.5
+            let pad = brush / 2 + radius * 2
             let hull = Annotation.bounds(of: localPoints).insetBy(dx: -pad, dy: -pad)
             drawBlurredMask(
                 localMask: mosaicStrokeMask(localPoints: localPoints, brushWidth: brush),
                 localHull: hull,
                 radius: radius,
-                intensity: intensity,
                 drawOrigin: drawOrigin,
                 sample: sample
             ) {
@@ -2286,7 +2329,7 @@ enum AnnotationDrawing {
                 drawMosaicFallbackRegion(rect: localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y), mode: mode)
                 return
             }
-            let pad = radius * 3.5
+            let pad = radius * 2
             let hull = localRect.insetBy(dx: -pad, dy: -pad)
             let mask: NSBezierPath
             switch mode {
@@ -2299,7 +2342,6 @@ enum AnnotationDrawing {
                 localMask: mask,
                 localHull: hull,
                 radius: radius,
-                intensity: intensity,
                 drawOrigin: drawOrigin,
                 sample: sample
             ) {
@@ -2315,7 +2357,6 @@ enum AnnotationDrawing {
         localMask: NSBezierPath,
         localHull: CGRect,
         radius: CGFloat,
-        intensity: CGFloat,
         drawOrigin: CGPoint,
         sample: MosaicSampleContext,
         fallback: () -> Void
@@ -2329,12 +2370,7 @@ enum AnnotationDrawing {
         let crop = sampleHull.intersection(imageBounds)
         guard crop.width >= 1, crop.height >= 1 else { return }
 
-        guard let blurred = blurredCrop(
-            from: sample.image,
-            crop: crop,
-            radius: radius,
-            intensity: intensity
-        ) else {
+        guard let blurred = blurredCrop(from: sample.image, crop: crop, radius: radius) else {
             fallback()
             return
         }
@@ -2407,12 +2443,11 @@ enum AnnotationDrawing {
 
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-    /// Soft gaussian: full-res at low intensity (keep text), half-res + clamp above threshold.
+    /// Crop → `CIGaussianBlur` → image (samples freeze/base pixels only).
     private static func blurredCrop(
         from image: NSImage,
         crop: CGRect,
-        radius: CGFloat,
-        intensity: CGFloat
+        radius: CGFloat
     ) -> NSImage? {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             return nil
@@ -2431,22 +2466,12 @@ enum AnnotationDrawing {
         else { return nil }
 
         let ci = CIImage(cgImage: cropped)
-        let useSoftDownsample = intensity >= MosaicStyle.softDownsampleIntensityThreshold
-        let down: CGFloat = useSoftDownsample ? 0.5 : 1
-        let working = down < 1
-            ? ci.transformed(by: CGAffineTransform(scaleX: down, y: down))
-            : ci
         let filter = CIFilter(name: "CIGaussianBlur")
-        filter?.setValue(working.clampedToExtent(), forKey: kCIInputImageKey)
-        filter?.setValue(max(radius * pixelScale * down, 0.35), forKey: kCIInputRadiusKey)
-        let workingExtent = working.extent
-        guard let blurredWorking = filter?.outputImage?.cropped(to: workingExtent) else { return nil }
-
-        let up: CIImage = down < 1
-            ? blurredWorking.transformed(by: CGAffineTransform(scaleX: 1 / down, y: 1 / down))
-            : blurredWorking
-        let outExtent = ci.extent
-        guard let outCG = ciContext.createCGImage(up.cropped(to: outExtent), from: outExtent)
+        filter?.setValue(ci.clampedToExtent(), forKey: kCIInputImageKey)
+        filter?.setValue(max(radius * pixelScale, 0.35), forKey: kCIInputRadiusKey)
+        let extent = ci.extent
+        guard let blurred = filter?.outputImage?.cropped(to: extent),
+              let outCG = ciContext.createCGImage(blurred, from: extent)
         else { return nil }
 
         return NSImage(cgImage: outCG, size: crop.size)
@@ -2687,9 +2712,14 @@ enum AnnotationCursors {
         return NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
     }()
 
-    /// Transparent cursor while pencil is stroking (Snipaste: crosshair vanishes; only the ink shows).
+    /// Near-invisible cursor while pencil is stroking (Snipaste: reticle vanishes; only the ink shows).
+    /// A fully transparent image often becomes a black blob under AppKit — keep a tiny alpha.
     static let hidden: NSCursor = {
-        let image = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { _ in true }
+        let image = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { rect in
+            NSColor.white.withAlphaComponent(0.01).setFill()
+            rect.fill()
+            return true
+        }
         return NSCursor(image: image, hotSpot: .zero)
     }()
 

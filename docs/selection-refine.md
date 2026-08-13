@@ -74,12 +74,12 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Sub-toolbar: stroke + line-style + color (no fill / kind).
 - Color reticle; mouse-down hides cursor. Freehand; Shift → straight any angle.
 - No resize chrome; no auto-select after stroke. Pencil strokes always draw-through under any annotate tool (keep reticle / eraser tip); hold **⌘** for temporary move (four-arrow + drag).
-- Deferred: if dense sampling (~0.15pt + 120Hz) lags or bloats history, simplify polyline on mouse-up (RDP).
+- Live sampling on mouse-drag only (~2pt spacing; no 120Hz tip poll); **mouse-up** runs RDP simplify so many strokes don’t bloat history / mosaic re-samples.
 
 ### Marker
 
 - Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to highlight an area) | **color card** (preview 24 + palette 2×10) — same layout as mosaic, with color instead of blur intensity.
-- Freehand: stroke sampling; Shift → straight; mouse-down hides cursor. No resize chrome / no auto-select after stroke.
+- Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
 - Region: drag like mosaic; Shift → square / circle; entire rect/oval is highlighted. **Edit chrome**: while drawing / moving / resizing → **1 device-pixel solid** contrast hairline; after mouse-up (selected idle) → **handles only** (no border); **mouseover** on a non-selected region → dashed contrast outline (like text hover). Hit mark to move; handles resize.
 - Effect: **multiply** blend (Snipaste highlighter — keeps contrast on dark UIs; light glyphs tint brightly; black occludes). Near-white swatches fall back to sourceOver wash. **Vector** stroke/region data only (P4). Default color yellow.
 - Toolbar icon: SF Symbol `paintbrush.pointed`.
@@ -88,15 +88,16 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ### Mosaic
 
 - Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to blur an area) | intensity **3…24** with live blur preview left of the slider.
-- Freehand: stroke sampling; Shift → straight; mouse-down hides cursor. No resize chrome / no auto-select after stroke.
+- Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
 - Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
-- Effect: **gaussian blur** (`CIGaussianBlur`; full-res below intensity 8, half-res soft pass above) sampled from freeze/base at draw time — **vector stroke/region data only** (P4; never mutates `baseImage`). Intensity 3…24 maps to ~0.35…20 pt (ease-in so 3…5 stay readable); sample pad ≈ 3.5σ.
+- Effect: **gaussian blur** of freeze/base under the brush/region (`CIGaussianBlur`; linear intensity 3…24 → ~0.7…14 pt). Simple path: crop → blur → clip to stroke/region. **Vector** stroke/region data only (P4; never mutates `baseImage`).
+- Hit: mosaic marks draw-through under any annotate tool (no move hand over blurred areas); hold **⌘** to move (region handles still work when selected).
 - No color palette.
 
 ### Eraser
 
 - Sub-toolbar: same first **5** icons as mosaic — brush **14 / 18 / 24** | **rect / oval region** (no intensity / color).
-- Freehand: stroke sampling; Shift → straight; mouse-down hides cursor (tip temporarily reuses mosaic brush outline; concentric-ring tip deferred). No resize chrome / no auto-select after stroke.
+- Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking (tip temporarily reuses mosaic brush outline; concentric-ring tip deferred). No resize chrome / no auto-select after stroke.
 - Region: drag like mosaic; Shift → square / circle; auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles.
 - Effect: punches **annotation marks only** (`destinationOut` on a marks layer composited over the freeze/base) — never erases image pixels (P4). Order matters: later marks redraw on top of earlier erasures.
 - Hit: eraser marks draw-through under any annotate tool (no move hand over erased areas); hold **⌘** to move.

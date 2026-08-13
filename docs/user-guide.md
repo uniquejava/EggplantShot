@@ -38,18 +38,18 @@ Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recogn
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
 - **Esc** while editing text ends the editor only; otherwise Esc cancels the whole snip.
 
-### Pencil — move vs draw
+### Pencil / mosaic / eraser — move vs draw
 
-While the pencil tool is active, hovering an existing pencil stroke **keeps the draw reticle** so you can trace along an edge without accidentally grabbing the stroke.
+Hovering an existing **pencil**, **mosaic (blur)**, or **eraser** mark **keeps the draw cursor** under any annotate tool, so you can keep painting without accidentally grabbing the mark.
 
-To **move** a pencil stroke without switching tools:
+To **move** one of those marks without switching tools:
 
 1. Hold **⌘**
-2. Pointer over the stroke → four-arrow cursor
+2. Pointer over the mark → four-arrow cursor
 3. Drag to reposition
 4. Release **⌘** to draw again
 
-(Other annotate tools can still click a pencil stroke to move it.)
+(Selected mosaic / eraser **regions** still expose resize handles; body move needs **⌘**.)
 
 ### Other handy modifiers
 
@@ -57,6 +57,7 @@ To **move** a pencil stroke without switching tools:
 |---------|----------|--------|
 | Shape / mosaic region | **Shift** | Square / circle |
 | Arrow / pencil / freehand mosaic | **Shift** | Straight line (arrow also 45° snap) |
+| Pencil / mosaic / eraser marks | **⌘** | Temporary move |
 
 ## History while snipping
 

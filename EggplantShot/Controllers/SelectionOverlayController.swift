@@ -121,11 +121,9 @@ final class SelectionOverlayController {
     private let selectionEdgeHit: CGFloat = 8
     private let minSelection: CGFloat = 2
     private let minAnnotation: CGFloat = 4
-    /// Freehand sample distance (points). Dense enough to turn freely without
-    /// the old rubber-band feel; 120Hz tip polling fills gaps between drag events.
-    private let pencilSampleSpacing: CGFloat = 0.15
-    /// High-frequency tip polling while stroking.
-    private var pencilSampleTimer: Timer?
+    /// Freehand sample distance (points). Coarse enough to avoid point bloat; mouse-drag
+    /// events alone drive the stroke (no high-Hz tip poll).
+    private let pencilSampleSpacing: CGFloat = 2
     /// Movement past this distance abandons window pick and starts free drag.
     private let windowPickDragThreshold: CGFloat = 4
     /// Half-width of the annotation border hit corridor (beyond stroke).
@@ -319,7 +317,6 @@ final class SelectionOverlayController {
         hoveredTextID = nil
         hoveredMarkerRegionID = nil
         discardTextEditor()
-        stopPencilSampling()
         historyCursor = nil
         playbackBaseImage = nil
         phase = .idle
@@ -460,7 +457,7 @@ final class SelectionOverlayController {
             eventMonitors.append(mon)
         }
 
-        // ⌘ up/down while pencil is armed: refresh move-vs-draw cursor without waiting for mouse move.
+        // ⌘ up/down: refresh move-vs-draw cursor over pencil / mosaic / eraser without waiting for mouse move.
         let flagsMask: NSEvent.EventTypeMask = .flagsChanged
         if let mon = NSEvent.addLocalMonitorForEvents(matching: flagsMask, handler: { [weak self] event in
             self?.handleAnnotateModifierFlagsChanged()
@@ -475,9 +472,9 @@ final class SelectionOverlayController {
         }
     }
 
-    /// Pencil + ⌘: temporary move over existing pencil strokes (cursor updates on key alone).
+    /// ⌘ over pencil / mosaic / eraser marks: temporary move (cursor updates on key alone).
     private func handleAnnotateModifierFlagsChanged() {
-        guard phase == .refining, annotateTool == .pencil, dragKind == nil else { return }
+        guard phase == .refining, annotateTool != .none, dragKind == nil else { return }
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
@@ -648,14 +645,17 @@ final class SelectionOverlayController {
                 let local = toLocal(point)
                 dragKind = .annotateDraw(startLocal: local)
                 draftAnnotation = makeDraftAnnotation(startingAt: local)
-                // Pencil / freehand mosaic / marker / eraser: hide cursor so only the brush tip shows.
-                if annotateTool == .pencil
-                    || (annotateTool == .mosaic && mosaicDrawMode == .freehand)
-                    || (annotateTool == .marker && markerDrawMode == .freehand)
-                    || (annotateTool == .eraser && eraserDrawMode == .freehand)
-                {
+                // Pencil: hide reticle so only the ink shows.
+                // Mosaic / marker / eraser: keep the translucent brush tip while stroking
+                // (a fully hidden tip looks like a black blob on macOS).
+                if annotateTool == .pencil {
                     AnnotationCursors.hidden.set()
-                    startPencilSampling()
+                } else if annotateTool == .mosaic, mosaicDrawMode == .freehand {
+                    AnnotationCursors.mosaicCrosshair(brushWidth: mosaicStyle.brushWidth).set()
+                } else if annotateTool == .marker, markerDrawMode == .freehand {
+                    AnnotationCursors.mosaicCrosshair(brushWidth: markerStyle.brushWidth).set()
+                } else if annotateTool == .eraser, eraserDrawMode == .freehand {
+                    AnnotationCursors.mosaicCrosshair(brushWidth: eraserStyle.brushWidth).set()
                 } else {
                     AnnotationCursors.whitePlus.set()
                 }
@@ -823,7 +823,6 @@ final class SelectionOverlayController {
         case .refining:
             switch dragKind {
             case .annotateDraw:
-                stopPencilSampling()
                 if let draft = draftAnnotation {
                     draftAnnotation = nil
                     if isDraftWorthKeeping(draft) {
@@ -1043,38 +1042,6 @@ final class SelectionOverlayController {
         updateHighlight(showHandles: true)
     }
 
-    /// Poll mouse while pencil is down so the stroke tracks between sparse drag events.
-    private func startPencilSampling() {
-        stopPencilSampling()
-        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.samplePencilAtMouse()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        pencilSampleTimer = timer
-    }
-
-    private func stopPencilSampling() {
-        pencilSampleTimer?.invalidate()
-        pencilSampleTimer = nil
-    }
-
-    private func samplePencilAtMouse() {
-        guard case .annotateDraw(let startLocal) = dragKind,
-              annotateTool == .pencil
-                || (annotateTool == .mosaic && mosaicDrawMode == .freehand)
-                || (annotateTool == .marker && markerDrawMode == .freehand)
-                || (annotateTool == .eraser && eraserDrawMode == .freehand)
-        else {
-            stopPencilSampling()
-            return
-        }
-        // Shift-straight is endpoint-only; polling would fight it.
-        if NSEvent.modifierFlags.contains(.shift) { return }
-        appendPencilOrShapeDraft(startLocal: startLocal, globalPoint: NSEvent.mouseLocation)
-    }
-
     private func updatedDraft(from start: CGPoint, to end: CGPoint) -> Annotation {
         switch annotateTool {
         case .pencil:
@@ -1084,7 +1051,7 @@ final class SelectionOverlayController {
                 // Straight line at any angle (start → tip); no 45° quantization.
                 return Annotation(points: [start, end], style: style)
             }
-            // Append densely — never rubber-band a long segment from the last committed point.
+            // Append on mouse-drag (~2pt spacing) — not sub-pixel / high-Hz.
             var points = draftAnnotation?.points ?? [start]
             if points.isEmpty { points = [start] }
             if let last = points.last {
@@ -1288,25 +1255,39 @@ final class SelectionOverlayController {
         case .arrow(let start, let end, let style, let caps):
             return Annotation(start: start, end: end, style: style, caps: caps)
         case .pencil(let points, let style):
-            return Annotation(points: points, style: style)
+            // Live: ~2pt on mouse-drag. Commit: RDP so many strokes don’t bloat mosaic re-samples.
+            let epsilon = max(style.strokeWidth * 0.15, 0.5)
+            return Annotation(points: PolylineSimplifier.simplify(points, epsilon: epsilon), style: style)
         case .mosaic(let geometry, let style):
             switch geometry {
             case .stroke(let points):
-                return Annotation(mosaicPoints: points, mosaicStyle: style)
+                let epsilon = max(style.brushWidth * 0.04, 0.6)
+                return Annotation(
+                    mosaicPoints: PolylineSimplifier.simplify(points, epsilon: epsilon),
+                    mosaicStyle: style
+                )
             case .region(let mode, let rect):
                 return Annotation(mosaicRegion: mode, rect: rect, mosaicStyle: style)
             }
         case .marker(let geometry, let style):
             switch geometry {
             case .stroke(let points):
-                return Annotation(markerPoints: points, markerStyle: style)
+                let epsilon = max(style.brushWidth * 0.04, 0.6)
+                return Annotation(
+                    markerPoints: PolylineSimplifier.simplify(points, epsilon: epsilon),
+                    markerStyle: style
+                )
             case .region(let mode, let rect):
                 return Annotation(markerRegion: mode, rect: rect, markerStyle: style)
             }
         case .eraser(let geometry, let style):
             switch geometry {
             case .stroke(let points):
-                return Annotation(eraserPoints: points, eraserStyle: style)
+                let epsilon = max(style.brushWidth * 0.04, 0.6)
+                return Annotation(
+                    eraserPoints: PolylineSimplifier.simplify(points, epsilon: epsilon),
+                    eraserStyle: style
+                )
             case .region(let mode, let rect):
                 return Annotation(eraserRegion: mode, rect: rect, eraserStyle: style)
             }
@@ -1402,9 +1383,9 @@ final class SelectionOverlayController {
                 }
                 continue
             }
-            // Pencil / eraser marks always draw-through while any annotate tool is armed
-            // (keep tool cursor over strokes / erased areas). Hold ⌘ for temporary move.
-            if (ann.isPencil || ann.isEraser), !NSEvent.modifierFlags.contains(.command) {
+            // Pencil / mosaic / eraser marks always draw-through while any annotate tool is armed
+            // (keep tool cursor over strokes / blurred / erased areas). Hold ⌘ for temporary move.
+            if (ann.isPencil || ann.isMosaic || ann.isEraser), !NSEvent.modifierFlags.contains(.command) {
                 continue
             }
             if isOnAnnotationStroke(ann, at: point) {
