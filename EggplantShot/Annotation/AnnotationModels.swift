@@ -711,8 +711,8 @@ struct MagnifierStyle: Equatable {
     )
 
     /// Default lens / source scale when creating a concentric pair.
-    /// Slightly above 2× so source vs lens size reads clearly when nested.
-    static let defaultScale: CGFloat = 2.5
+    /// 2× matches common screenshot-magnifier defaults (clear double without over-zoom).
+    static let defaultScale: CGFloat = 2
 
     mutating func clamp() {
         strokeWidth = StrokeWidthOption.matching(strokeWidth).points
@@ -2815,7 +2815,17 @@ enum AnnotationDrawing {
     ) {
         let sourceDraw = source.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
         let lensDraw = lens.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
-        guard sourceDraw.width >= 1, sourceDraw.height >= 1, lensDraw.width >= 1, lensDraw.height >= 1 else {
+        guard sourceDraw.width >= 1, sourceDraw.height >= 1 else { return }
+
+        // Draft: source only — solid palette stroke; lens + dashed source appear on mouse-up.
+        guard lensDraw.width >= 1, lensDraw.height >= 1 else {
+            style.color.setStroke()
+            strokeMagnifierFrame(
+                kind: kind,
+                rect: sourceDraw,
+                lineWidth: style.strokeWidth,
+                dash: []
+            )
             return
         }
 
@@ -2841,11 +2851,19 @@ enum AnnotationDrawing {
             }
         }
 
-        // Source border: thin dashed where inside the lens, thick solid where outside
-        // (crossing → hybrid per segment). Lens always uses the thick solid stroke.
-        style.color.setStroke()
-        drawMagnifierSourceBorder(kind: kind, source: sourceDraw, lens: lensDraw, style: style)
+        // Source border: dashed contrast hairline inside the lens (not palette);
+        // thick palette stroke where source sits outside the lens.
+        let dashColor = magnifierSourceDashColor(sourceLocal: source, sample: sample)
+        drawMagnifierSourceBorder(
+            kind: kind,
+            source: sourceDraw,
+            lens: lensDraw,
+            style: style,
+            dashColor: dashColor,
+            solidColor: style.color
+        )
 
+        style.color.setStroke()
         let inset = style.strokeWidth / 2
         let lensPath = magnifierPath(kind: kind, in: lensDraw.insetBy(dx: inset, dy: inset))
         lensPath.lineWidth = style.strokeWidth
@@ -2862,12 +2880,33 @@ enum AnnotationDrawing {
         }
     }
 
-    /// Source outline relative to the lens: hairline dashed inside, thick solid outside.
+    /// Contrast hairline for the nested source dash (black on light / white on dark).
+    private static func magnifierSourceDashColor(
+        sourceLocal: CGRect,
+        sample: MosaicSampleContext?
+    ) -> NSColor {
+        guard let sample else {
+            return NSColor.black.withAlphaComponent(0.65)
+        }
+        let imagePoint = CGPoint(
+            x: sourceLocal.midX + sample.selectionOriginInImage.x,
+            y: sourceLocal.midY + sample.selectionOriginInImage.y
+        )
+        let luminance = ContrastChrome.averageLuminance(
+            in: sample.image,
+            aroundPointInImageSpace: imagePoint
+        ) ?? 0.75
+        return ContrastChrome.hairline(onLuminance: luminance)
+    }
+
+    /// Source outline relative to the lens: contrast dashed inside, palette solid outside.
     private static func drawMagnifierSourceBorder(
         kind: ShapeKind,
         source: CGRect,
         lens: CGRect,
-        style: MagnifierStyle
+        style: MagnifierStyle,
+        dashColor: NSColor,
+        solidColor: NSColor
     ) {
         guard let ctx = NSGraphicsContext.current else { return }
         let deviceScale = max(abs(ctx.cgContext.userSpaceToDeviceSpaceTransform.a), 1)
@@ -2875,9 +2914,10 @@ enum AnnotationDrawing {
         let dash: [CGFloat] = [3, 2]
         let lensClip = magnifierPath(kind: kind, in: lens)
 
-        // Portion inside (or on) the lens → very thin dashed.
+        // Portion inside (or on) the lens → very thin dashed contrast chrome.
         ctx.saveGraphicsState()
         lensClip.addClip()
+        dashColor.setStroke()
         strokeMagnifierFrame(
             kind: kind,
             rect: source,
@@ -2886,7 +2926,7 @@ enum AnnotationDrawing {
         )
         ctx.restoreGraphicsState()
 
-        // Portion outside the lens → thick solid (toolbar stroke width).
+        // Portion outside the lens → thick solid palette stroke.
         ctx.saveGraphicsState()
         let pad = max(style.strokeWidth, 4) * 2 + 8
         let exteriorBounds = source.union(lens).insetBy(dx: -pad, dy: -pad)
@@ -2894,6 +2934,7 @@ enum AnnotationDrawing {
         exteriorClip.append(lensClip)
         exteriorClip.windingRule = .evenOdd
         exteriorClip.addClip()
+        solidColor.setStroke()
         strokeMagnifierFrame(
             kind: kind,
             rect: source,

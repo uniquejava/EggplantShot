@@ -10,6 +10,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ## Shared rules (all annotate tools)
 
 - Annotate works on the **full freeze overlay**, not only inside the blue selection.
+- **Crop resize chrome stays** while any annotate tool is selected (8 handles on the blue export rect). Mark chrome wins on overlap; otherwise crop edge resize / outside-edge expand still work. Interior of the crop still draws / places marks (does not move the selection).
 - Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
 - Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
 - Confirm composites marks onto the crop, then tears down the overlay.
@@ -128,11 +129,11 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 ### Magnifier
 
-- Drag defines the **source** sample rect; on mouse-up, a concentric **lens** is created at the current **scale** (default **2.5×**, same center). Shift → square/circle source.
+- Drag defines the **source** sample rect with a **solid palette** stroke (no lens yet); on mouse-up, a concentric **lens** appears at the current **scale** (default **2×**) and the source outline switches to the nested **dashed** style. Shift → square/circle source.
 - Zoom is **only** via the **scale slider** (1.00…6.00, two decimals): resizes the lens about its center; source size stays put. **Lens resize** changes selection area only — source scales proportionally about its center so zoom stays fixed. **Source is move-only** (no resize handles). Move each frame independently.
 - Connector links nearest edges **only when source and lens are fully disjoint**; any overlap / nesting → no line.
-- **Source border vs lens:** portion of the source outline **inside** the lens → **1 device-pixel dashed** hairline (same color); portion **outside** → thick solid stroke (`strokeWidth`). Fully nested → all dashed; fully outside → all thick; crossing → hybrid per segment. Lens always thick solid.
-- Sub-toolbar: stroke widths | rect ↔ oval | **include annotations** toggle (`rectangle.on.rectangle`) | **scale** (solid preview dot + slider + value) | color grid.
+- **Source border vs lens:** portion of the source outline **inside** the lens → **1 device-pixel dashed** contrast hairline (black on light / white on dark — **not** palette ink); portion **outside** → thick solid palette stroke (`strokeWidth`). Fully nested → all dashed contrast; fully outside → all thick palette; crossing → hybrid per segment. Lens always thick solid palette.
+- Sub-toolbar: stroke widths | rect ↔ oval | **include annotations** toggle (`rectangle.on.rectangle`, default **off**) | **scale** (solid preview dot + slider + value) | color grid.
 - `includeAnnotations == false`: sample freeze/base only. `true`: sample freeze/base + marks drawn **before** this magnifier (excludes self; **source-crop composite** only — not full-display; P4 vector data, no bake into `baseImage`).
 - Auto-select after create; 8-handle chrome on **lens only**.
 - Disk: `type: "magnifier"` with `kind`, `rect` (source), `lensRect`, `magnifierStyle` (`strokeWidth` / `color` / `includeAnnotations` / optional `scale`).

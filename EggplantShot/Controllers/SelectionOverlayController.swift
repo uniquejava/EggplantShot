@@ -663,6 +663,8 @@ final class SelectionOverlayController {
                 updateHighlight(showHandles: true)
 
             case .draw:
+                // Crop edge chrome stays active while annotating (mark chrome wins above).
+                if beginSelectionEdgeDragIfNeeded(at: point) { return }
                 if annotateTool == .text || annotateTool == .step {
                     // Click-to-place resolved on mouse-up (ignore tiny drag).
                     textClickCandidate = (nil, point, false)
@@ -690,29 +692,39 @@ final class SelectionOverlayController {
                 updateHighlight(showHandles: true)
 
             case .outside:
-                // Keep selection + annotations; ignore clicks in the dimmed area while annotating.
-                break
+                // Dimmed area: still allow crop edge resize / expand; otherwise ignore.
+                _ = beginSelectionEdgeDragIfNeeded(at: point)
             }
             return
         }
 
         // Selection refine (no annotate tool): interior moves; border resize; outside expands to point.
         annotationHistory.select(nil)
-        if let handle = refineResizeHandle(at: point) {
-            if currentRect.contains(point) {
-                dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
-            } else {
-                // Snipaste: click outside → that edge jumps to the pointer, then follows while dragged.
-                dragKind = .expand(handle: handle, baseRect: currentRect)
-                currentRect = expandedRect(handle: handle, baseRect: currentRect, to: point)
-                updateHighlight(showHandles: true)
-                repositionToolbar()
-            }
-            resizeCursor(for: handle).set()
-        } else if currentRect.contains(point) {
+        if beginSelectionEdgeDragIfNeeded(at: point) {
+            return
+        }
+        if currentRect.contains(point) {
             dragKind = .move(startRect: currentRect, startPoint: point)
             AnnotationCursors.move.set()
         }
+    }
+
+    /// Starts crop resize (inside edge) or Snipaste-style expand (outside octant). Mark chrome must win first.
+    @discardableResult
+    private func beginSelectionEdgeDragIfNeeded(at point: CGPoint) -> Bool {
+        guard let handle = refineResizeHandle(at: point) else { return false }
+        annotationHistory.select(nil)
+        if currentRect.contains(point) {
+            dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
+        } else {
+            // Snipaste: click outside → that edge jumps to the pointer, then follows while dragged.
+            dragKind = .expand(handle: handle, baseRect: currentRect)
+            currentRect = expandedRect(handle: handle, baseRect: currentRect, to: point)
+            updateHighlight(showHandles: true)
+            repositionToolbar()
+        }
+        resizeCursor(for: handle).set()
+        return true
     }
 
     private func handleMouseDragged(at point: CGPoint) {
@@ -1079,10 +1091,11 @@ final class SelectionOverlayController {
             return Annotation(number: nextStepNumber(), center: local, stepStyle: stepStyle)
         case .magnifier:
             let source = CGRect(origin: local, size: .zero)
+            // Lens appears on mouse-up only (avoids live concentric zoom while dragging).
             return Annotation(
                 magnifierKind: magnifierKind,
                 source: source,
-                lens: Annotation.concentricMagnifierLens(for: source, scale: magnifierStyle.scale),
+                lens: .zero,
                 magnifierStyle: magnifierStyle
             )
         case .rectangle, .none:
@@ -1257,10 +1270,11 @@ final class SelectionOverlayController {
             if NSEvent.modifierFlags.contains(.shift) {
                 source = constrainedSquare(from: start, toward: end)
             }
+            // Source-only while dragging; concentric lens is created in `finalizedDraft`.
             return Annotation(
                 magnifierKind: magnifierKind,
                 source: source,
-                lens: Annotation.concentricMagnifierLens(for: source, scale: magnifierStyle.scale),
+                lens: .zero,
                 magnifierStyle: magnifierStyle
             )
 
@@ -1373,11 +1387,11 @@ final class SelectionOverlayController {
             return Annotation(string: string, rect: rect, style: style)
         case .step(let number, let center, let style):
             return Annotation(number: number, center: center, stepStyle: style)
-        case .magnifier(let kind, let source, let lens, let style):
+        case .magnifier(let kind, let source, _, let style):
             return Annotation(
                 magnifierKind: kind,
                 source: source,
-                lens: lens,
+                lens: Annotation.concentricMagnifierLens(for: source, scale: style.scale),
                 magnifierStyle: style
             )
         }
@@ -1845,7 +1859,9 @@ final class SelectionOverlayController {
         case .interior:
             NSCursor.iBeam.set()
         case .draw:
-            if annotateTool == .pencil {
+            if let handle = refineResizeHandle(at: point) {
+                resizeCursor(for: handle).set()
+            } else if annotateTool == .pencil {
                 AnnotationCursors.pencilCrosshair(color: annotationStyle.strokeColor).set()
             } else if annotateTool == .mosaic {
                 if mosaicDrawMode == .freehand {
@@ -1874,8 +1890,11 @@ final class SelectionOverlayController {
                 AnnotationCursors.whitePlus.set()
             }
         case .outside:
-            // Should be rare while a tool is active (draw covers the overlay).
-            NSCursor.arrow.set()
+            if let handle = refineResizeHandle(at: point) {
+                resizeCursor(for: handle).set()
+            } else {
+                NSCursor.arrow.set()
+            }
         }
     }
 
@@ -2713,7 +2732,8 @@ final class SelectionOverlayController {
         for panel in panels {
             panel.setSelection(
                 currentRect,
-                showHandles: showHandles && annotateTool == .none,
+                // Crop resize chrome stays while any annotate tool is active (export size).
+                showHandles: showHandles,
                 handleVisualSize: handleVisualSize,
                 annotations: annotations,
                 draftAnnotation: draftAnnotation,
