@@ -355,6 +355,8 @@ New tools add a `AnnotationPayload` case + draw/hit-test; history / store / conf
 
 Pencil: `.pencil(points:style:)` — freehand polyline (dense live sample + tip poll); Shift → straight any angle; no resize chrome / no auto-select after stroke.
 
+Arrow: `.arrow(start:end:style:caps:)` — segment + Snipaste end-caps; Shift → 45°; endpoint handles; disk `startCap` / `endCap`.
+
 Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
 
 ## Relationship to current MVP
