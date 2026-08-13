@@ -208,10 +208,11 @@ struct TextStyle: Equatable {
     )
 
     static let fontSizeChoices: [CGFloat] = [8, 10, 12, 14, 16, 18, 24, 28, 36]
-    /// Minimum editor / mark width while empty (room for the caret).
-    static let minEditorWidth: CGFloat = 28
+    /// Insertion-point width used only when the string is empty (matches 1px hairline at 2x).
+    static let caretWidth: CGFloat = 0.5
 
-    var textPadding: CGFloat { hasBackground ? 4 : 2 }
+    /// Tight wrap around glyphs (and the caret when empty).
+    var textPadding: CGFloat { hasBackground ? 3 : 2 }
 
     /// System UI font with bold / italic traits.
     func makeFont() -> NSFont {
@@ -460,43 +461,54 @@ struct Annotation: Equatable {
         }
     }
 
-    /// Fitted rect for `string` with `style`, anchored at click `origin` (selection-local, top ≈ origin).
+    /// How `origin` maps onto the fitted text box (selection-local Cocoa points).
+    enum TextRectAnchor {
+        /// `origin` is the top-left (grow downward while editing).
+        case topLeft
+        /// `origin` is the left edge at the vertical center (click-to-place).
+        case leadingMidY
+    }
+
+    /// Fitted rect for `string` with `style`, anchored at `origin`.
     /// Width grows with glyphs; wraps only when exceeding `maxWidth`.
     static func fittedTextRect(
         string: String,
         style: TextStyle,
         origin: CGPoint,
-        maxWidth: CGFloat = 10_000
+        maxWidth: CGFloat = 10_000,
+        anchor: TextRectAnchor = .topLeft
     ) -> CGRect {
         let size = fittingTextSize(string: string, style: style, maxWidth: maxWidth)
-        return CGRect(
-            x: origin.x,
-            y: origin.y - size.height,
-            width: size.width,
-            height: size.height
-        )
+        let y: CGFloat
+        switch anchor {
+        case .topLeft:
+            y = origin.y - size.height
+        case .leadingMidY:
+            y = origin.y - size.height / 2
+        }
+        return CGRect(x: origin.x, y: y, width: size.width, height: size.height)
     }
 
-    /// Box size: grow with content width; soft-wrap only past `maxWidth`.
+    /// Box size: glyphs + tiny padding only; empty box is caret-wide. Soft-wrap past `maxWidth`.
     static func fittingTextSize(
         string: String,
         style: TextStyle,
         maxWidth: CGFloat = 10_000
     ) -> CGSize {
-        let display = string.isEmpty ? " " : string
         let pad = style.textPadding
-        let attributed = NSAttributedString(string: display, attributes: style.attributes())
+        let minH = ceil(style.makeFont().boundingRectForFont.height) + pad * 2
+        if string.isEmpty {
+            return CGSize(width: pad * 2 + TextStyle.caretWidth, height: minH)
+        }
+        let attributed = NSAttributedString(string: string, attributes: style.attributes())
         let natural = attributed.boundingRect(
             with: CGSize(width: 10_000, height: 10_000),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         )
         let naturalW = ceil(natural.width) + pad * 2
-        let minH = style.fontSize + pad * 2
+        let naturalH = max(ceil(natural.height) + pad * 2, minH)
         if naturalW <= maxWidth {
-            return CGSize(
-                width: max(naturalW, TextStyle.minEditorWidth),
-                height: max(ceil(natural.height) + pad * 2, minH)
-            )
+            return CGSize(width: naturalW, height: naturalH)
         }
         let inner = max(maxWidth - pad * 2, 12)
         let wrapped = attributed.boundingRect(

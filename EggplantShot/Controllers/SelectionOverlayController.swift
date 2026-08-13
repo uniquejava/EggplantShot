@@ -82,6 +82,8 @@ final class SelectionOverlayController {
     private var draftAnnotation: Annotation?
     /// Text click-to-place / click-to-edit (resolved on mouse-up if drag is tiny).
     private var textClickCandidate: (id: UUID?, start: CGPoint, wasSelected: Bool)?
+    /// Snipaste hover outline while the pointer is over a text mark.
+    private var hoveredTextID: UUID?
     /// Active inline text editor (selection-local mark id).
     private var editingTextID: UUID?
     private var textEditorHost: SelectionPanel?
@@ -116,6 +118,8 @@ final class SelectionOverlayController {
     private enum AnnotationPointerTarget {
         case handle(id: UUID, handle: Handle)
         case border(id: UUID)
+        /// Interior of a text mark (text tool): click to edit, not move.
+        case interior(id: UUID)
         case draw
         case outside
     }
@@ -246,6 +250,7 @@ final class SelectionOverlayController {
         annotationHistory.reset()
         draftAnnotation = nil
         textClickCandidate = nil
+        hoveredTextID = nil
         discardTextEditor()
         stopPencilSampling()
         historyCursor = nil
@@ -397,6 +402,7 @@ final class SelectionOverlayController {
             return
         }
         if phase == .refining, dragKind == nil {
+            updateHoveredText(at: point)
             updateOverlayCursor(at: point)
         }
     }
@@ -480,15 +486,21 @@ final class SelectionOverlayController {
 
             case .border(let id):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
-                let wasSelected = (selectedAnnotationID == id)
                 annotationHistory.select(id)
                 syncToolbar(from: ann)
                 annotationHistory.beginGesture()
                 dragKind = .annotateMove(id: id, start: ann, startPoint: point)
-                if annotateTool == .text, ann.isText {
-                    textClickCandidate = (id, point, wasSelected)
-                }
                 NSCursor.closedHand.set()
+                updateHighlight(showHandles: true)
+
+            case .interior(let id):
+                guard let ann = annotations.first(where: { $0.id == id }) else { return }
+                annotationHistory.select(id)
+                syncToolbar(from: ann)
+                // Interior click edits immediately (Snipaste: body is for typing, not moving).
+                if annotateTool == .text, ann.isText {
+                    startTextEditing(id: id)
+                }
                 updateHighlight(showHandles: true)
 
             case .draw:
@@ -759,7 +771,12 @@ final class SelectionOverlayController {
             style.isFilled = false
             return Annotation(points: [local], style: style)
         case .text:
-            let rect = Annotation.fittedTextRect(string: "", style: textStyle, origin: local)
+            let rect = Annotation.fittedTextRect(
+                string: "",
+                style: textStyle,
+                origin: local,
+                anchor: .leadingMidY
+            )
             return Annotation(string: "", rect: rect, style: textStyle)
         case .rectangle, .none:
             return Annotation(
@@ -897,7 +914,7 @@ final class SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// Priority: selected handles → any stroke/border (topmost) → draw on freeze overlay.
+    /// Priority: selected handles → text interior/border → any stroke/border (topmost) → draw.
     /// Annotate tools work fullscreen (Snipaste), not only inside the blue selection.
     private func annotationPointerTarget(at point: CGPoint) -> AnnotationPointerTarget {
         guard annotateTool != .none else { return .outside }
@@ -905,12 +922,29 @@ final class SelectionOverlayController {
         if let id = selectedAnnotationID,
            id != editingTextID,
            let ann = annotations.first(where: { $0.id == id }),
+           !ann.isText,
            let handle = hitTestAnnotationHandle(at: point, annotation: ann) {
             return .handle(id: id, handle: handle)
         }
 
         for ann in annotations.reversed() {
             if ann.id == editingTextID { continue }
+            if ann.isText {
+                let global = toGlobal(ann.boundingRect)
+                switch textFrameHit(at: point, globalRect: global) {
+                case .none:
+                    break
+                case .border:
+                    return .border(id: ann.id)
+                case .interior:
+                    // Text tool: interior is edit. Other tools: whole body still moves.
+                    if annotateTool == .text {
+                        return .interior(id: ann.id)
+                    }
+                    return .border(id: ann.id)
+                }
+                continue
+            }
             if isOnAnnotationStroke(ann, at: point) {
                 return .border(id: ann.id)
             }
@@ -918,6 +952,41 @@ final class SelectionOverlayController {
 
         // Any point on the overlay is a draw target while a tool is active.
         return .draw
+    }
+
+    private enum TextFrameHit {
+        case border
+        case interior
+    }
+
+    /// Border strip is the move handle; interior is for typing.
+    /// Hits stay *inside* the frame (edge inclusive) so adjacent text marks can sit flush.
+    private func textFrameHit(at point: CGPoint, globalRect: CGRect) -> TextFrameHit? {
+        guard globalRect.contains(point) else { return nil }
+        let inset = min(3, min(globalRect.width, globalRect.height) / 4)
+        if globalRect.width <= inset * 2 || globalRect.height <= inset * 2 {
+            return .border
+        }
+        let inner = globalRect.insetBy(dx: inset, dy: inset)
+        return inner.contains(point) ? .interior : .border
+    }
+
+    private func textMarkID(at point: CGPoint) -> UUID? {
+        for ann in annotations.reversed() {
+            if ann.id == editingTextID { continue }
+            guard ann.isText else { continue }
+            if toGlobal(ann.boundingRect).contains(point) {
+                return ann.id
+            }
+        }
+        return nil
+    }
+
+    private func updateHoveredText(at point: CGPoint) {
+        let id = textMarkID(at: point)
+        guard id != hoveredTextID else { return }
+        hoveredTextID = id
+        updateHighlight(showHandles: true)
     }
 
     private func isOnAnnotationStroke(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
@@ -947,15 +1016,14 @@ final class SelectionOverlayController {
             let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
             return AnnotationDrawing.distance(from: local, toPolyline: points) <= tolerance
 
-        case .text(_, let localRect, _):
-            // Whole body is the move / select target (Snipaste text).
-            return toGlobal(localRect).insetBy(dx: -2, dy: -2).contains(globalPoint)
+        case .text:
+            return false
         }
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
-        // Pencil is freehand — no resize chrome (keeps the canvas uncluttered).
-        guard !annotation.isPencil else { return nil }
+        // Pencil / text: no resize chrome.
+        guard !annotation.isPencil, !annotation.isText else { return nil }
         let global = toGlobal(annotation.boundingRect)
         for handle in Handle.allCases {
             if handleHitRect(handle, in: global).contains(point) {
@@ -1029,6 +1097,8 @@ final class SelectionOverlayController {
             resizeCursor(for: handle).set()
         case .border:
             NSCursor.openHand.set()
+        case .interior:
+            NSCursor.iBeam.set()
         case .draw:
             if annotateTool == .pencil {
                 AnnotationCursors.pencilCrosshair(color: annotationStyle.strokeColor).set()
@@ -1170,7 +1240,12 @@ final class SelectionOverlayController {
     private func placeAndEditText(at globalPoint: CGPoint) {
         // Selection-local, may be outside the blue rect (Snipaste free placement).
         let local = toLocal(globalPoint)
-        let rect = Annotation.fittedTextRect(string: "", style: textStyle, origin: local)
+        let rect = Annotation.fittedTextRect(
+            string: "",
+            style: textStyle,
+            origin: local,
+            anchor: .leadingMidY
+        )
         let ann = Annotation(string: "", rect: rect, style: textStyle)
         annotationHistory.commit { doc in
             doc.marks.append(ann)
@@ -1205,17 +1280,16 @@ final class SelectionOverlayController {
             height: size.height
         )
 
-        // Draw border in `draw(_:)` — layer borders on clear NSScrollView often don't show.
+        // Draw border in `draw(_:)` — layer borders on clear views often don't show.
+        // Text view fills chrome; hairline border sits in the padding zone (no extra inset).
         let chrome = TextEditChromeView(frame: localInPanel)
-        let inset: CGFloat = 2
-        let tv = AnnotationTextView(frame: chrome.bounds.insetBy(dx: inset, dy: inset))
+        let tv = AnnotationTextView(frame: chrome.bounds)
         tv.autoresizingMask = [.width, .height]
         tv.string = ann.string
         tv.isRichText = false
         tv.allowsUndo = true
         tv.font = ann.textStyle.makeFont()
         tv.textColor = ann.textStyle.color
-        tv.insertionPointColor = ann.textStyle.color
         tv.backgroundColor = .clear
         tv.drawsBackground = false
         // Only the explicit “background” style toggle fills behind glyphs.
@@ -1227,6 +1301,7 @@ final class SelectionOverlayController {
         tv.isHorizontallyResizable = true
         tv.textContainer?.widthTracksTextView = false
         tv.textContainer?.heightTracksTextView = false
+        tv.textContainer?.lineFragmentPadding = 0
         tv.textContainer?.containerSize = CGSize(width: 10_000, height: 10_000)
         tv.textContainerInset = NSSize(
             width: ann.textStyle.textPadding,
@@ -1234,6 +1309,9 @@ final class SelectionOverlayController {
         )
         tv.delegate = TextEditingBridge.shared
         TextEditingBridge.shared.owner = self
+        tv.onNeedsFit = { [weak self] in
+            self?.resizeTextEditorToFit()
+        }
 
         chrome.addSubview(tv)
         panel.contentView?.addSubview(chrome)
@@ -1242,6 +1320,10 @@ final class SelectionOverlayController {
 
         textChromeView = chrome
         textEditor = tv
+        applyTextChromeContrast(
+            style: ann.textStyle,
+            globalPoint: CGPoint(x: globalRect.midX, y: globalRect.midY)
+        )
         resizeTextEditorToFit()
         updateHighlight(showHandles: true)
     }
@@ -1317,6 +1399,7 @@ final class SelectionOverlayController {
         }
         textChromeView?.removeFromSuperview()
         textChromeView = nil
+        textEditor?.onNeedsFit = nil
         textEditor = nil
         textEditorHost = nil
         editingTextID = nil
@@ -1327,7 +1410,6 @@ final class SelectionOverlayController {
         guard let tv = textEditor else { return }
         tv.font = style.makeFont()
         tv.textColor = style.color
-        tv.insertionPointColor = style.color
         if style.hasBackground {
             tv.drawsBackground = true
             tv.backgroundColor = Self.textEditorBackground(for: style.color)
@@ -1337,6 +1419,16 @@ final class SelectionOverlayController {
             tv.backgroundColor = .clear
             tv.textContainerInset = NSSize(width: style.textPadding, height: style.textPadding)
         }
+        let sample: CGPoint
+        if let chrome = textChromeView, let host = textEditorHost {
+            sample = CGPoint(
+                x: chrome.frame.midX + host.screenFrame.minX,
+                y: chrome.frame.midY + host.screenFrame.minY
+            )
+        } else {
+            sample = NSEvent.mouseLocation
+        }
+        applyTextChromeContrast(style: style, globalPoint: sample)
         resizeTextEditorToFit()
     }
 
@@ -1349,9 +1441,15 @@ final class SelectionOverlayController {
             }
             return textStyle
         }()
-        // Grow with glyphs; wrap only near the trailing screen edge.
+        // Grow with glyphs (including IME marked / preedit); wrap only near the trailing screen edge.
         let maxW = max(40, host.screenFrame.width - chrome.frame.minX - 4)
-        let size = Annotation.fittingTextSize(string: tv.string, style: style, maxWidth: maxW)
+        let minH = ceil(style.makeFont().boundingRectForFont.height) + style.textPadding * 2
+        let size = tv.fittingSize(
+            padding: style.textPadding,
+            caretWidth: TextStyle.caretWidth,
+            minHeight: minH,
+            maxWidth: maxW
+        )
 
         var frame = chrome.frame
         let top = frame.maxY
@@ -1369,8 +1467,8 @@ final class SelectionOverlayController {
         }
 
         chrome.frame = frame
-        let inset: CGFloat = 2
-        tv.frame = chrome.bounds.insetBy(dx: inset, dy: inset)
+        tv.frame = chrome.bounds
+        tv.textContainer?.lineFragmentPadding = 0
         tv.textContainer?.containerSize = CGSize(width: max(frame.width, maxW), height: 10_000)
         tv.textContainer?.widthTracksTextView = false
         chrome.needsDisplay = true
@@ -1382,6 +1480,46 @@ final class SelectionOverlayController {
         return luminance > 0.55
             ? NSColor.black.withAlphaComponent(0.55)
             : NSColor.white.withAlphaComponent(0.85)
+    }
+
+    /// Hairline + caret: white on dark, black on light (not the palette / text color).
+    private func applyTextChromeContrast(style: TextStyle, globalPoint: CGPoint) {
+        let color = contrastChromeColor(style: style, at: globalPoint)
+        textChromeView?.strokeColor = color
+        textEditor?.insertionPointColor = color
+    }
+
+    private func contrastChromeColor(style: TextStyle, at globalPoint: CGPoint) -> NSColor {
+        if style.hasBackground {
+            let bg = Self.textEditorBackground(for: style.color)
+            return Self.isLightColor(bg) ? .black : .white
+        }
+        return freezeContrastColor(at: globalPoint)
+    }
+
+    private func freezeContrastColor(at globalPoint: CGPoint) -> NSColor {
+        let frame = freezeFrames.first { NSMouseInRect(globalPoint, $0.screen.frame, false) }
+            ?? freezeFrames.first
+        var luminance: CGFloat = 0.2
+        if let frame,
+           let sampled = ScreenCapturer.averageLuminance(
+            in: frame.cgImage,
+            aroundPointInScreenPoints: globalPoint,
+            on: frame.screen
+           ) {
+            luminance = sampled
+        }
+        if !currentRect.isNull, !currentRect.contains(globalPoint) {
+            // Overlay dim is 45% black over the freeze.
+            luminance *= 0.55
+        }
+        return luminance < 0.55 ? .white : .black
+    }
+
+    private static func isLightColor(_ color: NSColor) -> Bool {
+        let rgb = color.usingColorSpace(.genericRGB) ?? color
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.55
     }
 
     // MARK: - Geometry
@@ -1573,6 +1711,7 @@ final class SelectionOverlayController {
         hoveredWindowRect = nil
         draftAnnotation = nil
         textClickCandidate = nil
+        hoveredTextID = nil
         annotateTool = .none
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
@@ -1614,7 +1753,8 @@ final class SelectionOverlayController {
                 selectedAnnotation: selected,
                 annotationHandleSize: annotationHandleVisualSize,
                 playbackImage: playbackBaseImage,
-                editingAnnotationID: editingTextID
+                editingAnnotationID: editingTextID,
+                hoveredTextID: hoveredTextID
             )
         }
     }

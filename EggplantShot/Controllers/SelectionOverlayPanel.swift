@@ -42,7 +42,8 @@ final class SelectionPanel: NSPanel {
         selectedAnnotation: Annotation?,
         annotationHandleSize: CGFloat,
         playbackImage: NSImage?,
-        editingAnnotationID: UUID?
+        editingAnnotationID: UUID?,
+        hoveredTextID: UUID?
     ) {
         let local: CGRect
         if globalRect.isNull {
@@ -64,6 +65,7 @@ final class SelectionPanel: NSPanel {
         overlayView.annotationHandleSize = annotationHandleSize
         overlayView.playbackImage = playbackImage
         overlayView.editingAnnotationID = editingAnnotationID
+        overlayView.hoveredTextID = hoveredTextID
         overlayView.needsDisplay = true
     }
 
@@ -83,6 +85,8 @@ final class SelectionOverlayNSView: NSView {
     var playbackImage: NSImage?
     /// Skip drawing this mark while the inline editor is showing it.
     var editingAnnotationID: UUID?
+    /// Snipaste-style hover: dashed outline while the pointer is over a text mark.
+    var hoveredTextID: UUID?
 
     private let freezeImage: NSImage?
     private let accent = NSColor.systemBlue
@@ -182,21 +186,31 @@ final class SelectionOverlayNSView: NSView {
 
         if let selected = selectedAnnotation,
            !selected.isPencil,
+           !selected.isText,
            selected.id != editingAnnotationID {
             let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
             AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
-            if selected.isText {
-                // White frame mirrors the live editor chrome.
-                NSColor.black.withAlphaComponent(0.35).setStroke()
-                let halo = NSBezierPath(rect: r.insetBy(dx: -0.5, dy: -0.5))
-                halo.lineWidth = 3
-                halo.stroke()
-                NSColor.white.setStroke()
-                let outline = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
-                outline.lineWidth = 1.5
-                outline.stroke()
-            }
         }
+
+        if let hid = hoveredTextID,
+           hid != editingAnnotationID,
+           let hovered = annotations.first(where: { $0.id == hid }),
+           hovered.isText {
+            let r = hovered.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
+            drawTextHoverOutline(in: r)
+        }
+    }
+
+    /// 1px white dashed frame (Snipaste text mouse-over).
+    private func drawTextHoverOutline(in rect: CGRect) {
+        let scale = window?.backingScaleFactor ?? 2
+        let w = 1 / max(scale, 1)
+        NSColor.white.setStroke()
+        let path = NSBezierPath(rect: rect.insetBy(dx: w / 2, dy: w / 2))
+        path.lineWidth = w
+        let dash: [CGFloat] = [3, 2]
+        path.setLineDash(dash, count: dash.count, phase: 0)
+        path.stroke()
     }
 
     private func drawSelectionHandles() {

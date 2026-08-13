@@ -60,6 +60,30 @@ enum ScreenCapturer {
         return nsImage(from: cropped, pointSize: rect.size)
     }
 
+    /// Average luminance 0…1 around a Cocoa global point (for contrast chrome).
+    static func averageLuminance(
+        in full: CGImage,
+        aroundPointInScreenPoints point: CGPoint,
+        on screen: NSScreen
+    ) -> CGFloat? {
+        let sample = CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4)
+        guard let pixel = pixelRect(for: sample, on: screen),
+              let cropped = full.cropping(to: pixel)
+        else { return nil }
+        let rep = NSBitmapImageRep(cgImage: cropped)
+        var sum: CGFloat = 0
+        var count: CGFloat = 0
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                guard let rgb = rep.colorAt(x: x, y: y)?.usingColorSpace(.genericRGB) else { continue }
+                sum += 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+                count += 1
+            }
+        }
+        guard count > 0 else { return nil }
+        return sum / count
+    }
+
     /// Capture a rectangular region in Cocoa global coordinates (points, bottom-left origin).
     /// `rect` is in screen points; the returned image is pixel-backed at display scale.
     static func capture(rectInScreenPoints rect: CGRect) async -> NSImage? {

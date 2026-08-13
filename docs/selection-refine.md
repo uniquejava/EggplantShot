@@ -64,8 +64,10 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ### Text
 
 - Sub-toolbar: Bold / Italic / background | font size | color (system UI font; no family / rotation yet).
-- Click anywhere on freeze → place + inline edit; **white border only** (transparent fill unless bg toggle).
-- Frame **grows with text width**; soft-wrap only near screen edge.
+- Click anywhere on freeze → place + inline edit (click = left edge + vertical center of the first line).
+- **Edit chrome:** 1px hairline; white border + white caret on dark backdrops, black + black on light (not the palette color). Transparent fill unless bg toggle.
+- Frame hugs glyphs with tiny padding (~2pt); **grows with text width** (including IME preedit before commit); soft-wrap only near screen edge. Empty editor is caret-wide (no trailing blank).
+- **Hit / cursor:** inside, near the edge (or on the hairline) → move (open hand); deeper interior → I-beam + click to edit. Outside the frame is always place-new. Hover → 1px white dashed outline (clears on mouse-out). No resize handles.
 - Esc ends edit only; Return = newline (not confirm). Empty on end-edit → drop mark.
 
 ## Pin chrome
