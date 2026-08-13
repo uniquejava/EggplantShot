@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate live: **shape**, **arrow**, **pencil**, **mosaic**, **text**, **step** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Marker / magnifier remain stubs.
+Annotate live: **shape**, **arrow**, **pencil**, **marker**, **mosaic**, **text**, **step** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Magnifier remains a stub.
 
 Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
@@ -34,7 +34,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ## Toolbar layout (Snipaste parity)
 
 ```
-[ shape† | arrow | pen† | marker | mosaic¶ | T‡ | step§ | magnifier | eraser ]
+[ shape† | arrow | pen† | marker‖ | mosaic¶ | T‡ | step§ | magnifier | eraser ]
 | [ OCR | undo | redo ]
 | [ ✕ | pin | save | copy | … ]
 
@@ -42,6 +42,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
   Arrow: [ thin | med | thick ] | [ start ▾≈32 | body ▾ | end ▾≈32 | caps Switch ] | [ preview 24 + palette 2×10 ]
   Pen: same card without fill / rect / oval
   Palette chips ≈11pt, gap ≈2pt
+‖ Marker: [ · | ·· | ··· ] | [ rect region | oval region ] | [ preview 24 + palette 2×10 ]  (sizes 14/18/24 freehand; rect/oval = area highlight)
 ¶ Mosaic: [ · | ·· | ··· ] | [ rect region | oval region ] | [ preview | slider 3…24 | value ]  (sizes 14/18/24 freehand; rect/oval = area blur)
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 § Step: [ filled | outline | plain ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
@@ -73,6 +74,15 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Color reticle; mouse-down hides cursor. Freehand; Shift → straight any angle.
 - No resize chrome; no auto-select after stroke. While pencil is armed, existing pencil strokes draw-through (keep reticle for edge tracing); hold **⌘** for temporary move (four-arrow + drag). Other annotate tools still hit-move pencil strokes.
 - Deferred: if dense sampling (~0.15pt + 120Hz) lags or bloats history, simplify polyline on mouse-up (RDP).
+
+### Marker
+
+- Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to highlight an area) | **color card** (preview 24 + palette 2×10) — same layout as mosaic, with color instead of blur intensity.
+- Freehand: stroke sampling; Shift → straight; mouse-down hides cursor. No resize chrome / no auto-select after stroke.
+- Region: drag like mosaic; Shift → square / circle; entire rect/oval is highlighted. **Edit chrome**: while drawing / moving / resizing → **1 device-pixel solid** contrast hairline; after mouse-up (selected idle) → **handles only** (no border); **mouseover** on a non-selected region → dashed contrast outline (like text hover). Hit mark to move; handles resize.
+- Effect: **multiply** blend (Snipaste highlighter — keeps contrast on dark UIs; light glyphs tint brightly; black occludes). Near-white swatches fall back to sourceOver wash. **Vector** stroke/region data only (P4). Default color yellow.
+- Toolbar icon: SF Symbol `paintbrush.pointed`.
+- Disk: `type: "marker"` with `markerStyle` (brushWidth / color) plus either stroke `points` or region `kind` + `rect`.
 
 ### Mosaic
 
@@ -131,6 +141,6 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
 - [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
-- [x] Shape / arrow / pencil / mosaic / text / step: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] Shape / arrow / pencil / marker / mosaic / text / step: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] OCR: recognize selection → clipboard + bubble-pop; dismiss overlay; no result UI
 - [x] Undo / redo; debug build succeeds

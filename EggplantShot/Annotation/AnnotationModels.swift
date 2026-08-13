@@ -7,6 +7,7 @@ enum AnnotateTool: Equatable {
     case rectangle
     case arrow
     case pencil
+    case marker
     case mosaic
     case text
     case step
@@ -66,6 +67,61 @@ struct MosaicStyle: Equatable {
 
     /// Half-res soft pass only above this intensity; below it, full-res keeps fine text.
     static let softDownsampleIntensityThreshold: CGFloat = 8
+}
+
+/// Marker / highlighter style (brush size for freehand + fill color). Stored on the mark; prefs mirror last-used.
+/// Geometry reuses `MosaicGeometry` / `MosaicDrawMode` (freehand stroke or rect/oval region).
+/// Drawn with **multiply** (Snipaste): tints without muddying; black occludes; white glyphs pick up the tint brightly.
+struct MarkerStyle: Equatable {
+    var brushWidth: CGFloat
+    var color: NSColor
+
+    /// Same brush diameters as mosaic (toolbar · / ·· / ···).
+    static let brushPresets: [CGFloat] = MosaicStyle.brushPresets
+    static let brushPreviewDiameters: [CGFloat] = MosaicStyle.brushPreviewDiameters
+    /// Only used for near-white swatches (multiply is a no-op on white).
+    static let whiteWashAlpha: CGFloat = 0.35
+
+    static let `default` = MarkerStyle(
+        brushWidth: 18,
+        color: PaletteColor.yellow.color
+    )
+
+    mutating func clamp() {
+        brushWidth = Self.nearestBrushPreset(brushWidth)
+    }
+
+    static func nearestBrushPreset(_ width: CGFloat) -> CGFloat {
+        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? 18
+    }
+
+    /// Relative luminance in generic RGB (0…1).
+    private var luminance: CGFloat {
+        let rgb = color.usingColorSpace(.genericRGB) ?? color
+        return 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+    }
+
+    /// Near-white palette chips cannot use multiply (result ≈ unchanged).
+    var usesMultiplyBlend: Bool { luminance <= 0.92 }
+
+    /// Paint color for the current blend path (opaque for multiply; washed for white sourceOver).
+    var fillColor: NSColor {
+        let rgb = color.usingColorSpace(.genericRGB) ?? color
+        if usesMultiplyBlend {
+            return NSColor(
+                calibratedRed: rgb.redComponent,
+                green: rgb.greenComponent,
+                blue: rgb.blueComponent,
+                alpha: 1
+            )
+        }
+        return NSColor(
+            calibratedRed: rgb.redComponent,
+            green: rgb.greenComponent,
+            blue: rgb.blueComponent,
+            alpha: Self.whiteWashAlpha
+        )
+    }
 }
 
 /// Arrowhead / end-cap styles (Snipaste start / end dropdown).
@@ -245,6 +301,45 @@ enum AnnotationPrefs {
         let defaults = UserDefaults.standard
         defaults.set(mode.rawValue, forKey: mosaicDrawModeKey)
         defaults.removeObject(forKey: mosaicBrushKindKey)
+    }
+
+    private static let markerBrushWidthKey = "annotate.marker.brushWidth"
+    private static let markerDrawModeKey = "annotate.marker.drawMode"
+    private static let markerColorKey = "annotate.marker.color"
+
+    static func loadMarkerStyle() -> MarkerStyle {
+        let defaults = UserDefaults.standard
+        var style = MarkerStyle.default
+        if defaults.object(forKey: markerBrushWidthKey) != nil {
+            style.brushWidth = MarkerStyle.nearestBrushPreset(
+                CGFloat(defaults.double(forKey: markerBrushWidthKey))
+            )
+        }
+        if defaults.object(forKey: markerColorKey) != nil,
+           let swatch = PaletteColor(rawValue: defaults.integer(forKey: markerColorKey)) {
+            style.color = swatch.color
+        }
+        return style
+    }
+
+    static func loadMarkerDrawMode() -> MosaicDrawMode {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: markerDrawModeKey) != nil {
+            return MosaicDrawMode(rawValue: defaults.integer(forKey: markerDrawModeKey)) ?? .rectangle
+        }
+        return .rectangle
+    }
+
+    static func saveMarkerStyle(_ style: MarkerStyle) {
+        var clamped = style
+        clamped.clamp()
+        let defaults = UserDefaults.standard
+        defaults.set(Double(clamped.brushWidth), forKey: markerBrushWidthKey)
+        defaults.set(PaletteColor.matching(clamped.color).rawValue, forKey: markerColorKey)
+    }
+
+    static func saveMarkerDrawMode(_ mode: MosaicDrawMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: markerDrawModeKey)
     }
 }
 
@@ -549,6 +644,7 @@ enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
     case arrow(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps)
     case pencil(points: [CGPoint], style: AnnotationStyle)
+    case marker(MosaicGeometry, style: MarkerStyle)
     case mosaic(MosaicGeometry, style: MosaicStyle)
     case text(string: String, rect: CGRect, style: TextStyle)
     /// Sequence number centered at `center` (selection-local).
@@ -608,6 +704,28 @@ struct Annotation: Equatable {
         self.payload = .mosaic(.region(kind, rect: rect), style: mosaicStyle)
     }
 
+    /// Convenience for freehand marker / highlighter.
+    init(id: UUID = UUID(), markerPoints points: [CGPoint], markerStyle: MarkerStyle) {
+        self.id = id
+        var style = markerStyle
+        style.clamp()
+        self.payload = .marker(.stroke(points: points), style: style)
+    }
+
+    /// Convenience for region marker (rect / oval).
+    init(
+        id: UUID = UUID(),
+        markerRegion mode: MosaicDrawMode,
+        rect: CGRect,
+        markerStyle: MarkerStyle
+    ) {
+        self.id = id
+        var style = markerStyle
+        style.clamp()
+        let kind: MosaicDrawMode = (mode == .ellipse) ? .ellipse : .rectangle
+        self.payload = .marker(.region(kind, rect: rect), style: style)
+    }
+
     /// Convenience for the text tool.
     init(id: UUID = UUID(), string: String, rect: CGRect, style: TextStyle) {
         self.id = id
@@ -628,6 +746,7 @@ struct Annotation: Equatable {
         case .shape: return "shape"
         case .arrow: return "arrow"
         case .pencil: return "pencil"
+        case .marker: return "marker"
         case .mosaic: return "mosaic"
         case .text: return "text"
         case .step: return "step"
@@ -636,13 +755,13 @@ struct Annotation: Equatable {
 
     // MARK: Shared accessors
 
-    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / text / step marks.
+    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / marker / text / step marks.
     var style: AnnotationStyle {
         get {
             switch payload {
             case .shape(_, _, let style), .arrow(_, _, let style, _), .pencil(_, let style):
                 return style
-            case .mosaic, .text, .step:
+            case .marker, .mosaic, .text, .step:
                 return .default
             }
         }
@@ -654,7 +773,7 @@ struct Annotation: Equatable {
                 payload = .arrow(start: start, end: end, style: newValue, caps: caps)
             case .pencil(let points, _):
                 payload = .pencil(points: points, style: newValue)
-            case .mosaic, .text, .step:
+            case .marker, .mosaic, .text, .step:
                 break
             }
         }
@@ -691,6 +810,40 @@ struct Annotation: Equatable {
 
     var isMosaicRegion: Bool {
         if case .mosaic(.region, _) = payload { return true }
+        return false
+    }
+
+    var markerStyle: MarkerStyle {
+        get {
+            if case .marker(_, let style) = payload { return style }
+            return .default
+        }
+        set {
+            guard case .marker(let geometry, _) = payload else { return }
+            var style = newValue
+            style.clamp()
+            payload = .marker(geometry, style: style)
+        }
+    }
+
+    var markerGeometry: MosaicGeometry? {
+        get {
+            if case .marker(let geometry, _) = payload { return geometry }
+            return nil
+        }
+        set {
+            guard let newValue, case .marker(_, let style) = payload else { return }
+            payload = .marker(newValue, style: style)
+        }
+    }
+
+    var isMarkerStroke: Bool {
+        if case .marker(.stroke, _) = payload { return true }
+        return false
+    }
+
+    var isMarkerRegion: Bool {
+        if case .marker(.region, _) = payload { return true }
         return false
     }
 
@@ -749,6 +902,15 @@ struct Annotation: Equatable {
             return AnnotationDrawing.arrowBounds(start: start, end: end, style: style, caps: caps)
         case .pencil(let points, _):
             return Self.bounds(of: points)
+        case .marker(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let hull = Self.bounds(of: points)
+                let pad = style.brushWidth / 2
+                return hull.insetBy(dx: -pad, dy: -pad)
+            case .region(_, let rect):
+                return rect
+            }
         case .mosaic(let geometry, let style):
             switch geometry {
             case .stroke(let points):
@@ -775,6 +937,11 @@ struct Annotation: Equatable {
 
     var isPencil: Bool {
         if case .pencil = payload { return true }
+        return false
+    }
+
+    var isMarker: Bool {
+        if case .marker = payload { return true }
         return false
     }
 
@@ -814,7 +981,7 @@ struct Annotation: Equatable {
                 payload = .shape(kind, rect: newValue, style: style)
             case .text(let string, _, let style):
                 payload = .text(string: string, rect: newValue, style: style)
-            case .arrow, .pencil, .mosaic, .step:
+            case .arrow, .pencil, .marker, .mosaic, .step:
                 break
             }
         }
@@ -825,7 +992,7 @@ struct Annotation: Equatable {
             switch payload {
             case .pencil(let points, _):
                 return points
-            case .mosaic(.stroke(let points), _):
+            case .marker(.stroke(let points), _), .mosaic(.stroke(let points), _):
                 return points
             default:
                 return []
@@ -835,6 +1002,8 @@ struct Annotation: Equatable {
             switch payload {
             case .pencil(_, let style):
                 payload = .pencil(points: newValue, style: style)
+            case .marker(.stroke, let style):
+                payload = .marker(.stroke(points: newValue), style: style)
             case .mosaic(.stroke, let style):
                 payload = .mosaic(.stroke(points: newValue), style: style)
             default:
@@ -902,6 +1071,17 @@ struct Annotation: Equatable {
         case .pencil(let points, let style):
             let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
             payload = .pencil(points: moved, style: style)
+        case .marker(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
+                payload = .marker(.stroke(points: moved), style: style)
+            case .region(let mode, let rect):
+                payload = .marker(
+                    .region(mode, rect: rect.offsetBy(dx: delta.width, dy: delta.height)),
+                    style: style
+                )
+            }
         case .mosaic(let geometry, let style):
             switch geometry {
             case .stroke(let points):
@@ -957,6 +1137,25 @@ struct Annotation: Equatable {
                 )
             }
             payload = .pencil(points: mapped, style: style)
+        case .marker(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let pad = style.brushWidth / 2
+                let oldHull = old.insetBy(dx: pad, dy: pad)
+                let newHull = newBounds.insetBy(dx: pad, dy: pad)
+                guard oldHull.width > 0, oldHull.height > 0 else { return }
+                let sx = newHull.width / oldHull.width
+                let sy = newHull.height / oldHull.height
+                let mapped = points.map { p in
+                    CGPoint(
+                        x: newHull.minX + (p.x - oldHull.minX) * sx,
+                        y: newHull.minY + (p.y - oldHull.minY) * sy
+                    )
+                }
+                payload = .marker(.stroke(points: mapped), style: style)
+            case .region(let mode, _):
+                payload = .marker(.region(mode, rect: newBounds), style: style)
+            }
         case .mosaic(let geometry, let style):
             switch geometry {
             case .stroke(let points):
@@ -1082,6 +1281,8 @@ enum AnnotationDrawing {
         case .pencil(let points, let style):
             let offset = points.map { CGPoint(x: $0.x + origin.x, y: $0.y + origin.y) }
             drawPencil(points: offset, style: style)
+        case .marker(let geometry, let style):
+            drawMarker(geometry: geometry, style: style, drawOrigin: origin)
         case .mosaic(let geometry, let style):
             drawMosaic(geometry: geometry, style: style, drawOrigin: origin, sample: sample)
         case .text(let string, let localRect, let style):
@@ -1098,7 +1299,7 @@ enum AnnotationDrawing {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
-        case .arrow, .pencil, .mosaic, .text, .step:
+        case .arrow, .pencil, .marker, .mosaic, .text, .step:
             draw(annotation, origin: .zero)
         }
     }
@@ -1764,6 +1965,58 @@ enum AnnotationDrawing {
         }
         style.strokeColor.setStroke()
         path.stroke()
+    }
+
+    /// Highlighter fill under a freehand brush or region mask (P4).
+    /// Snipaste uses multiply so dark UIs keep contrast and light glyphs tint brightly
+    /// (sourceOver + alpha looks muddy / “糊” by comparison).
+    private static func drawMarker(
+        geometry: MosaicGeometry,
+        style: MarkerStyle,
+        drawOrigin: CGPoint
+    ) {
+        guard let ctx = NSGraphicsContext.current else { return }
+        ctx.saveGraphicsState()
+        defer { ctx.restoreGraphicsState() }
+
+        ctx.compositingOperation = style.usesMultiplyBlend ? .multiply : .sourceOver
+        let fill = style.fillColor
+
+        switch geometry {
+        case .stroke(let localPoints):
+            guard !localPoints.isEmpty else { return }
+            let brush = max(style.brushWidth, 1)
+            let offset = localPoints.map { CGPoint(x: $0.x + drawOrigin.x, y: $0.y + drawOrigin.y) }
+            guard let first = offset.first else { return }
+            let path = NSBezierPath()
+            if offset.count == 1 {
+                let r = brush / 2
+                path.appendOval(in: CGRect(x: first.x - r, y: first.y - r, width: r * 2, height: r * 2))
+                fill.setFill()
+                path.fill()
+                return
+            }
+            path.move(to: first)
+            for p in offset.dropFirst() { path.line(to: p) }
+            path.lineWidth = brush
+            path.lineJoinStyle = .round
+            path.lineCapStyle = .round
+            fill.setStroke()
+            path.stroke()
+
+        case .region(let mode, let localRect):
+            guard localRect.width >= 1, localRect.height >= 1 else { return }
+            let rect = localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
+            let path: NSBezierPath
+            switch mode {
+            case .ellipse:
+                path = NSBezierPath(ovalIn: rect)
+            case .rectangle, .freehand:
+                path = NSBezierPath(rect: rect)
+            }
+            fill.setFill()
+            path.fill()
+        }
     }
 
     /// Gaussian-blur the backdrop under a freehand brush or region mask (P4).

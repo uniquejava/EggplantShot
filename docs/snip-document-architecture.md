@@ -70,13 +70,14 @@ enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
     case arrow(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps)
     case pencil(points: [CGPoint], style: AnnotationStyle)
+    case marker(MosaicGeometry, style: MarkerStyle) // stroke points | rect/oval region
     case mosaic(MosaicGeometry, style: MosaicStyle) // stroke points | rect/oval region
     case text(string: String, rect: CGRect, style: TextStyle)
-    // later: marker, step, …
+    case step(number: Int, center: CGPoint, style: StepStyle)
 }
 ```
 
-Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"arrow"`, `"pencil"`, `"mosaic"`, `"text"`, …). Shape keeps `kind` / `rect`; arrow stores `points: [start, end]` + `startCap` / `endCap` (+ optional hull `rect`); pencil stores `points` (+ optional hull `rect`); mosaic stores `mosaicStyle` (brushWidth / intensity) plus either stroke `points` or region `kind` + `rect`; text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
+Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"arrow"`, `"pencil"`, `"marker"`, `"mosaic"`, `"text"`, `"step"`, …). Shape keeps `kind` / `rect`; arrow stores `points: [start, end]` + `startCap` / `endCap` (+ optional hull `rect`); pencil stores `points` (+ optional hull `rect`); marker stores `markerStyle` (brushWidth / color) plus either stroke `points` or region `kind` + `rect`; mosaic stores `mosaicStyle` (brushWidth / intensity) plus either stroke `points` or region `kind` + `rect`; text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
 
 ### `AnnotationDocument`
 
@@ -189,9 +190,9 @@ P0–P4 done:
 - Overlay routes mutations through `AnnotationHistory`, returns `AnnotationDocument` on confirm.
 - `SnipController` composites for output and appends `SnipRecord` (memory + disk).
 - `,` / `.` restore selection + base + document into the active overlay.
-- Marks use `AnnotationPayload` (`shape`, `arrow`, `pencil`, `mosaic`, `text`); disk `type` discriminator ready for new tools.
+- Marks use `AnnotationPayload` (`shape`, `arrow`, `pencil`, `marker`, `mosaic`, `text`, `step`); disk `type` discriminator ready for new tools.
 
-Next product work: marker / magnifier / … add payload cases + drawing + hit-testing only.
+Next product work: magnifier / … add payload cases + drawing + hit-testing only.
 
 ## Coordinate conventions
 
@@ -362,6 +363,8 @@ Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Itali
 
 Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
+Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **multiply** color fill (Snipaste highlighter; near-white → sourceOver wash) instead of blur; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
+
 Step: `.step(number:center:style:)` — click-to-place auto-increment; cursor shows next badge; filled / outline / plain; default size 4; move only; disk `stepStyle` + `number` + center point.
 
 ## Relationship to current MVP
@@ -372,6 +375,6 @@ Step: `.step(number:center:style:)` — click-to-place auto-increment; cursor sh
 | Confirm | Bake + disk `SnipRecord` |
 | `,` / `.` | History playback |
 | Pin window | Flat image (no layer reopen) |
-| Mark model | `AnnotationPayload` (`shape`, `arrow`, `pencil`, `mosaic`, `text`, `step`) |
+| Mark model | `AnnotationPayload` (`shape`, `arrow`, `pencil`, `marker`, `mosaic`, `text`, `step`) |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

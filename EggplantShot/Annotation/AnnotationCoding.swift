@@ -43,6 +43,8 @@ enum AnnotationCoding {
         var endCap: Int?
         /// Mosaic brush style (type == "mosaic").
         var mosaicStyle: MosaicStyleDTO?
+        /// Marker / highlighter style (type == "marker").
+        var markerStyle: MarkerStyleDTO?
         /// Step / numbering style (type == "step").
         var stepStyle: StepStyleDTO?
         /// Step number (type == "step").
@@ -54,6 +56,11 @@ enum AnnotationCoding {
         var intensity: Double
         /// Legacy tip shape (0/1); ignored on decode for style (geometry carries region kind).
         var brushKind: Int?
+    }
+
+    struct MarkerStyleDTO: Codable {
+        var brushWidth: Double
+        var color: ColorDTO
     }
 
     struct StepStyleDTO: Codable {
@@ -167,6 +174,7 @@ enum AnnotationCoding {
                 startCap: nil,
                 endCap: nil,
                 mosaicStyle: nil,
+                markerStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
@@ -183,6 +191,7 @@ enum AnnotationCoding {
                 startCap: caps.start.rawValue,
                 endCap: caps.end.rawValue,
                 mosaicStyle: nil,
+                markerStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
@@ -199,9 +208,47 @@ enum AnnotationCoding {
                 startCap: nil,
                 endCap: nil,
                 mosaicStyle: nil,
+                markerStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
+        case .marker(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                return MarkDTO(
+                    id: annotation.id.uuidString,
+                    type: "marker",
+                    kind: nil,
+                    rect: RectDTO(annotation.boundingRect),
+                    points: points.map(PointDTO.init),
+                    string: nil,
+                    style: nil,
+                    textStyle: nil,
+                    startCap: nil,
+                    endCap: nil,
+                    mosaicStyle: nil,
+                    markerStyle: encode(style),
+                    stepStyle: nil,
+                    number: nil
+                )
+            case .region(let mode, let rect):
+                return MarkDTO(
+                    id: annotation.id.uuidString,
+                    type: "marker",
+                    kind: mode == .ellipse ? "ellipse" : "rectangle",
+                    rect: RectDTO(rect),
+                    points: nil,
+                    string: nil,
+                    style: nil,
+                    textStyle: nil,
+                    startCap: nil,
+                    endCap: nil,
+                    mosaicStyle: nil,
+                    markerStyle: encode(style),
+                    stepStyle: nil,
+                    number: nil
+                )
+            }
         case .mosaic(let geometry, let style):
             switch geometry {
             case .stroke(let points):
@@ -217,6 +264,7 @@ enum AnnotationCoding {
                     startCap: nil,
                     endCap: nil,
                     mosaicStyle: encode(style),
+                    markerStyle: nil,
                     stepStyle: nil,
                     number: nil
                 )
@@ -233,6 +281,7 @@ enum AnnotationCoding {
                     startCap: nil,
                     endCap: nil,
                     mosaicStyle: encode(style),
+                    markerStyle: nil,
                     stepStyle: nil,
                     number: nil
                 )
@@ -250,6 +299,7 @@ enum AnnotationCoding {
                 startCap: nil,
                 endCap: nil,
                 mosaicStyle: nil,
+                markerStyle: nil,
                 stepStyle: nil,
                 number: nil
             )
@@ -266,6 +316,7 @@ enum AnnotationCoding {
                 startCap: nil,
                 endCap: nil,
                 mosaicStyle: nil,
+                markerStyle: nil,
                 stepStyle: encode(style),
                 number: number
             )
@@ -315,6 +366,27 @@ enum AnnotationCoding {
                 id: id,
                 payload: .pencil(points: points.map(\.cgPoint), style: decode(styleDTO))
             )
+        case "marker":
+            guard let markerDTO = dto.markerStyle else {
+                NSLog("SnipHistory: skipping marker mark without markerStyle")
+                return nil
+            }
+            let style = decode(markerDTO)
+            if let points = dto.points, !points.isEmpty {
+                return Annotation(
+                    id: id,
+                    payload: .marker(.stroke(points: points.map(\.cgPoint)), style: style)
+                )
+            }
+            if let rect = dto.rect?.cgRect {
+                let mode: MosaicDrawMode = (dto.kind == "ellipse") ? .ellipse : .rectangle
+                return Annotation(
+                    id: id,
+                    payload: .marker(.region(mode, rect: rect), style: style)
+                )
+            }
+            NSLog("SnipHistory: skipping marker mark without points or rect")
+            return nil
         case "mosaic":
             guard let mosaicDTO = dto.mosaicStyle else {
                 NSLog("SnipHistory: skipping mosaic mark without mosaicStyle")
@@ -383,6 +455,22 @@ enum AnnotationCoding {
         var style = MosaicStyle(
             brushWidth: CGFloat(dto.brushWidth),
             intensity: CGFloat(dto.intensity)
+        )
+        style.clamp()
+        return style
+    }
+
+    static func encode(_ style: MarkerStyle) -> MarkerStyleDTO {
+        MarkerStyleDTO(
+            brushWidth: Double(style.brushWidth),
+            color: encode(style.color)
+        )
+    }
+
+    static func decode(_ dto: MarkerStyleDTO) -> MarkerStyle {
+        var style = MarkerStyle(
+            brushWidth: CGFloat(dto.brushWidth),
+            color: decode(dto.color)
         )
         style.clamp()
         return style

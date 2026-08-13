@@ -20,6 +20,8 @@ final class RefineToolbarController: NSObject {
         case textStyleChanged(TextStyle)
         case mosaicStyleChanged(MosaicStyle)
         case mosaicDrawModeChanged(MosaicDrawMode)
+        case markerStyleChanged(MarkerStyle)
+        case markerDrawModeChanged(MosaicDrawMode)
         case stepStyleChanged(StepStyle)
         case kindChanged(ShapeKind)
         case arrowCapsChanged(ArrowCaps)
@@ -34,6 +36,8 @@ final class RefineToolbarController: NSObject {
     private var textStyle: TextStyle
     private var mosaicStyle: MosaicStyle
     private var mosaicDrawMode: MosaicDrawMode
+    private var markerStyle: MarkerStyle
+    private var markerDrawMode: MosaicDrawMode
     private var stepStyle: StepStyle
     private var tool: AnnotateTool
     private var kind: ShapeKind
@@ -43,6 +47,7 @@ final class RefineToolbarController: NSObject {
     private var shapeButton: NSButton!
     private var arrowButton: NSButton!
     private var pencilButton: NSButton!
+    private var markerButton: NSButton!
     private var mosaicButton: NSButton!
     private var textButton: NSButton!
     private var stepButton: NSButton!
@@ -55,6 +60,8 @@ final class RefineToolbarController: NSObject {
     private var textOptionsRow: NSView!
     /// Mosaic options row (brush / kind / intensity).
     private var mosaicOptionsRow: NSView!
+    /// Marker options row (brush / kind / color card).
+    private var markerOptionsRow: NSView!
     /// Step options row (chrome kind / size / palette).
     private var stepOptionsRow: NSView!
     /// Shape-only chrome (fill + rect/oval). Hidden for pencil / arrow.
@@ -85,6 +92,10 @@ final class RefineToolbarController: NSObject {
     private var mosaicIntensityPreview: MosaicIntensityPreviewView!
     private var mosaicIntensitySlider: MosaicIntensitySlider!
     private var mosaicIntensityLabel: NSTextField!
+    private var markerBrushButtons: [NSButton] = []
+    private var markerRectButton: NSButton!
+    private var markerOvalButton: NSButton!
+    private var markerColorPreview: NSView!
     private var stepKindButtons: [NSButton] = []
     private var stepSizeButton: NSButton!
     private var stepColorPreview: NSView!
@@ -98,6 +109,8 @@ final class RefineToolbarController: NSObject {
         initialTextStyle: TextStyle,
         initialMosaicStyle: MosaicStyle = .default,
         initialMosaicDrawMode: MosaicDrawMode = .rectangle,
+        initialMarkerStyle: MarkerStyle = .default,
+        initialMarkerDrawMode: MosaicDrawMode = .rectangle,
         initialStepStyle: StepStyle = .default,
         onEvent: @escaping (Event) -> Void
     ) {
@@ -106,6 +119,8 @@ final class RefineToolbarController: NSObject {
         self.textStyle = initialTextStyle
         self.mosaicStyle = initialMosaicStyle
         self.mosaicDrawMode = initialMosaicDrawMode
+        self.markerStyle = initialMarkerStyle
+        self.markerDrawMode = initialMarkerDrawMode
         self.stepStyle = initialStepStyle
         self.tool = initialTool
         self.kind = initialKind
@@ -143,9 +158,11 @@ final class RefineToolbarController: NSObject {
         strokeOptionsRow = buildSubToolbar()
         textOptionsRow = buildTextSubToolbar()
         mosaicOptionsRow = buildMosaicSubToolbar()
+        markerOptionsRow = buildMarkerSubToolbar()
         stepOptionsRow = buildStepSubToolbar()
         optionsStack.addArrangedSubview(strokeOptionsRow)
         optionsStack.addArrangedSubview(textOptionsRow)
+        optionsStack.addArrangedSubview(markerOptionsRow)
         optionsStack.addArrangedSubview(mosaicOptionsRow)
         optionsStack.addArrangedSubview(stepOptionsRow)
         embed(optionsStack, in: optionsCard)
@@ -203,6 +220,12 @@ final class RefineToolbarController: NSObject {
             enabled: true,
             action: #selector(mosaicTapped)
         )
+        markerButton = iconButton(
+            systemName: "paintbrush.pointed",
+            tooltip: "Marker",
+            enabled: true,
+            action: #selector(markerTapped)
+        )
         textButton = iconButton(
             image: textToolIcon(),
             tooltip: "Text",
@@ -220,7 +243,7 @@ final class RefineToolbarController: NSObject {
             shapeButton,
             arrowButton,
             pencilButton,
-            iconButton(systemName: "paintbrush.pointed", tooltip: "Marker", enabled: false, action: nil),
+            markerButton,
             mosaicButton,
             textButton,
             stepButton,
@@ -633,6 +656,96 @@ final class RefineToolbarController: NSObject {
         return stack
     }
 
+    /// Marker = mosaic layout with color card instead of blur intensity.
+    private func buildMarkerSubToolbar() -> NSView {
+        let stack = NSStackView(views: [])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+
+        markerBrushButtons = MarkerStyle.brushPresets.enumerated().map { index, width in
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.setButtonType(.momentaryChange)
+            button.imagePosition = .imageOnly
+            button.toolTip = "Brush \(Int(width))"
+            button.target = self
+            button.action = #selector(markerBrushTapped(_:))
+            button.tag = Int(width)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 24),
+                button.heightAnchor.constraint(equalToConstant: 24),
+            ])
+            let preview = MarkerStyle.brushPreviewDiameters[index]
+            button.image = strokeDotImage(diameter: preview, selected: false)
+            return button
+        }
+        for button in markerBrushButtons {
+            stack.addArrangedSubview(button)
+        }
+        stack.addArrangedSubview(miniDivider())
+
+        markerRectButton = iconButton(
+            image: mosaicBrushKindIcon(kind: .rectangle),
+            tooltip: "Rectangle region",
+            enabled: true,
+            action: #selector(markerRectTapped)
+        )
+        markerOvalButton = iconButton(
+            image: mosaicBrushKindIcon(kind: .ellipse),
+            tooltip: "Oval region",
+            enabled: true,
+            action: #selector(markerOvalTapped)
+        )
+        stack.addArrangedSubview(markerRectButton)
+        stack.addArrangedSubview(markerOvalButton)
+        stack.addArrangedSubview(miniDivider())
+
+        let preview = NSView(frame: .zero)
+        preview.wantsLayer = true
+        preview.layer?.cornerRadius = 3
+        preview.layer?.borderWidth = 1
+        preview.layer?.borderColor = NSColor(calibratedWhite: 0.35, alpha: 1).cgColor
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            preview.widthAnchor.constraint(equalToConstant: 24),
+            preview.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        markerColorPreview = preview
+        stack.addArrangedSubview(preview)
+
+        let swatchGrid = NSStackView(views: [])
+        swatchGrid.orientation = .vertical
+        swatchGrid.spacing = 2
+        swatchGrid.alignment = .leading
+
+        let allSwatches = PaletteColor.allCases
+        let columns = 10
+        for rowStart in stride(from: 0, to: allSwatches.count, by: columns) {
+            let row = NSStackView(views: [])
+            row.orientation = .horizontal
+            row.spacing = 2
+            let end = min(rowStart + columns, allSwatches.count)
+            for swatch in allSwatches[rowStart..<end] {
+                let control = PaletteSwatchControl(swatch: swatch) { [weak self] picked in
+                    guard let self else { return }
+                    self.markerStyle.color = picked.color
+                    self.refreshSelectionChrome()
+                    self.onEvent(.markerStyleChanged(self.markerStyle))
+                }
+                row.addArrangedSubview(control)
+            }
+            swatchGrid.addArrangedSubview(row)
+        }
+        stack.addArrangedSubview(swatchGrid)
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
+
     private func buildStepSubToolbar() -> NSView {
         let stack = NSStackView(views: [])
         stack.orientation = .horizontal
@@ -763,19 +876,23 @@ final class RefineToolbarController: NSObject {
         tintSelected(shapeButton, selected: tool == .rectangle)
         tintSelected(arrowButton, selected: tool == .arrow)
         tintSelected(pencilButton, selected: tool == .pencil)
+        tintSelected(markerButton, selected: tool == .marker)
         tintSelected(mosaicButton, selected: tool == .mosaic)
         tintSelected(textButton, selected: tool == .text)
         tintSelected(stepButton, selected: tool == .step)
         colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
         textColorPreview.layer?.backgroundColor = textStyle.color.cgColor
+        markerColorPreview.layer?.backgroundColor = markerStyle.color.cgColor
         stepColorPreview.layer?.backgroundColor = stepStyle.color.cgColor
 
         let isText = (tool == .text)
         let isMosaic = (tool == .mosaic)
+        let isMarker = (tool == .marker)
         let isStep = (tool == .step)
-        strokeOptionsRow.isHidden = isText || isMosaic || isStep
+        strokeOptionsRow.isHidden = isText || isMosaic || isMarker || isStep
         textOptionsRow.isHidden = !isText
         mosaicOptionsRow.isHidden = !isMosaic
+        markerOptionsRow.isHidden = !isMarker
         stepOptionsRow.isHidden = !isStep
 
         let isArrow = (tool == .arrow)
@@ -783,7 +900,7 @@ final class RefineToolbarController: NSObject {
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
-        afterKindDivider.isHidden = isArrow || isText || isMosaic || isStep
+        afterKindDivider.isHidden = isArrow || isText || isMosaic || isMarker || isStep
         for view in arrowOnlyViews {
             view.isHidden = !isArrow
         }
@@ -825,6 +942,7 @@ final class RefineToolbarController: NSObject {
         textSizeButton.title = sizeLabel
 
         refreshMosaicChrome()
+        refreshMarkerChrome()
         refreshStepChrome()
     }
 
@@ -846,6 +964,23 @@ final class RefineToolbarController: NSObject {
         mosaicIntensityLabel.stringValue = "\(Int(mosaicStyle.intensity.rounded()))"
         mosaicIntensityPreview.intensity = mosaicStyle.intensity
         mosaicIntensityPreview.needsDisplay = true
+    }
+
+    private func refreshMarkerChrome() {
+        let selectedWidth = MarkerStyle.nearestBrushPreset(markerStyle.brushWidth)
+        let isFreehand = (markerDrawMode == .freehand)
+        for (index, button) in markerBrushButtons.enumerated() {
+            let width = MarkerStyle.brushPresets[index]
+            let on = isFreehand && abs(width - selectedWidth) < 0.5
+            let preview = MarkerStyle.brushPreviewDiameters[index]
+            button.title = ""
+            button.imagePosition = .imageOnly
+            button.image = strokeDotImage(diameter: preview, selected: on)
+            tintSelected(button, selected: on)
+        }
+        tintSelected(markerRectButton, selected: markerDrawMode == .rectangle)
+        tintSelected(markerOvalButton, selected: markerDrawMode == .ellipse)
+        markerColorPreview.layer?.backgroundColor = markerStyle.color.cgColor
     }
 
     private func refreshStepChrome() {
@@ -1277,6 +1412,10 @@ final class RefineToolbarController: NSObject {
         selectTool(tool == .mosaic ? .none : .mosaic)
     }
 
+    @objc private func markerTapped() {
+        selectTool(tool == .marker ? .none : .marker)
+    }
+
     @objc private func textTapped() {
         selectTool(tool == .text ? .none : .text)
     }
@@ -1324,6 +1463,26 @@ final class RefineToolbarController: NSObject {
         mosaicIntensityPreview.intensity = mosaicStyle.intensity
         mosaicIntensityPreview.needsDisplay = true
         onEvent(.mosaicStyleChanged(mosaicStyle))
+    }
+
+    @objc private func markerBrushTapped(_ sender: NSButton) {
+        markerStyle.brushWidth = MarkerStyle.nearestBrushPreset(CGFloat(sender.tag))
+        markerDrawMode = .freehand
+        refreshMarkerChrome()
+        onEvent(.markerDrawModeChanged(markerDrawMode))
+        onEvent(.markerStyleChanged(markerStyle))
+    }
+
+    @objc private func markerRectTapped() {
+        markerDrawMode = .rectangle
+        refreshMarkerChrome()
+        onEvent(.markerDrawModeChanged(markerDrawMode))
+    }
+
+    @objc private func markerOvalTapped() {
+        markerDrawMode = .ellipse
+        refreshMarkerChrome()
+        onEvent(.markerDrawModeChanged(markerDrawMode))
     }
 
     @objc private func textBoldTapped() {
@@ -1660,6 +1819,18 @@ final class RefineToolbarController: NSObject {
 
     func syncMosaicDrawMode(_ mode: MosaicDrawMode) {
         mosaicDrawMode = mode
+        refreshSelectionChrome()
+    }
+
+    func syncMarkerStyle(_ style: MarkerStyle) {
+        var next = style
+        next.clamp()
+        self.markerStyle = next
+        refreshSelectionChrome()
+    }
+
+    func syncMarkerDrawMode(_ mode: MosaicDrawMode) {
+        markerDrawMode = mode
         refreshSelectionChrome()
     }
 

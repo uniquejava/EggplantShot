@@ -73,7 +73,9 @@ final class SelectionPanel: NSPanel {
         annotationHandleSize: CGFloat,
         playbackImage: NSImage?,
         editingAnnotationID: UUID?,
-        hoveredTextID: UUID?
+        hoveredTextID: UUID?,
+        hoveredMarkerRegionID: UUID? = nil,
+        showSolidMarkerRegionBorder: Bool = false
     ) {
         let local: CGRect
         if globalRect.isNull {
@@ -96,6 +98,8 @@ final class SelectionPanel: NSPanel {
         overlayView.playbackImage = playbackImage
         overlayView.editingAnnotationID = editingAnnotationID
         overlayView.hoveredTextID = hoveredTextID
+        overlayView.hoveredMarkerRegionID = hoveredMarkerRegionID
+        overlayView.showSolidMarkerRegionBorder = showSolidMarkerRegionBorder
         overlayView.needsDisplay = true
     }
 
@@ -124,6 +128,10 @@ final class SelectionOverlayNSView: NSView {
     var editingAnnotationID: UUID?
     /// Snipaste-style hover: dashed outline while the pointer is over a text mark.
     var hoveredTextID: UUID?
+    /// Snipaste-style hover: dashed outline over a non-selected marker region.
+    var hoveredMarkerRegionID: UUID?
+    /// While moving / resizing a selected marker region: solid hairline (Snipaste).
+    var showSolidMarkerRegionBorder = false
     var onCursorUpdate: (() -> Void)?
     var cursorMode: CursorMode = .selectingPlus {
         didSet {
@@ -268,16 +276,20 @@ final class SelectionOverlayNSView: NSView {
         }
         if let draft = draftAnnotation {
             AnnotationDrawing.draw(draft, origin: origin, sample: sample)
-            // Mosaic region drag: solid 1px contrast hairline (edit chrome only).
+            // Mosaic / marker region drag: solid 1px contrast hairline (edit chrome only).
             if case .mosaic(.region(let mode, let rect), _) = draft.payload {
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
-                drawMosaicRegionChrome(in: r, mode: mode, dashed: false)
+                drawRegionChrome(in: r, mode: mode, dashed: false)
+            } else if case .marker(.region(let mode, let rect), _) = draft.payload {
+                let r = rect.offsetBy(dx: origin.x, dy: origin.y)
+                drawRegionChrome(in: r, mode: mode, dashed: false)
             }
         }
 
         if let selected = selectedAnnotation,
            !selected.isPencil,
            !selected.isMosaicStroke,
+           !selected.isMarkerStroke,
            !selected.isText,
            !selected.isStep,
            selected.id != editingAnnotationID {
@@ -293,7 +305,14 @@ final class SelectionOverlayNSView: NSView {
             } else if case .mosaic(.region(let mode, let rect), _) = selected.payload {
                 // After release: dashed hairline + resize handles.
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
-                drawMosaicRegionChrome(in: r, mode: mode, dashed: true)
+                drawRegionChrome(in: r, mode: mode, dashed: true)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+            } else if case .marker(.region(let mode, let rect), _) = selected.payload {
+                // Snipaste marker: handles only when idle; solid border while moving / resizing.
+                let r = rect.offsetBy(dx: origin.x, dy: origin.y)
+                if showSolidMarkerRegionBorder {
+                    drawRegionChrome(in: r, mode: mode, dashed: false)
+                }
                 AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
             } else {
                 let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
@@ -315,11 +334,20 @@ final class SelectionOverlayNSView: NSView {
             let r = hovered.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
             drawTextHoverOutline(in: r, style: hovered.textStyle)
         }
+
+        if let hid = hoveredMarkerRegionID,
+           hid != selectedAnnotation?.id,
+           let hovered = annotations.first(where: { $0.id == hid }),
+           case .marker(.region(let mode, let rect), _) = hovered.payload {
+            let r = rect.offsetBy(dx: origin.x, dy: origin.y)
+            drawRegionChrome(in: r, mode: mode, dashed: true)
+        }
     }
 
-    /// Snipaste mosaic region: 1 device-pixel hairline; black on light / white on dark.
-    /// Solid while dragging; dashed once committed & selected.
-    private func drawMosaicRegionChrome(in rect: CGRect, mode: MosaicDrawMode, dashed: Bool) {
+    /// Snipaste mosaic / marker region: 1 device-pixel hairline; black on light / white on dark.
+    /// Mosaic: solid while dragging, dashed when selected. Marker: solid while drawing / moving / resizing;
+    /// idle selected = handles only; non-selected hover = dashed.
+    private func drawRegionChrome(in rect: CGRect, mode: MosaicDrawMode, dashed: Bool) {
         guard rect.width >= 1, rect.height >= 1 else { return }
         let scale = window?.backingScaleFactor ?? 2
         let w = 1 / max(scale, 1)

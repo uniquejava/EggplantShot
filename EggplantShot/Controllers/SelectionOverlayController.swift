@@ -83,6 +83,8 @@ final class SelectionOverlayController {
     private var textStyle: TextStyle = TextAnnotationPrefs.load()
     private var mosaicStyle: MosaicStyle = AnnotationPrefs.loadMosaicStyle()
     private var mosaicDrawMode: MosaicDrawMode = AnnotationPrefs.loadMosaicDrawMode()
+    private var markerStyle: MarkerStyle = AnnotationPrefs.loadMarkerStyle()
+    private var markerDrawMode: MosaicDrawMode = AnnotationPrefs.loadMarkerDrawMode()
     private var stepStyle: StepStyle = StepAnnotationPrefs.load()
     private let annotationHistory = AnnotationHistory()
     /// In-progress mark while dragging (selection-local geometry).
@@ -91,6 +93,8 @@ final class SelectionOverlayController {
     private var textClickCandidate: (id: UUID?, start: CGPoint, wasSelected: Bool)?
     /// Snipaste hover outline while the pointer is over a text mark.
     private var hoveredTextID: UUID?
+    /// Snipaste hover: dashed outline over a non-selected marker region.
+    private var hoveredMarkerRegionID: UUID?
     /// Active inline text editor (selection-local mark id).
     private var editingTextID: UUID?
     private var textEditorHost: SelectionPanel?
@@ -302,11 +306,14 @@ final class SelectionOverlayController {
         textStyle = TextAnnotationPrefs.load()
         mosaicStyle = AnnotationPrefs.loadMosaicStyle()
         mosaicDrawMode = AnnotationPrefs.loadMosaicDrawMode()
+        markerStyle = AnnotationPrefs.loadMarkerStyle()
+        markerDrawMode = AnnotationPrefs.loadMarkerDrawMode()
         stepStyle = StepAnnotationPrefs.load()
         annotationHistory.reset()
         draftAnnotation = nil
         textClickCandidate = nil
         hoveredTextID = nil
+        hoveredMarkerRegionID = nil
         discardTextEditor()
         stopPencilSampling()
         historyCursor = nil
@@ -330,6 +337,7 @@ final class SelectionOverlayController {
             // Always drive the cursor ourselves (incl. over the text editor).
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
                 self.updateHoveredText(at: point)
+                self.updateHoveredMarkerRegion(at: point)
                 self.updateOverlayCursor(at: point)
             }
             // Live-moving the editing chrome: swallow so NSTextView cannot steal the drag.
@@ -356,6 +364,7 @@ final class SelectionOverlayController {
             }
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
                 self.updateHoveredText(at: point)
+                self.updateHoveredMarkerRegion(at: point)
                 self.updateOverlayCursor(at: point)
             }
             if self.isDraggingEditingText {
@@ -505,6 +514,7 @@ final class SelectionOverlayController {
         }
         if phase == .refining, dragKind == nil {
             updateHoveredText(at: point)
+            updateHoveredMarkerRegion(at: point)
             updateOverlayCursor(at: point)
         }
     }
@@ -634,9 +644,10 @@ final class SelectionOverlayController {
                 let local = toLocal(point)
                 dragKind = .annotateDraw(startLocal: local)
                 draftAnnotation = makeDraftAnnotation(startingAt: local)
-                // Pencil / freehand mosaic: hide cursor so only the brush tip shows.
+                // Pencil / freehand mosaic / marker: hide cursor so only the brush tip shows.
                 if annotateTool == .pencil
                     || (annotateTool == .mosaic && mosaicDrawMode == .freehand)
+                    || (annotateTool == .marker && markerDrawMode == .freehand)
                 {
                     AnnotationCursors.hidden.set()
                     startPencilSampling()
@@ -814,8 +825,9 @@ final class SelectionOverlayController {
                         let ann = finalizedDraft(draft)
                         annotationHistory.commit { doc in
                             doc.marks.append(ann)
-                            // Pencil / freehand mosaic: no auto-select. Region mosaic: select for resize chrome.
-                            doc.selectedID = (ann.isPencil || ann.isMosaicStroke) ? nil : ann.id
+                            // Pencil / freehand mosaic / marker: no auto-select. Region: select for resize chrome.
+                            doc.selectedID = (ann.isPencil || ann.isMosaicStroke || ann.isMarkerStroke)
+                                ? nil : ann.id
                         }
                         refreshHistoryChrome()
                     }
@@ -924,6 +936,17 @@ final class SelectionOverlayController {
             toolbar?.syncMosaicDrawMode(mosaicDrawMode)
             return
         }
+        if annotation.isMarker {
+            markerStyle = annotation.markerStyle
+            if case .region(let mode, _) = annotation.markerGeometry {
+                markerDrawMode = mode
+            } else {
+                markerDrawMode = .freehand
+            }
+            toolbar?.syncMarkerStyle(markerStyle)
+            toolbar?.syncMarkerDrawMode(markerDrawMode)
+            return
+        }
         annotationStyle = annotation.style
         if annotation.isShape {
             annotationKind = annotation.kind
@@ -949,6 +972,17 @@ final class SelectionOverlayController {
                     mosaicRegion: mosaicDrawMode,
                     rect: CGRect(origin: local, size: .zero),
                     mosaicStyle: mosaicStyle
+                )
+            }
+        case .marker:
+            switch markerDrawMode {
+            case .freehand:
+                return Annotation(markerPoints: [local], markerStyle: markerStyle)
+            case .rectangle, .ellipse:
+                return Annotation(
+                    markerRegion: markerDrawMode,
+                    rect: CGRect(origin: local, size: .zero),
+                    markerStyle: markerStyle
                 )
             }
         case .arrow:
@@ -1002,6 +1036,7 @@ final class SelectionOverlayController {
         guard case .annotateDraw(let startLocal) = dragKind,
               annotateTool == .pencil
                 || (annotateTool == .mosaic && mosaicDrawMode == .freehand)
+                || (annotateTool == .marker && markerDrawMode == .freehand)
         else {
             stopPencilSampling()
             return
@@ -1068,6 +1103,41 @@ final class SelectionOverlayController {
                 )
             }
 
+        case .marker:
+            switch markerDrawMode {
+            case .freehand:
+                if NSEvent.modifierFlags.contains(.shift) {
+                    return Annotation(markerPoints: [start, end], markerStyle: markerStyle)
+                }
+                var points = draftAnnotation?.points ?? [start]
+                if points.isEmpty { points = [start] }
+                if let last = points.last {
+                    let distance = hypot(end.x - last.x, end.y - last.y)
+                    if distance >= pencilSampleSpacing {
+                        points.append(end)
+                    }
+                } else {
+                    points.append(end)
+                }
+                return Annotation(markerPoints: points, markerStyle: markerStyle)
+
+            case .rectangle, .ellipse:
+                var draft = CGRect(
+                    x: min(start.x, end.x),
+                    y: min(start.y, end.y),
+                    width: abs(end.x - start.x),
+                    height: abs(end.y - start.y)
+                )
+                if NSEvent.modifierFlags.contains(.shift) {
+                    draft = constrainedSquare(from: start, toward: end)
+                }
+                return Annotation(
+                    markerRegion: markerDrawMode,
+                    rect: draft,
+                    markerStyle: markerStyle
+                )
+            }
+
         case .arrow:
             var style = annotationStyle
             style.isFilled = false
@@ -1119,6 +1189,13 @@ final class SelectionOverlayController {
             case .region(_, let rect):
                 return rect.width >= minAnnotation && rect.height >= minAnnotation
             }
+        case .marker(let geometry, _):
+            switch geometry {
+            case .stroke(let points):
+                return !points.isEmpty
+            case .region(_, let rect):
+                return rect.width >= minAnnotation && rect.height >= minAnnotation
+            }
         case .text, .step:
             return true
         }
@@ -1147,6 +1224,13 @@ final class SelectionOverlayController {
                 return Annotation(mosaicPoints: points, mosaicStyle: style)
             case .region(let mode, let rect):
                 return Annotation(mosaicRegion: mode, rect: rect, mosaicStyle: style)
+            }
+        case .marker(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                return Annotation(markerPoints: points, markerStyle: style)
+            case .region(let mode, let rect):
+                return Annotation(markerRegion: mode, rect: rect, markerStyle: style)
             }
         case .text(let string, let rect, let style):
             return Annotation(string: string, rect: rect, style: style)
@@ -1293,6 +1377,25 @@ final class SelectionOverlayController {
         updateHighlight(showHandles: true)
     }
 
+    private func markerRegionID(at point: CGPoint) -> UUID? {
+        for ann in annotations.reversed() {
+            guard ann.isMarkerRegion else { continue }
+            // Selected mark uses handles chrome, not hover dashed.
+            if ann.id == selectedAnnotationID { continue }
+            if isOnAnnotationStroke(ann, at: point) {
+                return ann.id
+            }
+        }
+        return nil
+    }
+
+    private func updateHoveredMarkerRegion(at point: CGPoint) {
+        let id = markerRegionID(at: point)
+        guard id != hoveredMarkerRegionID else { return }
+        hoveredMarkerRegionID = id
+        updateHighlight(showHandles: true)
+    }
+
     private func isOnAnnotationStroke(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
         switch annotation.payload {
         case .shape(let kind, let localRect, let style):
@@ -1339,6 +1442,25 @@ final class SelectionOverlayController {
                 }
             }
 
+        case .marker(let geometry, let style):
+            let local = toLocal(globalPoint)
+            switch geometry {
+            case .stroke(let points):
+                let tolerance = max(style.brushWidth / 2 + 2, annotationBorderHitSlop)
+                return AnnotationDrawing.distance(from: local, toPolyline: points) <= tolerance
+            case .region(let mode, let rect):
+                let global = toGlobal(rect)
+                switch mode {
+                case .ellipse:
+                    let localIn = CGPoint(x: globalPoint.x - global.minX, y: globalPoint.y - global.minY)
+                    let nx = (localIn.x - global.width / 2) / max(global.width / 2, 0.5)
+                    let ny = (localIn.y - global.height / 2) / max(global.height / 2, 0.5)
+                    return nx * nx + ny * ny <= 1
+                case .rectangle, .freehand:
+                    return global.contains(globalPoint)
+                }
+            }
+
         case .arrow(let start, let end, let style, let caps):
             let local = toLocal(globalPoint)
             let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
@@ -1357,10 +1479,10 @@ final class SelectionOverlayController {
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
-        // Pencil / freehand mosaic / text / arrow / step: no 8-handle resize chrome.
-        // Mosaic region (rect/oval) uses the same 8 handles as shapes.
-        guard !annotation.isPencil, !annotation.isMosaicStroke, !annotation.isText,
-              !annotation.isArrow, !annotation.isStep else {
+        // Pencil / freehand mosaic / marker / text / arrow / step: no 8-handle resize chrome.
+        // Mosaic / marker region (rect/oval) uses the same 8 handles as shapes.
+        guard !annotation.isPencil, !annotation.isMosaicStroke, !annotation.isMarkerStroke,
+              !annotation.isText, !annotation.isArrow, !annotation.isStep else {
             return nil
         }
         let global = toGlobal(annotation.boundingRect)
@@ -1486,6 +1608,12 @@ final class SelectionOverlayController {
                 } else {
                     AnnotationCursors.whitePlus.set()
                 }
+            } else if annotateTool == .marker {
+                if markerDrawMode == .freehand {
+                    AnnotationCursors.mosaicCrosshair(brushWidth: markerStyle.brushWidth).set()
+                } else {
+                    AnnotationCursors.whitePlus.set()
+                }
             } else if annotateTool == .text {
                 NSCursor.iBeam.set()
             } else if annotateTool == .step {
@@ -1541,7 +1669,7 @@ final class SelectionOverlayController {
         AnnotationPrefs.save(style: next, kind: annotationKind)
         if let id = selectedAnnotationID,
            let selected = annotations.first(where: { $0.id == id }),
-           !selected.isText, !selected.isMosaic, !selected.isStep {
+           !selected.isText, !selected.isMosaic, !selected.isMarker, !selected.isStep {
             var applied = next
             // Don't push fill onto a pencil / arrow mark.
             if selected.isPencil || selected.isArrow {
@@ -1597,6 +1725,30 @@ final class SelectionOverlayController {
     private func applyMosaicDrawMode(_ mode: MosaicDrawMode) {
         mosaicDrawMode = mode
         AnnotationPrefs.saveMosaicDrawMode(mode)
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
+
+    private func applyMarkerStyle(_ style: MarkerStyle) {
+        var next = style
+        next.clamp()
+        markerStyle = next
+        AnnotationPrefs.saveMarkerStyle(next)
+        if let id = selectedAnnotationID,
+           let selected = annotations.first(where: { $0.id == id }),
+           selected.isMarker {
+            annotationHistory.commit { doc in
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+                doc.marks[idx].markerStyle = next
+            }
+            updateHighlight(showHandles: true)
+            refreshHistoryChrome()
+        }
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
+
+    private func applyMarkerDrawMode(_ mode: MosaicDrawMode) {
+        markerDrawMode = mode
+        AnnotationPrefs.saveMarkerDrawMode(mode)
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
@@ -2158,6 +2310,7 @@ final class SelectionOverlayController {
         draftAnnotation = nil
         textClickCandidate = nil
         hoveredTextID = nil
+        hoveredMarkerRegionID = nil
         annotateTool = .none
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
@@ -2237,6 +2390,17 @@ final class SelectionOverlayController {
 
     private func updateHighlight(showHandles: Bool) {
         let selected = selectedAnnotationID.flatMap { id in annotations.first(where: { $0.id == id }) }
+        if let hid = hoveredMarkerRegionID, hid == selectedAnnotationID {
+            hoveredMarkerRegionID = nil
+        }
+        let movingOrResizingMarkerRegion: Bool = {
+            switch dragKind {
+            case .annotateResize(_, _, let start, _), .annotateMove(_, let start, _):
+                return start.isMarkerRegion
+            default:
+                return false
+            }
+        }()
         for panel in panels {
             panel.setSelection(
                 currentRect,
@@ -2248,7 +2412,9 @@ final class SelectionOverlayController {
                 annotationHandleSize: annotationHandleVisualSize,
                 playbackImage: playbackBaseImage,
                 editingAnnotationID: editingTextID,
-                hoveredTextID: hoveredTextID
+                hoveredTextID: hoveredTextID,
+                hoveredMarkerRegionID: hoveredMarkerRegionID,
+                showSolidMarkerRegionBorder: movingOrResizingMarkerRegion
             )
         }
     }
@@ -2264,6 +2430,8 @@ final class SelectionOverlayController {
             initialTextStyle: textStyle,
             initialMosaicStyle: mosaicStyle,
             initialMosaicDrawMode: mosaicDrawMode,
+            initialMarkerStyle: markerStyle,
+            initialMarkerDrawMode: markerDrawMode,
             initialStepStyle: stepStyle
         ) { [weak self] event in
             guard let self else { return }
@@ -2287,6 +2455,10 @@ final class SelectionOverlayController {
                 self.applyMosaicStyle(style)
             case .mosaicDrawModeChanged(let mode):
                 self.applyMosaicDrawMode(mode)
+            case .markerStyleChanged(let style):
+                self.applyMarkerStyle(style)
+            case .markerDrawModeChanged(let mode):
+                self.applyMarkerDrawMode(mode)
             case .stepStyleChanged(let style):
                 self.applyStepStyle(style)
             case .kindChanged(let kind):
