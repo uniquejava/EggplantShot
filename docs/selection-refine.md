@@ -17,7 +17,7 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
      1. **Stroke / fill** (items 1–4): thin / medium / thick outline, or fill. Mutually exclusive.
      2. **Shape kind** (items 5–6): rectangle ↔ ellipse. Mutually exclusive. Hold **Shift** while dragging for square / circle.
      3. **Border style** (item 7): dropdown — Snipaste 5 patterns: solid / long dash / short dash / long–short / long–short–short (disabled while fill is selected).
-     4. **Color**: current swatch preview + 2×8 preset grid.
+     4. **Color**: current swatch preview + 2×10 Snipaste-like preset grid.
    - Pointer zones on an existing mark:
      - **Interior** → white “＋” cursor; drag draws a new shape (nesting allowed); does **not** move.
      - **Border** → open-hand cursor; drag moves the mark.
@@ -49,8 +49,9 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
 | [ OCR | undo | redo ]
 | [ ✕ | pin | save | copy | …‡ ]
 
-† Shape tool expands a sub-row when active:
-  [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ palette 2×8 ]
+† Shape tool expands a **separate** options card below the main toolbar (~4pt gap):
+  [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ preview 24 + palette 2×10 ]
+  Palette chips ≈11pt, gap ≈2pt (Snipaste-measured).
 ‡ More is stub / disabled today.
 ```
 
@@ -71,5 +72,5 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
 - [x] Confirm tears down overlay, then captures final rect
 - [x] ⌘F1 entry; primary action matches mode
 - [x] Pin soft glow + drag
-- [x] Shape tool: stroke/fill + rect/oval + line-style dropdown + 2×8 palette; draw / move / resize, bake into capture
+- [x] Shape tool: stroke/fill + rect/oval + line-style dropdown + 2×10 palette; draw / move / resize, bake into capture
 - [x] Debug build succeeds

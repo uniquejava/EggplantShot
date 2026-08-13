@@ -17,7 +17,7 @@ struct AnnotationStyle: Equatable {
 
     static let `default` = AnnotationStyle(
         strokeWidth: StrokeWidthOption.medium.points,
-        strokeColor: PaletteColor.sky.color,
+        strokeColor: PaletteColor.cyan.color,
         isFilled: false,
         lineStyle: .solid
     )
@@ -130,31 +130,37 @@ enum StrokeWidthOption: Int, CaseIterable {
     }
 }
 
-/// Fixed Snipaste-like quick palette (2×8).
+/// Fixed Snipaste-like quick palette (2×10).
 enum PaletteColor: Int, CaseIterable {
-    case white, black, red, orange
-    case yellow, lime, green, teal
-    case cyan, sky, blue, indigo
-    case purple, magenta, pink, brown
+    // Row 1 — darker / saturated
+    case black, darkGray, maroon, red, orange
+    case yellow, green, cyan, blue, purple
+    // Row 2 — light / pastel
+    case white, lightGray, brown, pink, amber
+    case cream, lime, sky, slateBlue, lavender
 
     var color: NSColor {
         switch self {
+        case .black: return NSColor(calibratedWhite: 0.0, alpha: 1)
+        case .darkGray: return NSColor(calibratedWhite: 0.50, alpha: 1)
+        case .maroon: return NSColor(calibratedRed: 0.53, green: 0.0, blue: 0.08, alpha: 1)
+        case .red: return NSColor(calibratedRed: 0.93, green: 0.11, blue: 0.14, alpha: 1)
+        case .orange: return NSColor(calibratedRed: 1.0, green: 0.50, blue: 0.15, alpha: 1)
+        case .yellow: return NSColor(calibratedRed: 1.0, green: 0.95, blue: 0.0, alpha: 1)
+        case .green: return NSColor(calibratedRed: 0.13, green: 0.69, blue: 0.30, alpha: 1)
+        case .cyan: return NSColor(calibratedRed: 0.0, green: 0.64, blue: 0.91, alpha: 1)
+        case .blue: return NSColor(calibratedRed: 0.25, green: 0.28, blue: 0.80, alpha: 1)
+        case .purple: return NSColor(calibratedRed: 0.64, green: 0.29, blue: 0.64, alpha: 1)
         case .white: return NSColor(calibratedWhite: 1, alpha: 1)
-        case .black: return NSColor(calibratedWhite: 0.08, alpha: 1)
-        case .red: return NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
-        case .orange: return NSColor(calibratedRed: 1.0, green: 0.55, blue: 0.15, alpha: 1)
-        case .yellow: return NSColor(calibratedRed: 1.0, green: 0.84, blue: 0.12, alpha: 1)
-        case .lime: return NSColor(calibratedRed: 0.65, green: 0.9, blue: 0.2, alpha: 1)
-        case .green: return NSColor(calibratedRed: 0.22, green: 0.78, blue: 0.35, alpha: 1)
-        case .teal: return NSColor(calibratedRed: 0.15, green: 0.72, blue: 0.68, alpha: 1)
-        case .cyan: return NSColor(calibratedRed: 0.25, green: 0.85, blue: 0.95, alpha: 1)
-        case .sky: return NSColor(calibratedRed: 0.35, green: 0.72, blue: 0.98, alpha: 1)
-        case .blue: return NSColor(calibratedRed: 0.18, green: 0.45, blue: 0.95, alpha: 1)
-        case .indigo: return NSColor(calibratedRed: 0.35, green: 0.3, blue: 0.85, alpha: 1)
-        case .purple: return NSColor(calibratedRed: 0.62, green: 0.28, blue: 0.9, alpha: 1)
-        case .magenta: return NSColor(calibratedRed: 0.9, green: 0.25, blue: 0.7, alpha: 1)
-        case .pink: return NSColor(calibratedRed: 0.98, green: 0.45, blue: 0.65, alpha: 1)
-        case .brown: return NSColor(calibratedRed: 0.55, green: 0.35, blue: 0.2, alpha: 1)
+        case .lightGray: return NSColor(calibratedWhite: 0.76, alpha: 1)
+        case .brown: return NSColor(calibratedRed: 0.73, green: 0.48, blue: 0.34, alpha: 1)
+        case .pink: return NSColor(calibratedRed: 1.0, green: 0.68, blue: 0.79, alpha: 1)
+        case .amber: return NSColor(calibratedRed: 1.0, green: 0.79, blue: 0.05, alpha: 1)
+        case .cream: return NSColor(calibratedRed: 0.94, green: 0.89, blue: 0.69, alpha: 1)
+        case .lime: return NSColor(calibratedRed: 0.71, green: 0.90, blue: 0.11, alpha: 1)
+        case .sky: return NSColor(calibratedRed: 0.60, green: 0.85, blue: 0.92, alpha: 1)
+        case .slateBlue: return NSColor(calibratedRed: 0.44, green: 0.57, blue: 0.75, alpha: 1)
+        case .lavender: return NSColor(calibratedRed: 0.78, green: 0.75, blue: 0.91, alpha: 1)
         }
     }
 
@@ -162,7 +168,7 @@ enum PaletteColor: Int, CaseIterable {
         let target = color.usingColorSpace(.genericRGB) ?? color
         return allCases.min(by: { a, b in
             distance(a.color, target) < distance(b.color, target)
-        }) ?? .sky
+        }) ?? .cyan
     }
 
     private static func distance(_ a: NSColor, _ b: NSColor) -> CGFloat {

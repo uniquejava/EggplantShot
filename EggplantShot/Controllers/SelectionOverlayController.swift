@@ -898,7 +898,6 @@ private final class RefineToolbarController: NSObject {
     private var rectKindButton: NSButton!
     private var ovalKindButton: NSButton!
     private var lineStyleButton: NSButton!
-    private var colorButtons: [NSButton] = []
     private var colorPreview: NSView!
 
     init(
@@ -922,24 +921,25 @@ private final class RefineToolbarController: NSObject {
 
         let content = RefineToolbarView(frame: .zero)
         content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.white.cgColor
-        content.layer?.cornerRadius = 6
-        content.layer?.masksToBounds = false
-        content.layer?.shadowColor = NSColor.black.cgColor
-        content.layer?.shadowOpacity = 0.18
-        content.layer?.shadowRadius = 8
-        content.layer?.shadowOffset = CGSize(width: 0, height: -1)
+        content.layer?.backgroundColor = NSColor.clear.cgColor
 
         rootStack.orientation = .vertical
         rootStack.alignment = .leading
-        rootStack.spacing = 0
+        // Snipaste: two separate chrome cards with a small gap (~4pt).
+        rootStack.spacing = 4
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
+        let mainCard = makeChromeCard()
         let mainRow = buildMainRow(primaryAction: primaryAction)
-        subToolbarContainer = buildSubToolbar()
+        embed(mainRow, in: mainCard)
+
+        let optionsCard = makeChromeCard()
+        let subRow = buildSubToolbar()
+        embed(subRow, in: optionsCard)
+        subToolbarContainer = optionsCard
         subToolbarContainer.isHidden = (initialTool == .none)
 
-        rootStack.addArrangedSubview(mainRow)
+        rootStack.addArrangedSubview(mainCard)
         rootStack.addArrangedSubview(subToolbarContainer)
 
         content.addSubview(rootStack)
@@ -1024,7 +1024,7 @@ private final class RefineToolbarController: NSObject {
         stack.orientation = .horizontal
         stack.alignment = .centerY
         stack.spacing = 4
-        stack.edgeInsets = NSEdgeInsets(top: 2, left: 8, bottom: 4, right: 8)
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
 
         // Switch group 1: three stroke widths + fill (mutually exclusive).
         strokeButtons = StrokeWidthOption.allCases.map { option in
@@ -1106,16 +1106,16 @@ private final class RefineToolbarController: NSObject {
 
         stack.addArrangedSubview(miniDivider())
 
-        // Color preview + 2-row swatch grid
+        // Color preview (24pt) + 2×10 grid: chips 11pt, gap 2pt (measured from Snipaste @2x).
         let preview = NSView(frame: .zero)
         preview.wantsLayer = true
         preview.layer?.cornerRadius = 3
         preview.layer?.borderWidth = 1
-        preview.layer?.borderColor = NSColor(calibratedWhite: 0.75, alpha: 1).cgColor
+        preview.layer?.borderColor = NSColor(calibratedWhite: 0.35, alpha: 1).cgColor
         preview.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            preview.widthAnchor.constraint(equalToConstant: 22),
-            preview.heightAnchor.constraint(equalToConstant: 22),
+            preview.widthAnchor.constraint(equalToConstant: 24),
+            preview.heightAnchor.constraint(equalToConstant: 24),
         ])
         colorPreview = preview
         stack.addArrangedSubview(preview)
@@ -1124,62 +1124,58 @@ private final class RefineToolbarController: NSObject {
         swatchGrid.orientation = .vertical
         swatchGrid.spacing = 2
         swatchGrid.alignment = .leading
+        swatchGrid.wantsLayer = true
+        swatchGrid.layer?.masksToBounds = false
 
         let allSwatches = PaletteColor.allCases
-        let columns = 8
-        colorButtons = []
+        let columns = 10
         for rowStart in stride(from: 0, to: allSwatches.count, by: columns) {
             let row = NSStackView(views: [])
             row.orientation = .horizontal
             row.spacing = 2
+            row.wantsLayer = true
+            row.layer?.masksToBounds = false
             let end = min(rowStart + columns, allSwatches.count)
             for swatch in allSwatches[rowStart..<end] {
-                let button = NSButton(frame: .zero)
-                button.bezelStyle = .inline
-                button.isBordered = false
-                button.setButtonType(.momentaryChange)
-                button.imagePosition = .imageOnly
-                button.target = self
-                button.action = #selector(colorTapped(_:))
-                button.tag = swatch.rawValue
-                button.translatesAutoresizingMaskIntoConstraints = false
-                NSLayoutConstraint.activate([
-                    button.widthAnchor.constraint(equalToConstant: 11),
-                    button.heightAnchor.constraint(equalToConstant: 11),
-                ])
-                button.wantsLayer = true
-                button.layer?.backgroundColor = swatch.color.cgColor
-                button.layer?.cornerRadius = 1.5
-                button.layer?.borderWidth = 1
-                button.layer?.borderColor = NSColor(calibratedWhite: 0.7, alpha: 1).cgColor
-                colorButtons.append(button)
-                row.addArrangedSubview(button)
+                let control = PaletteSwatchControl(swatch: swatch) { [weak self] picked in
+                    guard let self else { return }
+                    self.style.strokeColor = picked.color
+                    self.refreshSelectionChrome()
+                    self.onEvent(.styleChanged(self.style))
+                }
+                row.addArrangedSubview(control)
             }
             swatchGrid.addArrangedSubview(row)
         }
         stack.addArrangedSubview(swatchGrid)
 
-        // Top hairline above sub-toolbar
-        let wrap = NSView(frame: .zero)
-        wrap.translatesAutoresizingMaskIntoConstraints = false
-        let line = NSView(frame: .zero)
-        line.wantsLayer = true
-        line.layer?.backgroundColor = NSColor(calibratedWhite: 0.88, alpha: 1).cgColor
-        line.translatesAutoresizingMaskIntoConstraints = false
         stack.translatesAutoresizingMaskIntoConstraints = false
-        wrap.addSubview(line)
-        wrap.addSubview(stack)
+        return stack
+    }
+
+    private func makeChromeCard() -> NSView {
+        let card = NSView(frame: .zero)
+        card.wantsLayer = true
+        card.layer?.backgroundColor = NSColor.white.cgColor
+        card.layer?.cornerRadius = 6
+        card.layer?.masksToBounds = false
+        card.layer?.shadowColor = NSColor.black.cgColor
+        card.layer?.shadowOpacity = 0.18
+        card.layer?.shadowRadius = 6
+        card.layer?.shadowOffset = CGSize(width: 0, height: -1)
+        card.translatesAutoresizingMaskIntoConstraints = false
+        return card
+    }
+
+    private func embed(_ child: NSView, in card: NSView) {
+        child.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(child)
         NSLayoutConstraint.activate([
-            line.heightAnchor.constraint(equalToConstant: 1),
-            line.topAnchor.constraint(equalTo: wrap.topAnchor),
-            line.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
-            line.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: line.bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
-            stack.bottomAnchor.constraint(equalTo: wrap.bottomAnchor),
+            child.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            child.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            child.topAnchor.constraint(equalTo: card.topAnchor),
+            child.bottomAnchor.constraint(equalTo: card.bottomAnchor),
         ])
-        return wrap
     }
 
     private func layoutPanel(content: NSView) {
@@ -1447,13 +1443,6 @@ private final class RefineToolbarController: NSObject {
         }
     }
 
-    @objc private func colorTapped(_ sender: NSButton) {
-        let swatch = PaletteColor(rawValue: sender.tag) ?? .sky
-        style.strokeColor = swatch.color
-        refreshSelectionChrome()
-        onEvent(.styleChanged(style))
-    }
-
     @objc private func pinTapped() { onEvent(.confirm(.pin)) }
     @objc private func copyTapped() { onEvent(.confirm(.copy)) }
     @objc private func saveTapped() { onEvent(.confirm(.save)) }
@@ -1685,5 +1674,104 @@ private final class SelectionOverlayNSView: NSView {
             stroke.lineWidth = 1.5
             stroke.stroke()
         }
+    }
+}
+
+// MARK: - Palette swatch (Snipaste-like hover grow)
+
+/// Fixed layout cell; chip starts small and scales up on hover.
+/// Fill is drawn flush to the 1pt border (no CALayer inset gap).
+private final class PaletteSwatchControl: NSView {
+    /// Snipaste @2x: 22 device-px → 11pt chip; 4px gap → 2pt (via stack spacing).
+    static let cellSize: CGFloat = 11
+    private static let restSize: CGFloat = 11
+    private static let hoverSize: CGFloat = 13.5
+
+    private let swatch: PaletteColor
+    private let onPick: (PaletteColor) -> Void
+    private let chip = PaletteSwatchChip()
+    private var trackingArea: NSTrackingArea?
+
+    init(swatch: PaletteColor, onPick: @escaping (PaletteColor) -> Void) {
+        self.swatch = swatch
+        self.onPick = onPick
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.masksToBounds = false
+        translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Self.cellSize),
+            heightAnchor.constraint(equalToConstant: Self.cellSize),
+        ])
+
+        chip.swatchColor = swatch.color
+        addSubview(chip)
+        layoutChip(size: Self.restSize)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        animateChip(size: Self.hoverSize)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        animateChip(size: Self.restSize)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onPick(swatch)
+    }
+
+    private func animateChip(size: CGFloat) {
+        let origin = (Self.cellSize - size) / 2
+        let target = CGRect(x: origin, y: origin, width: size, height: size)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.09
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            chip.animator().frame = target
+        }
+        chip.needsDisplay = true
+    }
+
+    private func layoutChip(size: CGFloat) {
+        let origin = (Self.cellSize - size) / 2
+        chip.frame = CGRect(x: origin, y: origin, width: size, height: size)
+        chip.needsDisplay = true
+    }
+}
+
+private final class PaletteSwatchChip: NSView {
+    var swatchColor: NSColor = .black
+
+    override func draw(_ dirtyRect: NSRect) {
+        let radius: CGFloat = max(1.75, bounds.width * 0.22)
+        let fillPath = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
+        swatchColor.setFill()
+        fillPath.fill()
+
+        // Stroke on the same rect edge — no gap between fill and border.
+        let strokePath = NSBezierPath(
+            roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+            xRadius: max(radius - 0.5, 0.5),
+            yRadius: max(radius - 0.5, 0.5)
+        )
+        strokePath.lineWidth = 1
+        NSColor(calibratedWhite: 0.55, alpha: 1).setStroke()
+        strokePath.stroke()
     }
 }
