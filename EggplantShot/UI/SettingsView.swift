@@ -16,12 +16,12 @@ struct SettingsView: View {
                     Label("Hotkeys", systemImage: "keyboard")
                 }
 
-            AboutSettingsPane()
+            AboutView()
                 .tabItem {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 460, height: 260)
+        .frame(width: 460, height: 320)
         .onAppear {
             appState.refreshPermissions()
         }
@@ -126,34 +126,5 @@ private struct HotkeysSettingsPane: View {
                 .padding(.vertical, 3)
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 4))
         }
-    }
-}
-
-private struct AboutSettingsPane: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "scissors")
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-            Text("EggplantShot")
-                .font(.title2.weight(.semibold))
-            Text("Version \(AppInfo.versionLine)")
-                .foregroundStyle(.secondary)
-            Text("Snipaste-style area capture for macOS.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-        }
-        .padding(28)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
-}
-
-enum AppInfo {
-    static var versionLine: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        return "\(v) (\(b))"
     }
 }

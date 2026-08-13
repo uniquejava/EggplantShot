@@ -51,7 +51,7 @@ EggplantShot/
   Controllers/SelectionOverlayController.swift
   Controllers/PinBoardController.swift
   Annotation/AnnotationModels.swift + AnnotationCompositor.swift
-  UI/StatusMenuContent.swift + SettingsView.swift
+  UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift
   Assets.xcassets/
   Info.plist                 # LSUIElement = true
   EggplantShot.entitlements  # App Sandbox OFF
