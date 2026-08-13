@@ -259,14 +259,22 @@ final class SelectionOverlayController {
             panel.onCursorUpdate = { [weak self] in
                 self?.reassertOverlayCursor()
             }
+            panel.cursorMode = .selectingPlus
             panels.append(panel)
             panel.orderFrontRegardless()
         }
+
+        // Cursor rects only apply on the key window — activate first, then makeKey.
+        NSApp.activate(ignoringOtherApps: true)
         let mouse = NSEvent.mouseLocation
         if let panel = panels.first(where: { NSMouseInRect(mouse, $0.screenFrame, false) }) ?? panels.first {
             panel.makeKeyAndOrderFront(nil)
+            panel.makeFirstResponder(panel.contentView)
+            if let view = panel.contentView {
+                panel.invalidateCursorRects(for: view)
+            }
         }
-        NSApp.activate(ignoringOtherApps: true)
+
         installMonitors()
         updateHoverHighlight(at: mouse)
     }
@@ -302,7 +310,7 @@ final class SelectionOverlayController {
         historyCursor = nil
         playbackBaseImage = nil
         phase = .idle
-        NSCursor.arrow.set()
+        // Don't NSCursor.arrow.set() — previous app restores its own cursor when it becomes key.
     }
 
     private func installMonitors() {
@@ -483,8 +491,14 @@ final class SelectionOverlayController {
     }
 
     private func handleMouseMoved(at point: CGPoint) {
-        if phase == .idle, pendingWindowPick == nil {
-            updateHoverHighlight(at: point)
+        if phase == .idle {
+            if pendingWindowPick == nil {
+                updateHoverHighlight(at: point)
+            }
+            // Selecting cursor comes from AppKit cursor rects on the key overlay.
+            return
+        }
+        if phase == .drawing {
             return
         }
         if phase == .refining, dragKind == nil {
@@ -509,6 +523,7 @@ final class SelectionOverlayController {
         hoveredWindowRect = nil
         currentRect = frame
         phase = .refining
+        setOverlayCursorMode(.controllerDriven)
         updateHighlight(showHandles: true)
         showToolbar()
         updateOverlayCursor(at: NSEvent.mouseLocation)
@@ -521,6 +536,7 @@ final class SelectionOverlayController {
         dragKind = .draw(start: start)
         currentRect = CGRect(origin: start, size: .zero)
         updateHighlight(showHandles: false)
+        setOverlayCursorMode(.selectingPlus)
     }
 
     private func handleMouseDown(at point: CGPoint) {
@@ -776,10 +792,12 @@ final class SelectionOverlayController {
                 currentRect = .null
                 phase = .idle
                 updateHoverHighlight(at: point)
+                setOverlayCursorMode(.selectingPlus)
                 return
             }
             currentRect = rect
             phase = .refining
+            setOverlayCursorMode(.controllerDriven)
             updateHighlight(showHandles: true)
             showToolbar()
             updateOverlayCursor(at: point)
@@ -1374,19 +1392,28 @@ final class SelectionOverlayController {
     }
 
     private func updateOverlayCursor(at point: CGPoint) {
-        guard phase == .refining else {
-            NSCursor.arrow.set()
+        switch phase {
+        case .idle, .drawing:
+            // AppKit cursor rects (`.selectingPlus`) own the white ＋.
             return
-        }
-        if annotateTool != .none {
-            updateAnnotateCursor(at: point)
-        } else {
-            updateRefineCursor(at: point)
+        case .refining:
+            if annotateTool != .none {
+                updateAnnotateCursor(at: point)
+            } else {
+                updateRefineCursor(at: point)
+            }
         }
     }
 
-    /// Re-apply the hit-tested cursor after AppKit clears it (caret blink, cursor rect invalidation).
+    private func setOverlayCursorMode(_ mode: SelectionOverlayNSView.CursorMode) {
+        for panel in panels {
+            panel.cursorMode = mode
+        }
+    }
+
+    /// Re-apply hit-tested cursor after AppKit clears it (caret blink, cursor rect invalidation).
     func reassertOverlayCursor() {
+        guard continuation != nil, !panels.isEmpty else { return }
         guard phase == .refining, dragKind == nil else { return }
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
@@ -2071,7 +2098,7 @@ final class SelectionOverlayController {
         annotationKind = prefs.kind
         arrowCaps = AnnotationPrefs.loadArrowCaps()
         textStyle = TextAnnotationPrefs.load()
-        NSCursor.arrow.set()
+        setOverlayCursorMode(.controllerDriven)
 
         currentRect = record.selection
         clampRectToScreens()
@@ -2082,6 +2109,7 @@ final class SelectionOverlayController {
         updateHighlight(showHandles: true)
         showToolbar()
         refreshHistoryChrome()
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     // MARK: - Drawing / toolbar

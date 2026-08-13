@@ -5,10 +5,17 @@ import AppKit
 final class SelectionPanel: NSPanel {
     let screenFrame: CGRect
     private let overlayView: SelectionOverlayNSView
-    /// AppKit asks views to update the cursor; we forward so the controller can re-apply.
+
+    /// Refine / annotate: AppKit asks the view to update; forward to the controller.
     var onCursorUpdate: (() -> Void)? {
         get { overlayView.onCursorUpdate }
         set { overlayView.onCursorUpdate = newValue }
+    }
+
+    /// Selecting: AppKit cursor rects. Refining: controller hit-tests via `onCursorUpdate`.
+    var cursorMode: SelectionOverlayNSView.CursorMode {
+        get { overlayView.cursorMode }
+        set { overlayView.cursorMode = newValue }
     }
 
     init(screen: NSScreen, freezeImage: NSImage?) {
@@ -18,14 +25,16 @@ final class SelectionPanel: NSPanel {
             freezeImage: freezeImage
         )
 
+        // Must be able to become key so cursor rects apply (Terminal otherwise keeps I-beam).
         super.init(
             contentRect: screen.frame,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
 
         level = .screenSaver
+        becomesKeyOnlyIfNeeded = false
         // Opaque when frozen so live desktop cannot show through.
         isOpaque = freezeImage != nil
         backgroundColor = freezeImage != nil ? .black : .clear
@@ -36,6 +45,22 @@ final class SelectionPanel: NSPanel {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
         contentView = overlayView
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(becameKey),
+            name: NSWindow.didBecomeKeyNotification,
+            object: self
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    /// After AppKit’s activation cursor reset, reinstall our rects.
+    @objc private func becameKey() {
+        invalidateCursorRects(for: overlayView)
     }
 
     func setSelection(
@@ -79,6 +104,13 @@ final class SelectionPanel: NSPanel {
 }
 
 final class SelectionOverlayNSView: NSView {
+    enum CursorMode {
+        /// Idle / free-drag: AppKit owns the white ＋ via cursor rects.
+        case selectingPlus
+        /// Refine / annotate: controller sets the cursor from hit-testing.
+        case controllerDriven
+    }
+
     var selectionRect: CGRect = .null
     var showHandles = false
     var handleVisualSize: CGFloat = 8
@@ -93,9 +125,16 @@ final class SelectionOverlayNSView: NSView {
     /// Snipaste-style hover: dashed outline while the pointer is over a text mark.
     var hoveredTextID: UUID?
     var onCursorUpdate: (() -> Void)?
+    var cursorMode: CursorMode = .selectingPlus {
+        didSet {
+            guard cursorMode != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+        }
+    }
 
     private let freezeImage: NSImage?
     private let accent = NSColor.systemBlue
+    private var cursorTrackingArea: NSTrackingArea?
 
     init(frame frameRect: NSRect, freezeImage: NSImage?) {
         self.freezeImage = freezeImage
@@ -109,9 +148,44 @@ final class SelectionOverlayNSView: NSView {
     override var isFlipped: Bool { false }
     override var isOpaque: Bool { freezeImage != nil }
 
-    override func resetCursorRects() {}
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let cursorTrackingArea {
+            removeTrackingArea(cursorTrackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [
+                .activeAlways,
+                .inVisibleRect,
+                .cursorUpdate,
+                .mouseEnteredAndExited,
+            ],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        cursorTrackingArea = area
+    }
+
+    override func resetCursorRects() {
+        guard cursorMode == .selectingPlus else { return }
+        addCursorRect(bounds, cursor: AnnotationCursors.whitePlus)
+    }
+
     override func cursorUpdate(with event: NSEvent) {
-        onCursorUpdate?()
+        switch cursorMode {
+        case .selectingPlus:
+            // Let AppKit apply the cursor rect we registered.
+            super.cursorUpdate(with: event)
+        case .controllerDriven:
+            onCursorUpdate?()
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        // Multi-display: only the key window’s cursor rects apply.
+        window?.makeKeyAndOrderFront(nil)
     }
 
     override func draw(_ dirtyRect: NSRect) {
