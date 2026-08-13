@@ -10,7 +10,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ## Shared rules (all annotate tools)
 
 - Annotate works on the **full freeze overlay**, not only inside the blue selection.
-- **Crop resize chrome stays** while any annotate tool is selected (8 handles on the blue export rect). Mark chrome wins on overlap; otherwise crop edge resize / outside-edge expand still work. Interior of the crop still draws / places marks (does not move the selection).
+- **Crop resize chrome stays** while any annotate tool is selected (8 handles on the blue export rect). Mark chrome wins on overlap; otherwise the **border strip** still resizes the crop. **Outside-edge expand is off** while a tool is armed (dimmed area is for annotate); it returns when the tool is toggled off / deselected. Interior of the crop still draws / places marks (does not move the selection).
 - Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
 - Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
 - Confirm composites marks onto the crop, then tears down the overlay.

@@ -663,8 +663,8 @@ final class SelectionOverlayController {
                 updateHighlight(showHandles: true)
 
             case .draw:
-                // Crop edge chrome stays active while annotating (mark chrome wins above).
-                if beginSelectionEdgeDragIfNeeded(at: point) { return }
+                // Border strip / handles still resize the crop; outside is for annotate (no octant expand).
+                if beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: false) { return }
                 if annotateTool == .text || annotateTool == .step {
                     // Click-to-place resolved on mouse-up (ignore tiny drag).
                     textClickCandidate = (nil, point, false)
@@ -692,15 +692,15 @@ final class SelectionOverlayController {
                 updateHighlight(showHandles: true)
 
             case .outside:
-                // Dimmed area: still allow crop edge resize / expand; otherwise ignore.
-                _ = beginSelectionEdgeDragIfNeeded(at: point)
+                // Unreachable while a tool is armed (`annotationPointerTarget` returns `.draw`).
+                break
             }
             return
         }
 
         // Selection refine (no annotate tool): interior moves; border resize; outside expands to point.
         annotationHistory.select(nil)
-        if beginSelectionEdgeDragIfNeeded(at: point) {
+        if beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: true) {
             return
         }
         if currentRect.contains(point) {
@@ -709,19 +709,23 @@ final class SelectionOverlayController {
         }
     }
 
-    /// Starts crop resize (inside edge) or Snipaste-style expand (outside octant). Mark chrome must win first.
+    /// Starts crop resize (border strip) or, when allowed, Snipaste-style expand (outside octant).
+    /// Mark chrome must win first. While annotating, pass `allowOutsideExpand: false` so the
+    /// dimmed area stays available for drawing.
     @discardableResult
-    private func beginSelectionEdgeDragIfNeeded(at point: CGPoint) -> Bool {
-        guard let handle = refineResizeHandle(at: point) else { return false }
+    private func beginSelectionEdgeDragIfNeeded(at point: CGPoint, allowOutsideExpand: Bool) -> Bool {
+        guard let handle = refineResizeHandle(at: point, allowOutsideExpand: allowOutsideExpand) else {
+            return false
+        }
         annotationHistory.select(nil)
-        if currentRect.contains(point) {
-            dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
-        } else {
+        if allowOutsideExpand, !currentRect.contains(point) {
             // Snipaste: click outside → that edge jumps to the pointer, then follows while dragged.
             dragKind = .expand(handle: handle, baseRect: currentRect)
             currentRect = expandedRect(handle: handle, baseRect: currentRect, to: point)
             updateHighlight(showHandles: true)
             repositionToolbar()
+        } else {
+            dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
         }
         resizeCursor(for: handle).set()
         return true
@@ -1830,7 +1834,7 @@ final class SelectionOverlayController {
             NSCursor.arrow.set()
             return
         }
-        if let handle = refineResizeHandle(at: point) {
+        if let handle = refineResizeHandle(at: point, allowOutsideExpand: true) {
             resizeCursor(for: handle).set()
         } else if currentRect.contains(point) {
             AnnotationCursors.move.set()
@@ -1859,7 +1863,8 @@ final class SelectionOverlayController {
         case .interior:
             NSCursor.iBeam.set()
         case .draw:
-            if let handle = refineResizeHandle(at: point) {
+            // Border / handles only — outside octants keep the annotate cursor.
+            if let handle = refineResizeHandle(at: point, allowOutsideExpand: false) {
                 resizeCursor(for: handle).set()
             } else if annotateTool == .pencil {
                 AnnotationCursors.pencilCrosshair(color: annotationStyle.strokeColor).set()
@@ -1890,11 +1895,7 @@ final class SelectionOverlayController {
                 AnnotationCursors.whitePlus.set()
             }
         case .outside:
-            if let handle = refineResizeHandle(at: point) {
-                resizeCursor(for: handle).set()
-            } else {
-                NSCursor.arrow.set()
-            }
+            NSCursor.arrow.set()
         }
     }
 
@@ -2450,9 +2451,10 @@ final class SelectionOverlayController {
 
     // MARK: - Geometry
 
-    /// Snipaste-style zones: deep interior → `nil` (move); border strip and outside
-    /// octants (N/S/E/W + corners) → the resize handle for that direction.
-    private func refineResizeHandle(at point: CGPoint) -> Handle? {
+    /// Snipaste-style zones: deep interior → `nil` (move); border strip → resize handle.
+    /// When `allowOutsideExpand` is true, the whole outside octant map also returns a handle
+    /// (click-outside expand). When false (annotate tool armed), only the border band hits.
+    private func refineResizeHandle(at point: CGPoint, allowOutsideExpand: Bool) -> Handle? {
         guard !currentRect.isNull, currentRect.width > 0, currentRect.height > 0 else { return nil }
         let r = currentRect
         let t = selectionEdgeHit
@@ -2460,6 +2462,12 @@ final class SelectionOverlayController {
         let inner = r.insetBy(dx: t, dy: t)
         if inner.width > 0, inner.height > 0, inner.contains(point) {
             return nil
+        }
+
+        if !allowOutsideExpand {
+            // Keep a thin outward slop so circular handles remain grabable; reject far outside.
+            let outer = r.insetBy(dx: -t, dy: -t)
+            guard outer.contains(point) else { return nil }
         }
 
         let onLeft = point.x < r.minX + t
