@@ -186,17 +186,19 @@ final class SelectionOverlayNSView: NSView {
 
     private func drawAnnotations() {
         let origin = selectionRect.origin
+        let sample = mosaicSampleContext()
         // Fullscreen annotate: marks may sit outside the blue selection — no clip.
         for ann in annotations {
             if ann.id == editingAnnotationID { continue }
-            AnnotationDrawing.draw(ann, origin: origin)
+            AnnotationDrawing.draw(ann, origin: origin, sample: sample)
         }
         if let draft = draftAnnotation {
-            AnnotationDrawing.draw(draft, origin: origin)
+            AnnotationDrawing.draw(draft, origin: origin, sample: sample)
         }
 
         if let selected = selectedAnnotation,
            !selected.isPencil,
+           !selected.isMosaic,
            !selected.isText,
            selected.id != editingAnnotationID {
             if case .arrow(let start, let end, _, _) = selected.payload {
@@ -256,5 +258,40 @@ final class SelectionOverlayNSView: NSView {
             stroke.lineWidth = 1.5
             stroke.stroke()
         }
+    }
+
+    /// Freeze backdrop, with history playback stamped into the selection when present.
+    private func mosaicSampleContext() -> AnnotationDrawing.MosaicSampleContext? {
+        guard let freezeImage else { return nil }
+        let origin = selectionRect.origin
+        guard let playbackImage,
+              !selectionRect.isNull,
+              selectionRect.width > 0,
+              selectionRect.height > 0
+        else {
+            return AnnotationDrawing.MosaicSampleContext(
+                image: freezeImage,
+                selectionOriginInImage: origin
+            )
+        }
+        let stamped = NSImage(size: freezeImage.size, flipped: false) { _ in
+            freezeImage.draw(
+                in: CGRect(origin: .zero, size: freezeImage.size),
+                from: .zero,
+                operation: .copy,
+                fraction: 1
+            )
+            playbackImage.draw(
+                in: self.selectionRect,
+                from: CGRect(origin: .zero, size: playbackImage.size),
+                operation: .copy,
+                fraction: 1
+            )
+            return true
+        }
+        return AnnotationDrawing.MosaicSampleContext(
+            image: stamped,
+            selectionOriginInImage: origin
+        )
     }
 }

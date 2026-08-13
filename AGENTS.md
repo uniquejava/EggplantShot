@@ -73,9 +73,19 @@ EggplantShot/
 8. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
 9. During an active snip, **`,`** / **`.`** step through prior snip records (older / newer).
 
+## Annotate extensibility (P4 — always)
+
+New annotate tools **must** follow these without being asked. Details: [`docs/snip-document-architecture.md`](docs/snip-document-architecture.md).
+
+1. Add an `AnnotationPayload` case + draw + hit-test together; history / store / confirm paths stay unchanged.
+2. Mutate marks **only** via `AnnotationHistory` (`commit` / `beginGesture`–`endGesture`) — never edit `marks` / `selectedID` from gesture code directly.
+3. Store effects as **data** (strokes / regions / style), not destructive pixels on `baseImage`. Sample the freeze/base at draw / bake time (e.g. mosaic `CIGaussianBlur`).
+4. Do **not** bake into `baseImage` until Pin / Copy / Save; `,` / `.` always restore unannotated base + vector document.
+5. Disk: new `type` discriminator; unknown types skip on load. Bump `schemaVersion` only when the meta shape itself changes.
+
 ## Next (not done yet)
 
-→ Remaining annotate tools (marker / mosaic / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + arrow + pencil + text + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
+→ Remaining annotate tools (marker / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows). Shape + arrow + pencil + mosaic + text + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in.
 
 → Pencil: if dense live sampling causes lag / history bloat, simplify polyline on mouse-up (keep live feel). See deferred note in `docs/selection-refine.md`.
 

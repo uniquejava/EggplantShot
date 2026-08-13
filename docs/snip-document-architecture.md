@@ -70,12 +70,13 @@ enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
     case arrow(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps)
     case pencil(points: [CGPoint], style: AnnotationStyle)
+    case mosaic(MosaicGeometry, style: MosaicStyle) // stroke points | rect/oval region
     case text(string: String, rect: CGRect, style: TextStyle)
-    // later: marker, mosaic, step, …
+    // later: marker, step, …
 }
 ```
 
-Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"arrow"`, `"pencil"`, `"text"`, …). Shape keeps `kind` / `rect`; arrow stores `points: [start, end]` + `startCap` / `endCap` (+ optional hull `rect`); pencil stores `points` (+ optional hull `rect`); text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
+Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"arrow"`, `"pencil"`, `"mosaic"`, `"text"`, …). Shape keeps `kind` / `rect`; arrow stores `points: [start, end]` + `startCap` / `endCap` (+ optional hull `rect`); pencil stores `points` (+ optional hull `rect`); mosaic stores `mosaicStyle` (brushWidth / intensity) plus either stroke `points` or region `kind` + `rect`; text stores `string` / `rect` / `textStyle`. Unknown `type` values are skipped on load.
 
 ### `AnnotationDocument`
 
@@ -188,9 +189,9 @@ P0–P4 done:
 - Overlay routes mutations through `AnnotationHistory`, returns `AnnotationDocument` on confirm.
 - `SnipController` composites for output and appends `SnipRecord` (memory + disk).
 - `,` / `.` restore selection + base + document into the active overlay.
-- Marks use `AnnotationPayload` (`shape`, `pencil`); disk `type` discriminator ready for new tools.
+- Marks use `AnnotationPayload` (`shape`, `arrow`, `pencil`, `mosaic`, `text`); disk `type` discriminator ready for new tools.
 
-Next product work: marker / mosaic / … add payload cases + drawing + hit-testing only.
+Next product work: marker / step / … add payload cases + drawing + hit-testing only.
 
 ## Coordinate conventions
 
@@ -359,6 +360,8 @@ Arrow: `.arrow(start:end:style:caps:)` — segment + Snipaste end-caps; Shift �
 
 Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
 
+Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions).
+
 ## Relationship to current MVP
 
 | Area | Status |
@@ -367,6 +370,6 @@ Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Itali
 | Confirm | Bake + disk `SnipRecord` |
 | `,` / `.` | History playback |
 | Pin window | Flat image (no layer reopen) |
-| Mark model | `AnnotationPayload` (`shape`, `arrow`, `pencil`, `text`) |
+| Mark model | `AnnotationPayload` (`shape`, `arrow`, `pencil`, `mosaic`, `text`) |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

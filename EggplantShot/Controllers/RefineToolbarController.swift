@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 import QuartzCore
 
 // MARK: - Toolbar
@@ -17,6 +18,8 @@ final class RefineToolbarController: NSObject {
         case selectTool(AnnotateTool)
         case styleChanged(AnnotationStyle)
         case textStyleChanged(TextStyle)
+        case mosaicStyleChanged(MosaicStyle)
+        case mosaicDrawModeChanged(MosaicDrawMode)
         case kindChanged(ShapeKind)
         case arrowCapsChanged(ArrowCaps)
         case undo
@@ -27,6 +30,8 @@ final class RefineToolbarController: NSObject {
     private let onEvent: (Event) -> Void
     private var style: AnnotationStyle
     private var textStyle: TextStyle
+    private var mosaicStyle: MosaicStyle
+    private var mosaicDrawMode: MosaicDrawMode
     private var tool: AnnotateTool
     private var kind: ShapeKind
     private var arrowCaps: ArrowCaps
@@ -35,6 +40,7 @@ final class RefineToolbarController: NSObject {
     private var shapeButton: NSButton!
     private var arrowButton: NSButton!
     private var pencilButton: NSButton!
+    private var mosaicButton: NSButton!
     private var textButton: NSButton!
     private var undoButton: NSButton!
     private var redoButton: NSButton!
@@ -43,6 +49,8 @@ final class RefineToolbarController: NSObject {
     private var strokeOptionsRow: NSView!
     /// Text options row (B / I / bg / size / palette).
     private var textOptionsRow: NSView!
+    /// Mosaic options row (brush / kind / intensity).
+    private var mosaicOptionsRow: NSView!
     /// Shape-only chrome (fill + rect/oval). Hidden for pencil / arrow.
     private var shapeOnlyViews: [NSView] = []
     /// Divider after shape kind group; visible for shape/pencil, hidden for arrow.
@@ -65,6 +73,12 @@ final class RefineToolbarController: NSObject {
     private var textBackgroundButton: NSButton!
     private var textSizeButton: NSButton!
     private var textColorPreview: NSView!
+    private var mosaicBrushButtons: [NSButton] = []
+    private var mosaicRectButton: NSButton!
+    private var mosaicOvalButton: NSButton!
+    private var mosaicIntensityPreview: MosaicIntensityPreviewView!
+    private var mosaicIntensitySlider: NSSlider!
+    private var mosaicIntensityLabel: NSTextField!
 
     init(
         primaryAction: SelectionOverlayController.ConfirmAction,
@@ -73,11 +87,15 @@ final class RefineToolbarController: NSObject {
         initialKind: ShapeKind,
         initialArrowCaps: ArrowCaps,
         initialTextStyle: TextStyle,
+        initialMosaicStyle: MosaicStyle = .default,
+        initialMosaicDrawMode: MosaicDrawMode = .freehand,
         onEvent: @escaping (Event) -> Void
     ) {
         self.onEvent = onEvent
         self.style = initialStyle
         self.textStyle = initialTextStyle
+        self.mosaicStyle = initialMosaicStyle
+        self.mosaicDrawMode = initialMosaicDrawMode
         self.tool = initialTool
         self.kind = initialKind
         self.arrowCaps = initialArrowCaps
@@ -113,8 +131,10 @@ final class RefineToolbarController: NSObject {
         optionsStack.spacing = 0
         strokeOptionsRow = buildSubToolbar()
         textOptionsRow = buildTextSubToolbar()
+        mosaicOptionsRow = buildMosaicSubToolbar()
         optionsStack.addArrangedSubview(strokeOptionsRow)
         optionsStack.addArrangedSubview(textOptionsRow)
+        optionsStack.addArrangedSubview(mosaicOptionsRow)
         embed(optionsStack, in: optionsCard)
         subToolbarContainer = optionsCard
         subToolbarContainer.isHidden = (initialTool == .none)
@@ -163,6 +183,12 @@ final class RefineToolbarController: NSObject {
             enabled: true,
             action: #selector(pencilTapped)
         )
+        mosaicButton = iconButton(
+            image: mosaicToolIcon(),
+            tooltip: "Mosaic",
+            enabled: true,
+            action: #selector(mosaicTapped)
+        )
         textButton = iconButton(
             image: textToolIcon(),
             tooltip: "Text",
@@ -175,7 +201,7 @@ final class RefineToolbarController: NSObject {
             arrowButton,
             pencilButton,
             iconButton(systemName: "paintbrush.pointed", tooltip: "Marker", enabled: false, action: nil),
-            iconButton(systemName: "square.grid.3x3", tooltip: "Mosaic", enabled: false, action: nil),
+            mosaicButton,
             textButton,
             iconButton(systemName: "1.circle", tooltip: "Step", enabled: false, action: nil),
             iconButton(systemName: "magnifyingglass", tooltip: "Magnifier", enabled: false, action: nil),
@@ -500,6 +526,89 @@ final class RefineToolbarController: NSObject {
         return stack
     }
 
+    private func buildMosaicSubToolbar() -> NSView {
+        let stack = NSStackView(views: [])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+
+        mosaicBrushButtons = MosaicStyle.brushPresets.enumerated().map { index, width in
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .inline
+            button.isBordered = false
+            button.setButtonType(.momentaryChange)
+            button.imagePosition = .imageOnly
+            button.toolTip = "Brush \(Int(width))"
+            button.target = self
+            button.action = #selector(mosaicBrushTapped(_:))
+            button.tag = Int(width)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 24),
+                button.heightAnchor.constraint(equalToConstant: 24),
+            ])
+            let preview = MosaicStyle.brushPreviewDiameters[index]
+            button.image = strokeDotImage(diameter: preview, selected: false)
+            return button
+        }
+        for button in mosaicBrushButtons {
+            stack.addArrangedSubview(button)
+        }
+        stack.addArrangedSubview(miniDivider())
+
+        mosaicRectButton = iconButton(
+            image: mosaicBrushKindIcon(kind: .rectangle),
+            tooltip: "Rectangle region",
+            enabled: true,
+            action: #selector(mosaicRectTapped)
+        )
+        mosaicOvalButton = iconButton(
+            image: mosaicBrushKindIcon(kind: .ellipse),
+            tooltip: "Oval region",
+            enabled: true,
+            action: #selector(mosaicOvalTapped)
+        )
+        stack.addArrangedSubview(mosaicRectButton)
+        stack.addArrangedSubview(mosaicOvalButton)
+        stack.addArrangedSubview(miniDivider())
+
+        mosaicIntensityPreview = MosaicIntensityPreviewView(frame: .zero)
+        mosaicIntensityPreview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            mosaicIntensityPreview.widthAnchor.constraint(equalToConstant: 24),
+            mosaicIntensityPreview.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        stack.addArrangedSubview(mosaicIntensityPreview)
+
+        mosaicIntensitySlider = NSSlider(value: Double(mosaicStyle.intensity),
+                                         minValue: Double(MosaicStyle.intensityRange.lowerBound),
+                                         maxValue: Double(MosaicStyle.intensityRange.upperBound),
+                                         target: self,
+                                         action: #selector(mosaicIntensityChanged(_:)))
+        mosaicIntensitySlider.isContinuous = true
+        mosaicIntensitySlider.controlSize = .small
+        mosaicIntensitySlider.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            mosaicIntensitySlider.widthAnchor.constraint(equalToConstant: 90),
+            mosaicIntensitySlider.heightAnchor.constraint(equalToConstant: 18),
+        ])
+        stack.addArrangedSubview(mosaicIntensitySlider)
+
+        mosaicIntensityLabel = NSTextField(labelWithString: "\(Int(mosaicStyle.intensity.rounded()))")
+        mosaicIntensityLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        mosaicIntensityLabel.textColor = NSColor(calibratedWhite: 0.28, alpha: 1)
+        mosaicIntensityLabel.alignment = .right
+        mosaicIntensityLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            mosaicIntensityLabel.widthAnchor.constraint(equalToConstant: 22),
+        ])
+        stack.addArrangedSubview(mosaicIntensityLabel)
+
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
+
     private func textStyleToggleButton(title: String, tooltip: String, action: Selector) -> NSButton {
         let button = NSButton(frame: .zero)
         button.bezelStyle = .inline
@@ -554,20 +663,23 @@ final class RefineToolbarController: NSObject {
         tintSelected(shapeButton, selected: tool == .rectangle)
         tintSelected(arrowButton, selected: tool == .arrow)
         tintSelected(pencilButton, selected: tool == .pencil)
+        tintSelected(mosaicButton, selected: tool == .mosaic)
         tintSelected(textButton, selected: tool == .text)
         colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
         textColorPreview.layer?.backgroundColor = textStyle.color.cgColor
 
         let isText = (tool == .text)
-        strokeOptionsRow.isHidden = isText
+        let isMosaic = (tool == .mosaic)
+        strokeOptionsRow.isHidden = isText || isMosaic
         textOptionsRow.isHidden = !isText
+        mosaicOptionsRow.isHidden = !isMosaic
 
         let isArrow = (tool == .arrow)
         let shapeExtrasVisible = (tool == .rectangle)
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
-        afterKindDivider.isHidden = isArrow || isText
+        afterKindDivider.isHidden = isArrow || isText || isMosaic
         for view in arrowOnlyViews {
             view.isHidden = !isArrow
         }
@@ -607,6 +719,28 @@ final class RefineToolbarController: NSObject {
         tintSelected(textBackgroundButton, selected: textStyle.hasBackground)
         let sizeLabel = "\(Int(textStyle.fontSize.rounded()))"
         textSizeButton.title = sizeLabel
+
+        refreshMosaicChrome()
+    }
+
+    private func refreshMosaicChrome() {
+        let selectedWidth = MosaicStyle.nearestBrushPreset(mosaicStyle.brushWidth)
+        let isFreehand = (mosaicDrawMode == .freehand)
+        for (index, button) in mosaicBrushButtons.enumerated() {
+            let width = MosaicStyle.brushPresets[index]
+            let on = isFreehand && abs(width - selectedWidth) < 0.5
+            let preview = MosaicStyle.brushPreviewDiameters[index]
+            button.title = ""
+            button.imagePosition = .imageOnly
+            button.image = strokeDotImage(diameter: preview, selected: on)
+            tintSelected(button, selected: on)
+        }
+        tintSelected(mosaicRectButton, selected: mosaicDrawMode == .rectangle)
+        tintSelected(mosaicOvalButton, selected: mosaicDrawMode == .ellipse)
+        mosaicIntensitySlider.doubleValue = Double(mosaicStyle.intensity)
+        mosaicIntensityLabel.stringValue = "\(Int(mosaicStyle.intensity.rounded()))"
+        mosaicIntensityPreview.intensity = mosaicStyle.intensity
+        mosaicIntensityPreview.needsDisplay = true
     }
 
     private func tintSelected(_ button: NSButton, selected: Bool) {
@@ -755,6 +889,50 @@ final class RefineToolbarController: NSObject {
         return image
     }
 
+    /// Snipaste-like 2×2 pixel block (checkerboard mosaic).
+    private func mosaicToolIcon() -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let inset: CGFloat = 2.5
+            let gap: CGFloat = 1.25
+            let cell = (rect.width - inset * 2 - gap) / 2
+            let origin = CGPoint(x: inset, y: inset)
+            // Top-left + bottom-right filled (classic pixel-block read).
+            let cells = [
+                CGRect(x: origin.x, y: origin.y + cell + gap, width: cell, height: cell),
+                CGRect(x: origin.x + cell + gap, y: origin.y, width: cell, height: cell),
+            ]
+            NSColor.black.setFill()
+            for cellRect in cells {
+                NSBezierPath(roundedRect: cellRect, xRadius: 0.75, yRadius: 0.75).fill()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
+    private func mosaicBrushKindIcon(kind: MosaicDrawMode) -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let outer = rect.insetBy(dx: 2.5, dy: 2.5)
+            let path: NSBezierPath
+            switch kind {
+            case .rectangle, .freehand:
+                path = NSBezierPath(rect: outer)
+            case .ellipse:
+                path = NSBezierPath(ovalIn: outer)
+            }
+            path.lineWidth = 1.5
+            path.lineJoinStyle = .miter
+            NSColor.black.setStroke()
+            path.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     private func divider() -> NSView {
         let wrap = NSView(frame: .zero)
         wrap.translatesAutoresizingMaskIntoConstraints = false
@@ -809,6 +987,10 @@ final class RefineToolbarController: NSObject {
         selectTool(tool == .pencil ? .none : .pencil)
     }
 
+    @objc private func mosaicTapped() {
+        selectTool(tool == .mosaic ? .none : .mosaic)
+    }
+
     @objc private func textTapped() {
         selectTool(tool == .text ? .none : .text)
     }
@@ -824,6 +1006,34 @@ final class RefineToolbarController: NSObject {
             layoutPanel(content: content)
         }
         onEvent(.selectTool(next))
+    }
+
+    @objc private func mosaicBrushTapped(_ sender: NSButton) {
+        mosaicStyle.brushWidth = MosaicStyle.nearestBrushPreset(CGFloat(sender.tag))
+        mosaicDrawMode = .freehand
+        refreshMosaicChrome()
+        onEvent(.mosaicDrawModeChanged(mosaicDrawMode))
+        onEvent(.mosaicStyleChanged(mosaicStyle))
+    }
+
+    @objc private func mosaicRectTapped() {
+        mosaicDrawMode = .rectangle
+        refreshMosaicChrome()
+        onEvent(.mosaicDrawModeChanged(mosaicDrawMode))
+    }
+
+    @objc private func mosaicOvalTapped() {
+        mosaicDrawMode = .ellipse
+        refreshMosaicChrome()
+        onEvent(.mosaicDrawModeChanged(mosaicDrawMode))
+    }
+
+    @objc private func mosaicIntensityChanged(_ sender: NSSlider) {
+        mosaicStyle.intensity = MosaicStyle.clampedIntensity(CGFloat(sender.doubleValue))
+        mosaicIntensityLabel.stringValue = "\(Int(mosaicStyle.intensity.rounded()))"
+        mosaicIntensityPreview.intensity = mosaicStyle.intensity
+        mosaicIntensityPreview.needsDisplay = true
+        onEvent(.mosaicStyleChanged(mosaicStyle))
     }
 
     @objc private func textBoldTapped() {
@@ -1121,6 +1331,18 @@ final class RefineToolbarController: NSObject {
         refreshSelectionChrome()
     }
 
+    func syncMosaicStyle(_ style: MosaicStyle) {
+        var next = style
+        next.clamp()
+        self.mosaicStyle = next
+        refreshSelectionChrome()
+    }
+
+    func syncMosaicDrawMode(_ mode: MosaicDrawMode) {
+        mosaicDrawMode = mode
+        refreshSelectionChrome()
+    }
+
     func setHistoryAvailability(canUndo: Bool, canRedo: Bool) {
         setHistoryButton(undoButton, enabled: canUndo)
         setHistoryButton(redoButton, enabled: canRedo)
@@ -1301,5 +1523,65 @@ final class PaletteSwatchChip: NSView {
         strokePath.lineWidth = 1
         NSColor(calibratedWhite: 0.55, alpha: 1).setStroke()
         strokePath.stroke()
+    }
+}
+
+/// Intensity chip: soft circle (no rim); interior softens with blur radius.
+final class MosaicIntensityPreviewView: NSView {
+    var intensity: CGFloat = 10
+
+    private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+    private static let sampleImage: CIImage = {
+        let px = 64
+        let size = CGSize(width: px, height: px)
+        let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: px,
+            pixelsHigh: px,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        )!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSColor(calibratedWhite: 0.92, alpha: 1).setFill()
+        NSBezierPath(rect: CGRect(origin: .zero, size: size)).fill()
+        NSColor(calibratedWhite: 0.22, alpha: 1).setFill()
+        NSBezierPath(ovalIn: CGRect(x: 10, y: 10, width: 44, height: 44)).fill()
+        NSColor(calibratedWhite: 0.75, alpha: 1).setFill()
+        NSBezierPath(ovalIn: CGRect(x: 22, y: 22, width: 20, height: 20)).fill()
+        NSGraphicsContext.restoreGraphicsState()
+        let ns = NSImage(size: size)
+        ns.addRepresentation(rep)
+        return CIImage(data: ns.tiffRepresentation!) ?? CIImage.empty()
+    }()
+
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let intensity = MosaicStyle.clampedIntensity(intensity)
+        let radius = MosaicStyle.blurRadiusPoints(forIntensity: intensity)
+
+        let filter = CIFilter(name: "CIGaussianBlur")
+        filter?.setValue(Self.sampleImage, forKey: kCIInputImageKey)
+        filter?.setValue(radius * 1.2, forKey: kCIInputRadiusKey)
+
+        let shapePath = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
+
+        NSGraphicsContext.current?.saveGraphicsState()
+        shapePath.addClip()
+        if let output = filter?.outputImage?.cropped(to: Self.sampleImage.extent),
+           let cg = Self.ciContext.createCGImage(output, from: Self.sampleImage.extent) {
+            NSImage(cgImage: cg, size: bounds.size)
+                .draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
+        } else {
+            NSColor(calibratedWhite: 0.85, alpha: 1).setFill()
+            shapePath.fill()
+        }
+        NSGraphicsContext.current?.restoreGraphicsState()
     }
 }

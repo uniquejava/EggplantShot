@@ -7,6 +7,10 @@ enum AnnotationCompositor {
         let size = image.size
         guard size.width > 0, size.height > 0 else { return image }
 
+        let sample = AnnotationDrawing.MosaicSampleContext(
+            image: image,
+            selectionOriginInImage: .zero
+        )
         return NSImage(size: size, flipped: false) { _ in
             image.draw(
                 in: CGRect(origin: .zero, size: size),
@@ -15,7 +19,7 @@ enum AnnotationCompositor {
                 fraction: 1
             )
             for annotation in annotations {
-                AnnotationDrawing.draw(annotation, origin: .zero)
+                AnnotationDrawing.draw(annotation, origin: .zero, sample: sample)
             }
             return true
         }

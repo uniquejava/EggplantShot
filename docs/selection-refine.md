@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate live: **shape**, **arrow**, **pencil**, **text** (+ in-session undo/redo). Marker / mosaic / step / OCR / magnifier remain stubs.
+Annotate live: **shape**, **arrow**, **pencil**, **mosaic**, **text** (+ in-session undo/redo). Marker / step / OCR / magnifier remain stubs.
 
 Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
@@ -34,7 +34,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ## Toolbar layout (Snipaste parity)
 
 ```
-[ shape† | arrow | pen† | marker | mosaic | T‡ | step | magnifier | eraser ]
+[ shape† | arrow | pen† | marker | mosaic¶ | T‡ | step | magnifier | eraser ]
 | [ OCR | undo | redo ]
 | [ ✕ | pin | save | copy | …§ ]
 
@@ -42,6 +42,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
   Arrow: [ thin | med | thick ] | [ start ▾≈32 | body ▾ | end ▾≈32 | caps Switch ] | [ preview 24 + palette 2×10 ]
   Pen: same card without fill / rect / oval
   Palette chips ≈11pt, gap ≈2pt
+¶ Mosaic: [ · | ·· | ··· ] | [ rect region | oval region ] | [ preview | slider 3…24 | value ]  (sizes 14/18/24 freehand; rect/oval = area blur)
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 § More stub / disabled
 ```
@@ -71,6 +72,14 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Color reticle; mouse-down hides cursor. Freehand; Shift → straight any angle.
 - No resize chrome; hit stroke to move. No auto-select after stroke.
 - Deferred: if dense sampling (~0.15pt + 120Hz) lags or bloats history, simplify polyline on mouse-up (RDP).
+
+### Mosaic
+
+- Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to blur an area) | intensity **3…24** with live blur preview left of the slider.
+- Freehand: stroke sampling; Shift → straight; mouse-down hides cursor.
+- Region: drag like shape; Shift → square / circle; entire rect/oval is blurred.
+- Effect: **gaussian blur** (`CIGaussianBlur`) sampled from freeze/base at draw time — **vector stroke/region data only** (P4; never mutates `baseImage`). Intensity 3…24 maps to ~0.7…14 pt radius (3 ≈ frosted but text still readable; 24 ≈ heavy defocus).
+- No color palette / resize chrome / auto-select after stroke. Hit mark to move.
 
 ### Text
 
@@ -102,5 +111,5 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
 - [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
-- [x] Shape / arrow / pencil / text: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] Shape / arrow / pencil / mosaic / text: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] Undo / redo; debug build succeeds

@@ -1,4 +1,5 @@
 import AppKit
+import CoreImage
 
 /// Drawing tool selected on the refine toolbar. `.none` = refine selection only.
 enum AnnotateTool: Equatable {
@@ -6,7 +7,60 @@ enum AnnotateTool: Equatable {
     case rectangle
     case arrow
     case pencil
+    case mosaic
     case text
+}
+
+/// Mosaic / blur draw mode: freehand stroke, or drag a blurred region.
+enum MosaicDrawMode: Int, CaseIterable {
+    case freehand = 0
+    case rectangle = 1
+    case ellipse = 2
+}
+
+/// Geometry for a mosaic mark (stroke polyline or region rect/oval).
+enum MosaicGeometry: Equatable {
+    case stroke(points: [CGPoint])
+    case region(MosaicDrawMode, rect: CGRect) // `.rectangle` / `.ellipse` only
+}
+
+/// Mosaic stroke style (brush size for freehand + blur intensity). Stored on the mark; prefs mirror last-used.
+struct MosaicStyle: Equatable {
+    var brushWidth: CGFloat
+    /// `CIGaussianBlur` radius (Snipaste intensity); clamped to `intensityRange`.
+    var intensity: CGFloat
+
+    static let intensityRange: ClosedRange<CGFloat> = 3...24
+    /// Brush diameters in points (≈ cover 14 / 18 / 24 pt glyphs — not Snipaste’s @2x 28/34/42 labels).
+    static let brushPresets: [CGFloat] = [14, 18, 24]
+    /// Toolbar dot diameters (visual only; distinct sizes, not numbers).
+    static let brushPreviewDiameters: [CGFloat] = [4, 6.5, 9]
+
+    static let `default` = MosaicStyle(
+        brushWidth: 18,
+        intensity: 10
+    )
+
+    mutating func clamp() {
+        intensity = min(max(intensity, Self.intensityRange.lowerBound), Self.intensityRange.upperBound)
+        brushWidth = Self.nearestBrushPreset(brushWidth)
+    }
+
+    static func nearestBrushPreset(_ width: CGFloat) -> CGFloat {
+        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? 18
+    }
+
+    static func clampedIntensity(_ value: CGFloat) -> CGFloat {
+        min(max(value, intensityRange.lowerBound), intensityRange.upperBound)
+    }
+
+    /// Maps Snipaste intensity 3…24 → gaussian radius in **points**.
+    /// At 3 the backdrop (e.g. body text) stays readable; at 24 it’s heavily defocused.
+    static func blurRadiusPoints(forIntensity intensity: CGFloat) -> CGFloat {
+        let t = (clampedIntensity(intensity) - intensityRange.lowerBound)
+            / (intensityRange.upperBound - intensityRange.lowerBound)
+        return 0.7 + t * 13.3 // ≈ 0.7 … 14
+    }
 }
 
 /// Arrowhead / end-cap styles (Snipaste start / end dropdown).
@@ -87,6 +141,11 @@ enum AnnotationPrefs {
     private static let kindKey = "annotate.kind"
     private static let arrowStartCapKey = "annotate.arrow.startCap"
     private static let arrowEndCapKey = "annotate.arrow.endCap"
+    private static let mosaicBrushWidthKey = "annotate.mosaic.brushWidth"
+    private static let mosaicDrawModeKey = "annotate.mosaic.drawMode"
+    private static let mosaicIntensityKey = "annotate.mosaic.intensity"
+    /// Legacy tip-shape key; migrated into `mosaicDrawModeKey`.
+    private static let mosaicBrushKindKey = "annotate.mosaic.brushKind"
 
     static func load() -> (style: AnnotationStyle, kind: ShapeKind) {
         let defaults = UserDefaults.standard
@@ -132,6 +191,50 @@ enum AnnotationPrefs {
         let defaults = UserDefaults.standard
         defaults.set(caps.start.rawValue, forKey: arrowStartCapKey)
         defaults.set(caps.end.rawValue, forKey: arrowEndCapKey)
+    }
+
+    static func loadMosaicStyle() -> MosaicStyle {
+        let defaults = UserDefaults.standard
+        var style = MosaicStyle.default
+        if defaults.object(forKey: mosaicBrushWidthKey) != nil {
+            style.brushWidth = MosaicStyle.nearestBrushPreset(
+                CGFloat(defaults.double(forKey: mosaicBrushWidthKey))
+            )
+        }
+        if defaults.object(forKey: mosaicIntensityKey) != nil {
+            style.intensity = MosaicStyle.clampedIntensity(
+                CGFloat(defaults.double(forKey: mosaicIntensityKey))
+            )
+        }
+        return style
+    }
+
+    static func loadMosaicDrawMode() -> MosaicDrawMode {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: mosaicDrawModeKey) != nil {
+            return MosaicDrawMode(rawValue: defaults.integer(forKey: mosaicDrawModeKey)) ?? .freehand
+        }
+        // Migrate old tip-shape prefs (0 rect / 1 oval) → region modes.
+        if defaults.object(forKey: mosaicBrushKindKey) != nil {
+            switch defaults.integer(forKey: mosaicBrushKindKey) {
+            case 0: return .rectangle
+            case 1: return .ellipse
+            default: return .freehand
+            }
+        }
+        return .freehand
+    }
+
+    static func saveMosaicStyle(_ style: MosaicStyle) {
+        var clamped = style
+        clamped.clamp()
+        let defaults = UserDefaults.standard
+        defaults.set(Double(clamped.brushWidth), forKey: mosaicBrushWidthKey)
+        defaults.set(Double(clamped.intensity), forKey: mosaicIntensityKey)
+    }
+
+    static func saveMosaicDrawMode(_ mode: MosaicDrawMode) {
+        UserDefaults.standard.set(mode.rawValue, forKey: mosaicDrawModeKey)
     }
 }
 
@@ -344,6 +447,7 @@ enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
     case arrow(start: CGPoint, end: CGPoint, style: AnnotationStyle, caps: ArrowCaps)
     case pencil(points: [CGPoint], style: AnnotationStyle)
+    case mosaic(MosaicGeometry, style: MosaicStyle)
     case text(string: String, rect: CGRect, style: TextStyle)
 }
 
@@ -382,31 +486,50 @@ struct Annotation: Equatable {
         self.payload = .pencil(points: points, style: style)
     }
 
+    /// Convenience for freehand mosaic.
+    init(id: UUID = UUID(), mosaicPoints points: [CGPoint], mosaicStyle: MosaicStyle) {
+        self.id = id
+        self.payload = .mosaic(.stroke(points: points), style: mosaicStyle)
+    }
+
+    /// Convenience for region mosaic (rect / oval).
+    init(
+        id: UUID = UUID(),
+        mosaicRegion mode: MosaicDrawMode,
+        rect: CGRect,
+        mosaicStyle: MosaicStyle
+    ) {
+        self.id = id
+        let kind: MosaicDrawMode = (mode == .ellipse) ? .ellipse : .rectangle
+        self.payload = .mosaic(.region(kind, rect: rect), style: mosaicStyle)
+    }
+
     /// Convenience for the text tool.
     init(id: UUID = UUID(), string: String, rect: CGRect, style: TextStyle) {
         self.id = id
         self.payload = .text(string: string, rect: rect, style: style)
     }
 
-    /// Disk / tooling type discriminator (`"shape"`, `"pencil"`, `"text"`, …).
+    /// Disk / tooling type discriminator (`"shape"`, `"pencil"`, `"mosaic"`, `"text"`, …).
     var typeName: String {
         switch payload {
         case .shape: return "shape"
         case .arrow: return "arrow"
         case .pencil: return "pencil"
+        case .mosaic: return "mosaic"
         case .text: return "text"
         }
     }
 
     // MARK: Shared accessors
 
-    /// Stroke style for shape / arrow / pencil. No-op get/set for text marks.
+    /// Stroke style for shape / arrow / pencil. No-op get/set for mosaic / text marks.
     var style: AnnotationStyle {
         get {
             switch payload {
             case .shape(_, _, let style), .arrow(_, _, let style, _), .pencil(_, let style):
                 return style
-            case .text:
+            case .mosaic, .text:
                 return .default
             }
         }
@@ -418,10 +541,44 @@ struct Annotation: Equatable {
                 payload = .arrow(start: start, end: end, style: newValue, caps: caps)
             case .pencil(let points, _):
                 payload = .pencil(points: points, style: newValue)
-            case .text:
+            case .mosaic, .text:
                 break
             }
         }
+    }
+
+    var mosaicStyle: MosaicStyle {
+        get {
+            if case .mosaic(_, let style) = payload { return style }
+            return .default
+        }
+        set {
+            guard case .mosaic(let geometry, _) = payload else { return }
+            var style = newValue
+            style.clamp()
+            payload = .mosaic(geometry, style: style)
+        }
+    }
+
+    var mosaicGeometry: MosaicGeometry? {
+        get {
+            if case .mosaic(let geometry, _) = payload { return geometry }
+            return nil
+        }
+        set {
+            guard let newValue, case .mosaic(_, let style) = payload else { return }
+            payload = .mosaic(newValue, style: style)
+        }
+    }
+
+    var isMosaicStroke: Bool {
+        if case .mosaic(.stroke, _) = payload { return true }
+        return false
+    }
+
+    var isMosaicRegion: Bool {
+        if case .mosaic(.region, _) = payload { return true }
+        return false
     }
 
     var textStyle: TextStyle {
@@ -444,6 +601,15 @@ struct Annotation: Equatable {
             return AnnotationDrawing.arrowBounds(start: start, end: end, style: style, caps: caps)
         case .pencil(let points, _):
             return Self.bounds(of: points)
+        case .mosaic(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let hull = Self.bounds(of: points)
+                let pad = style.brushWidth / 2
+                return hull.insetBy(dx: -pad, dy: -pad)
+            case .region(_, let rect):
+                return rect
+            }
         }
     }
 
@@ -459,6 +625,11 @@ struct Annotation: Equatable {
 
     var isPencil: Bool {
         if case .pencil = payload { return true }
+        return false
+    }
+
+    var isMosaic: Bool {
+        if case .mosaic = payload { return true }
         return false
     }
 
@@ -488,7 +659,7 @@ struct Annotation: Equatable {
                 payload = .shape(kind, rect: newValue, style: style)
             case .text(let string, _, let style):
                 payload = .text(string: string, rect: newValue, style: style)
-            case .arrow, .pencil:
+            case .arrow, .pencil, .mosaic:
                 break
             }
         }
@@ -496,12 +667,24 @@ struct Annotation: Equatable {
 
     var points: [CGPoint] {
         get {
-            if case .pencil(let points, _) = payload { return points }
-            return []
+            switch payload {
+            case .pencil(let points, _):
+                return points
+            case .mosaic(.stroke(let points), _):
+                return points
+            default:
+                return []
+            }
         }
         set {
-            guard case .pencil(_, let style) = payload else { return }
-            payload = .pencil(points: newValue, style: style)
+            switch payload {
+            case .pencil(_, let style):
+                payload = .pencil(points: newValue, style: style)
+            case .mosaic(.stroke, let style):
+                payload = .mosaic(.stroke(points: newValue), style: style)
+            default:
+                break
+            }
         }
     }
 
@@ -564,6 +747,17 @@ struct Annotation: Equatable {
         case .pencil(let points, let style):
             let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
             payload = .pencil(points: moved, style: style)
+        case .mosaic(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
+                payload = .mosaic(.stroke(points: moved), style: style)
+            case .region(let mode, let rect):
+                payload = .mosaic(
+                    .region(mode, rect: rect.offsetBy(dx: delta.width, dy: delta.height)),
+                    style: style
+                )
+            }
         case .text(let string, let rect, let style):
             payload = .text(
                 string: string,
@@ -602,6 +796,25 @@ struct Annotation: Equatable {
                 )
             }
             payload = .pencil(points: mapped, style: style)
+        case .mosaic(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                let pad = style.brushWidth / 2
+                let oldHull = old.insetBy(dx: pad, dy: pad)
+                let newHull = newBounds.insetBy(dx: pad, dy: pad)
+                guard oldHull.width > 0, oldHull.height > 0 else { return }
+                let sx = newHull.width / oldHull.width
+                let sy = newHull.height / oldHull.height
+                let mapped = points.map { p in
+                    CGPoint(
+                        x: newHull.minX + (p.x - oldHull.minX) * sx,
+                        y: newHull.minY + (p.y - oldHull.minY) * sy
+                    )
+                }
+                payload = .mosaic(.stroke(points: mapped), style: style)
+            case .region(let mode, _):
+                payload = .mosaic(.region(mode, rect: newBounds), style: style)
+            }
         case .text(let string, _, let style):
             payload = .text(string: string, rect: newBounds, style: style)
         }
@@ -681,8 +894,15 @@ struct Annotation: Equatable {
 }
 
 enum AnnotationDrawing {
+    /// Backdrop used to sample pixels for mosaic / blur marks.
+    struct MosaicSampleContext {
+        let image: NSImage
+        /// Image-space point corresponding to selection-local `(0, 0)`.
+        let selectionOriginInImage: CGPoint
+    }
+
     /// Draw `annotation` with selection-local geometry offset by `origin` (selection frame origin in context).
-    static func draw(_ annotation: Annotation, origin: CGPoint) {
+    static func draw(_ annotation: Annotation, origin: CGPoint, sample: MosaicSampleContext? = nil) {
         switch annotation.payload {
         case .shape(let kind, let localRect, let style):
             let rect = localRect.offsetBy(dx: origin.x, dy: origin.y)
@@ -694,6 +914,8 @@ enum AnnotationDrawing {
         case .pencil(let points, let style):
             let offset = points.map { CGPoint(x: $0.x + origin.x, y: $0.y + origin.y) }
             drawPencil(points: offset, style: style)
+        case .mosaic(let geometry, let style):
+            drawMosaic(geometry: geometry, style: style, drawOrigin: origin, sample: sample)
         case .text(let string, let localRect, let style):
             let rect = localRect.offsetBy(dx: origin.x, dy: origin.y)
             drawText(string: string, style: style, in: rect)
@@ -705,7 +927,7 @@ enum AnnotationDrawing {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
-        case .arrow, .pencil, .text:
+        case .arrow, .pencil, .mosaic, .text:
             draw(annotation, origin: .zero)
         }
     }
@@ -1373,6 +1595,190 @@ enum AnnotationDrawing {
         path.stroke()
     }
 
+    /// Gaussian-blur the backdrop under a freehand brush or region mask (P4).
+    private static func drawMosaic(
+        geometry: MosaicGeometry,
+        style: MosaicStyle,
+        drawOrigin: CGPoint,
+        sample: MosaicSampleContext?
+    ) {
+        let intensity = MosaicStyle.clampedIntensity(style.intensity)
+        let radius = MosaicStyle.blurRadiusPoints(forIntensity: intensity)
+
+        switch geometry {
+        case .stroke(let localPoints):
+            guard !localPoints.isEmpty else { return }
+            let brush = max(style.brushWidth, 1)
+            guard let sample else {
+                let offset = localPoints.map { CGPoint(x: $0.x + drawOrigin.x, y: $0.y + drawOrigin.y) }
+                drawMosaicFallbackStroke(points: offset, brushWidth: brush)
+                return
+            }
+            let pad = brush / 2 + radius * 2
+            let hull = Annotation.bounds(of: localPoints).insetBy(dx: -pad, dy: -pad)
+            drawBlurredMask(
+                localMask: mosaicStrokeMask(localPoints: localPoints, brushWidth: brush),
+                localHull: hull,
+                radius: radius,
+                drawOrigin: drawOrigin,
+                sample: sample
+            ) {
+                let offset = localPoints.map { CGPoint(x: $0.x + drawOrigin.x, y: $0.y + drawOrigin.y) }
+                drawMosaicFallbackStroke(points: offset, brushWidth: brush)
+            }
+
+        case .region(let mode, let localRect):
+            guard localRect.width >= 1, localRect.height >= 1 else { return }
+            guard let sample else {
+                drawMosaicFallbackRegion(rect: localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y), mode: mode)
+                return
+            }
+            let pad = radius * 2
+            let hull = localRect.insetBy(dx: -pad, dy: -pad)
+            let mask: NSBezierPath
+            switch mode {
+            case .ellipse:
+                mask = NSBezierPath(ovalIn: localRect)
+            case .rectangle, .freehand:
+                mask = NSBezierPath(rect: localRect)
+            }
+            drawBlurredMask(
+                localMask: mask,
+                localHull: hull,
+                radius: radius,
+                drawOrigin: drawOrigin,
+                sample: sample
+            ) {
+                drawMosaicFallbackRegion(
+                    rect: localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y),
+                    mode: mode
+                )
+            }
+        }
+    }
+
+    private static func drawBlurredMask(
+        localMask: NSBezierPath,
+        localHull: CGRect,
+        radius: CGFloat,
+        drawOrigin: CGPoint,
+        sample: MosaicSampleContext,
+        fallback: () -> Void
+    ) {
+        guard localHull.width >= 1, localHull.height >= 1 else { return }
+        let imageBounds = CGRect(origin: .zero, size: sample.image.size)
+        let sampleHull = localHull.offsetBy(
+            dx: sample.selectionOriginInImage.x,
+            dy: sample.selectionOriginInImage.y
+        )
+        let crop = sampleHull.intersection(imageBounds)
+        guard crop.width >= 1, crop.height >= 1 else { return }
+
+        guard let blurred = blurredCrop(from: sample.image, crop: crop, radius: radius) else {
+            fallback()
+            return
+        }
+
+        guard let ctx = NSGraphicsContext.current else { return }
+        ctx.saveGraphicsState()
+        defer { ctx.restoreGraphicsState() }
+
+        let mask = localMask.copy() as? NSBezierPath ?? localMask
+        let transform = AffineTransform(translationByX: drawOrigin.x, byY: drawOrigin.y)
+        mask.transform(using: transform)
+        mask.addClip()
+
+        let drawRect = crop.offsetBy(
+            dx: drawOrigin.x - sample.selectionOriginInImage.x,
+            dy: drawOrigin.y - sample.selectionOriginInImage.y
+        )
+        blurred.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+    }
+
+    private static func drawMosaicFallbackStroke(points: [CGPoint], brushWidth: CGFloat) {
+        guard let first = points.first else { return }
+        let path = NSBezierPath()
+        if points.count == 1 {
+            let r = brushWidth / 2
+            path.appendOval(in: CGRect(x: first.x - r, y: first.y - r, width: r * 2, height: r * 2))
+            NSColor.black.withAlphaComponent(0.18).setFill()
+            path.fill()
+            return
+        }
+        path.move(to: first)
+        for p in points.dropFirst() { path.line(to: p) }
+        path.lineWidth = brushWidth
+        path.lineJoinStyle = .round
+        path.lineCapStyle = .round
+        NSColor.black.withAlphaComponent(0.18).setStroke()
+        path.stroke()
+    }
+
+    private static func drawMosaicFallbackRegion(rect: CGRect, mode: MosaicDrawMode) {
+        let path: NSBezierPath
+        switch mode {
+        case .ellipse:
+            path = NSBezierPath(ovalIn: rect)
+        case .rectangle, .freehand:
+            path = NSBezierPath(rect: rect)
+        }
+        NSColor.black.withAlphaComponent(0.18).setFill()
+        path.fill()
+    }
+
+    private static func mosaicStrokeMask(localPoints: [CGPoint], brushWidth: CGFloat) -> NSBezierPath {
+        let path = NSBezierPath()
+        guard let first = localPoints.first else { return path }
+        if localPoints.count == 1 {
+            let r = brushWidth / 2
+            path.appendOval(in: CGRect(x: first.x - r, y: first.y - r, width: r * 2, height: r * 2))
+            return path
+        }
+        path.move(to: first)
+        for p in localPoints.dropFirst() { path.line(to: p) }
+        let stroked = path.cgPath.copy(
+            strokingWithWidth: brushWidth,
+            lineCap: .round,
+            lineJoin: .round,
+            miterLimit: 10
+        )
+        return NSBezierPath(cgPath: stroked)
+    }
+
+    private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    private static func blurredCrop(
+        from image: NSImage,
+        crop: CGRect,
+        radius: CGFloat
+    ) -> NSImage? {
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return nil
+        }
+        let scaleX = CGFloat(cgImage.width) / image.size.width
+        let scaleY = CGFloat(cgImage.height) / image.size.height
+        let pixelScale = (scaleX + scaleY) / 2
+        let pixelCrop = CGRect(
+            x: crop.minX * scaleX,
+            y: (image.size.height - crop.maxY) * scaleY,
+            width: crop.width * scaleX,
+            height: crop.height * scaleY
+        ).integral
+        guard pixelCrop.width >= 1, pixelCrop.height >= 1,
+              let cropped = cgImage.cropping(to: pixelCrop)
+        else { return nil }
+
+        let ci = CIImage(cgImage: cropped)
+        let filter = CIFilter(name: "CIGaussianBlur")
+        filter?.setValue(ci, forKey: kCIInputImageKey)
+        filter?.setValue(radius * pixelScale, forKey: kCIInputRadiusKey)
+        guard let output = filter?.outputImage?.cropped(to: ci.extent),
+              let outCG = ciContext.createCGImage(output, from: ci.extent)
+        else { return nil }
+
+        return NSImage(cgImage: outCG, size: crop.size)
+    }
+
     private static func drawText(string: String, style: TextStyle, in rect: CGRect) {
         let display = string.isEmpty ? " " : string
         let attributed = NSAttributedString(string: display, attributes: style.attributes())
@@ -1582,6 +1988,32 @@ enum AnnotationCursors {
     }()
 
     private static var pencilCrosshairCache: (key: UInt64, cursor: NSCursor)?
+    private static var mosaicCrosshairCache: (key: Int, cursor: NSCursor)?
+
+    /// Brush outline matching actual diameter (no artificial cap that hid size changes).
+    static func mosaicCrosshair(brushWidth: CGFloat) -> NSCursor {
+        let diameter = max(brushWidth, 8)
+        let key = Int((diameter * 2).rounded()) // half-point precision
+        if let cache = mosaicCrosshairCache, cache.key == key {
+            return cache.cursor
+        }
+        let pad: CGFloat = 3
+        let size = diameter + pad * 2
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            let r = rect.insetBy(dx: pad, dy: pad)
+            let path = NSBezierPath(ovalIn: r)
+            path.lineWidth = 1.5
+            NSColor.black.withAlphaComponent(0.45).setStroke()
+            path.stroke()
+            path.lineWidth = 1
+            NSColor.white.setStroke()
+            path.stroke()
+            return true
+        }
+        let cursor = NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
+        mosaicCrosshairCache = (key, cursor)
+        return cursor
+    }
 
     /// Snipaste-style pencil reticle: center dot + four short thin arms, tinted to stroke color.
     static func pencilCrosshair(color: NSColor) -> NSCursor {

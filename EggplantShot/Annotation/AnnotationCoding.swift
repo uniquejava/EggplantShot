@@ -41,6 +41,15 @@ enum AnnotationCoding {
         /// Arrow start / end caps (type == "arrow"); omitted → defaults.
         var startCap: Int?
         var endCap: Int?
+        /// Mosaic brush style (type == "mosaic").
+        var mosaicStyle: MosaicStyleDTO?
+    }
+
+    struct MosaicStyleDTO: Codable {
+        var brushWidth: Double
+        var intensity: Double
+        /// Legacy tip shape (0/1); ignored on decode for style (geometry carries region kind).
+        var brushKind: Int?
     }
 
     struct PointDTO: Codable {
@@ -146,7 +155,8 @@ enum AnnotationCoding {
                 style: encode(style),
                 textStyle: nil,
                 startCap: nil,
-                endCap: nil
+                endCap: nil,
+                mosaicStyle: nil
             )
         case .arrow(let start, let end, let style, let caps):
             return MarkDTO(
@@ -159,7 +169,8 @@ enum AnnotationCoding {
                 style: encode(style),
                 textStyle: nil,
                 startCap: caps.start.rawValue,
-                endCap: caps.end.rawValue
+                endCap: caps.end.rawValue,
+                mosaicStyle: nil
             )
         case .pencil(let points, let style):
             return MarkDTO(
@@ -172,8 +183,40 @@ enum AnnotationCoding {
                 style: encode(style),
                 textStyle: nil,
                 startCap: nil,
-                endCap: nil
+                endCap: nil,
+                mosaicStyle: nil
             )
+        case .mosaic(let geometry, let style):
+            switch geometry {
+            case .stroke(let points):
+                return MarkDTO(
+                    id: annotation.id.uuidString,
+                    type: "mosaic",
+                    kind: nil,
+                    rect: RectDTO(annotation.boundingRect),
+                    points: points.map(PointDTO.init),
+                    string: nil,
+                    style: nil,
+                    textStyle: nil,
+                    startCap: nil,
+                    endCap: nil,
+                    mosaicStyle: encode(style)
+                )
+            case .region(let mode, let rect):
+                return MarkDTO(
+                    id: annotation.id.uuidString,
+                    type: "mosaic",
+                    kind: mode == .ellipse ? "ellipse" : "rectangle",
+                    rect: RectDTO(rect),
+                    points: nil,
+                    string: nil,
+                    style: nil,
+                    textStyle: nil,
+                    startCap: nil,
+                    endCap: nil,
+                    mosaicStyle: encode(style)
+                )
+            }
         case .text(let string, let rect, let style):
             return MarkDTO(
                 id: annotation.id.uuidString,
@@ -185,7 +228,8 @@ enum AnnotationCoding {
                 style: nil,
                 textStyle: encode(style),
                 startCap: nil,
-                endCap: nil
+                endCap: nil,
+                mosaicStyle: nil
             )
         }
     }
@@ -233,6 +277,27 @@ enum AnnotationCoding {
                 id: id,
                 payload: .pencil(points: points.map(\.cgPoint), style: decode(styleDTO))
             )
+        case "mosaic":
+            guard let mosaicDTO = dto.mosaicStyle else {
+                NSLog("SnipHistory: skipping mosaic mark without mosaicStyle")
+                return nil
+            }
+            let style = decode(mosaicDTO)
+            if let points = dto.points, !points.isEmpty {
+                return Annotation(
+                    id: id,
+                    payload: .mosaic(.stroke(points: points.map(\.cgPoint)), style: style)
+                )
+            }
+            if let rect = dto.rect?.cgRect {
+                let mode: MosaicDrawMode = (dto.kind == "ellipse") ? .ellipse : .rectangle
+                return Annotation(
+                    id: id,
+                    payload: .mosaic(.region(mode, rect: rect), style: style)
+                )
+            }
+            NSLog("SnipHistory: skipping mosaic mark without points or rect")
+            return nil
         case "text":
             guard let rect = dto.rect?.cgRect, let textDTO = dto.textStyle else {
                 NSLog("SnipHistory: skipping text mark without rect/textStyle")
@@ -246,6 +311,23 @@ enum AnnotationCoding {
             NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
             return nil
         }
+    }
+
+    static func encode(_ style: MosaicStyle) -> MosaicStyleDTO {
+        MosaicStyleDTO(
+            brushWidth: Double(style.brushWidth),
+            intensity: Double(style.intensity),
+            brushKind: nil
+        )
+    }
+
+    static func decode(_ dto: MosaicStyleDTO) -> MosaicStyle {
+        var style = MosaicStyle(
+            brushWidth: CGFloat(dto.brushWidth),
+            intensity: CGFloat(dto.intensity)
+        )
+        style.clamp()
+        return style
     }
 
     static func encode(_ style: AnnotationStyle) -> StyleDTO {
