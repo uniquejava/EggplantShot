@@ -4,6 +4,7 @@ import AppKit
 enum AnnotateTool: Equatable {
     case none
     case rectangle
+    case pencil
 }
 
 /// Stroke / fill / color used when drawing or editing an annotation.
@@ -11,6 +12,7 @@ struct AnnotationStyle: Equatable {
     var strokeWidth: CGFloat
     var strokeColor: NSColor
     /// Filled body (sub-toolbar item 4). Mutually exclusive with stroke-width picks.
+    /// Ignored by pencil (always stroked).
     var isFilled: Bool
     /// Outline dash pattern (sub-toolbar item 7). Ignored when filled.
     var lineStyle: StrokeLineStyle
@@ -190,7 +192,7 @@ enum ShapeKind: Equatable {
 /// Extensible mark payload. New tools add cases here without forking history/store.
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
-    // later: arrow, stroke (pen/marker), mosaic, text, step, …
+    case pencil(points: [CGPoint], style: AnnotationStyle)
 }
 
 /// One drawable mark. Geometry is in **selection-local** Cocoa points
@@ -204,20 +206,66 @@ struct Annotation: Equatable {
         self.payload = payload
     }
 
-    /// Convenience for the shape tool (only payload today).
+    /// Convenience for the shape tool.
     init(id: UUID = UUID(), kind: ShapeKind = .rectangle, rect: CGRect, style: AnnotationStyle) {
         self.id = id
         self.payload = .shape(kind, rect: rect, style: style)
     }
 
-    /// Disk / tooling type discriminator (`"shape"`, later `"stroke"`, …).
+    /// Convenience for the pencil tool.
+    init(id: UUID = UUID(), points: [CGPoint], style: AnnotationStyle) {
+        self.id = id
+        self.payload = .pencil(points: points, style: style)
+    }
+
+    /// Disk / tooling type discriminator (`"shape"`, `"pencil"`, …).
     var typeName: String {
         switch payload {
         case .shape: return "shape"
+        case .pencil: return "pencil"
         }
     }
 
-    // MARK: Shape accessors (no-ops / defaults for non-shape payloads)
+    // MARK: Shared accessors
+
+    var style: AnnotationStyle {
+        get {
+            switch payload {
+            case .shape(_, _, let style), .pencil(_, let style):
+                return style
+            }
+        }
+        set {
+            switch payload {
+            case .shape(let kind, let rect, _):
+                payload = .shape(kind, rect: rect, style: newValue)
+            case .pencil(let points, _):
+                payload = .pencil(points: points, style: newValue)
+            }
+        }
+    }
+
+    /// Axis-aligned bounds in selection-local space (shape rect, or pencil path hull).
+    var boundingRect: CGRect {
+        switch payload {
+        case .shape(_, let rect, _):
+            return rect
+        case .pencil(let points, _):
+            return Self.bounds(of: points)
+        }
+    }
+
+    var isShape: Bool {
+        if case .shape = payload { return true }
+        return false
+    }
+
+    var isPencil: Bool {
+        if case .pencil = payload { return true }
+        return false
+    }
+
+    // MARK: Shape accessors (no-ops for non-shape payloads)
 
     var kind: ShapeKind {
         get {
@@ -231,39 +279,89 @@ struct Annotation: Equatable {
     }
 
     var rect: CGRect {
-        get {
-            if case .shape(_, let rect, _) = payload { return rect }
-            return .null
-        }
+        get { boundingRect }
         set {
             guard case .shape(let kind, _, let style) = payload else { return }
             payload = .shape(kind, rect: newValue, style: style)
         }
     }
 
-    var style: AnnotationStyle {
+    var points: [CGPoint] {
         get {
-            if case .shape(_, _, let style) = payload { return style }
-            return .default
+            if case .pencil(let points, _) = payload { return points }
+            return []
         }
         set {
-            guard case .shape(let kind, let rect, _) = payload else { return }
-            payload = .shape(kind, rect: rect, style: newValue)
+            guard case .pencil(_, let style) = payload else { return }
+            payload = .pencil(points: newValue, style: style)
         }
     }
 
-    var isShape: Bool {
-        if case .shape = payload { return true }
-        return false
+    // MARK: Geometry helpers
+
+    mutating func translate(by delta: CGSize) {
+        switch payload {
+        case .shape(let kind, let rect, let style):
+            payload = .shape(kind, rect: rect.offsetBy(dx: delta.width, dy: delta.height), style: style)
+        case .pencil(let points, let style):
+            let moved = points.map { CGPoint(x: $0.x + delta.width, y: $0.y + delta.height) }
+            payload = .pencil(points: moved, style: style)
+        }
+    }
+
+    /// Maps geometry so `boundingRect` becomes `newBounds` (used by resize handles).
+    mutating func mapBoundingRect(to newBounds: CGRect) {
+        let old = boundingRect
+        guard old.width > 0, old.height > 0 else { return }
+        switch payload {
+        case .shape(let kind, _, let style):
+            payload = .shape(kind, rect: newBounds, style: style)
+        case .pencil(let points, let style):
+            let sx = newBounds.width / old.width
+            let sy = newBounds.height / old.height
+            let mapped = points.map { p in
+                CGPoint(
+                    x: newBounds.minX + (p.x - old.minX) * sx,
+                    y: newBounds.minY + (p.y - old.minY) * sy
+                )
+            }
+            payload = .pencil(points: mapped, style: style)
+        }
+    }
+
+    static func bounds(of points: [CGPoint]) -> CGRect {
+        guard let first = points.first else { return .null }
+        var minX = first.x, maxX = first.x, minY = first.y, maxY = first.y
+        for p in points.dropFirst() {
+            minX = min(minX, p.x)
+            maxX = max(maxX, p.x)
+            minY = min(minY, p.y)
+            maxY = max(maxY, p.y)
+        }
+        return CGRect(x: minX, y: minY, width: max(maxX - minX, 1), height: max(maxY - minY, 1))
     }
 }
 
 enum AnnotationDrawing {
-    /// Stroke or fill an annotation into the current graphics context. `rect` is already in context space.
+    /// Draw `annotation` with selection-local geometry offset by `origin` (selection frame origin in context).
+    static func draw(_ annotation: Annotation, origin: CGPoint) {
+        switch annotation.payload {
+        case .shape(let kind, let localRect, let style):
+            let rect = localRect.offsetBy(dx: origin.x, dy: origin.y)
+            drawShape(kind: kind, style: style, in: rect)
+        case .pencil(let points, let style):
+            let offset = points.map { CGPoint(x: $0.x + origin.x, y: $0.y + origin.y) }
+            drawPencil(points: offset, style: style)
+        }
+    }
+
+    /// Legacy entry used when the caller already converted a shape rect to context space.
     static func draw(_ annotation: Annotation, in rect: CGRect) {
         switch annotation.payload {
         case .shape(let kind, _, let style):
             drawShape(kind: kind, style: style, in: rect)
+        case .pencil:
+            draw(annotation, origin: .zero)
         }
     }
 
@@ -280,18 +378,49 @@ enum AnnotationDrawing {
             style.strokeColor.setFill()
             path.fill()
         } else {
-            path.lineWidth = style.strokeWidth
-            path.lineJoinStyle = .miter
-            // Butt caps keep dash segments as rectangles (Snipaste-style).
-            path.lineCapStyle = .butt
-            let dash = style.lineStyle.dashPattern(strokeWidth: style.strokeWidth)
-            if dash.isEmpty {
-                path.setLineDash(nil, count: 0, phase: 0)
-            } else {
-                path.setLineDash(dash, count: dash.count, phase: 0)
-            }
+            applyStroke(style, to: path)
             style.strokeColor.setStroke()
             path.stroke()
+        }
+    }
+
+    private static func drawPencil(points: [CGPoint], style: AnnotationStyle) {
+        guard let first = points.first else { return }
+        if points.count == 1 {
+            let r = max(style.strokeWidth / 2, 0.5)
+            style.strokeColor.setFill()
+            NSBezierPath(ovalIn: CGRect(x: first.x - r, y: first.y - r, width: r * 2, height: r * 2)).fill()
+            return
+        }
+        let path = NSBezierPath()
+        path.move(to: first)
+        for p in points.dropFirst() {
+            path.line(to: p)
+        }
+        // Round caps/joins suit freehand; dash still reuses StrokeLineStyle.
+        path.lineJoinStyle = .round
+        path.lineCapStyle = .round
+        path.lineWidth = style.strokeWidth
+        let dash = style.lineStyle.dashPattern(strokeWidth: style.strokeWidth)
+        if dash.isEmpty {
+            path.setLineDash(nil, count: 0, phase: 0)
+        } else {
+            path.setLineDash(dash, count: dash.count, phase: 0)
+        }
+        style.strokeColor.setStroke()
+        path.stroke()
+    }
+
+    private static func applyStroke(_ style: AnnotationStyle, to path: NSBezierPath) {
+        path.lineWidth = style.strokeWidth
+        path.lineJoinStyle = .miter
+        // Butt caps keep dash segments as rectangles (Snipaste-style).
+        path.lineCapStyle = .butt
+        let dash = style.lineStyle.dashPattern(strokeWidth: style.strokeWidth)
+        if dash.isEmpty {
+            path.setLineDash(nil, count: 0, phase: 0)
+        } else {
+            path.setLineDash(dash, count: dash.count, phase: 0)
         }
     }
 
@@ -316,11 +445,34 @@ enum AnnotationDrawing {
             stroke.stroke()
         }
     }
+
+    /// Distance from `point` to the polyline (selection-local). Used for pencil hit-testing.
+    static func distance(from point: CGPoint, toPolyline points: [CGPoint]) -> CGFloat {
+        guard let first = points.first else { return .greatestFiniteMagnitude }
+        guard points.count > 1 else { return hypot(point.x - first.x, point.y - first.y) }
+        var best = CGFloat.greatestFiniteMagnitude
+        for i in 0..<(points.count - 1) {
+            best = min(best, distance(from: point, toSegment: points[i], points[i + 1]))
+        }
+        return best
+    }
+
+    private static func distance(from point: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x
+        let dy = b.y - a.y
+        let lengthSq = dx * dx + dy * dy
+        if lengthSq < 0.0001 {
+            return hypot(point.x - a.x, point.y - a.y)
+        }
+        let t = max(0, min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSq))
+        let proj = CGPoint(x: a.x + t * dx, y: a.y + t * dy)
+        return hypot(point.x - proj.x, point.y - proj.y)
+    }
 }
 
 /// Cursors for annotate hit zones (draw / move / resize).
 enum AnnotationCursors {
-    /// White “＋” used inside the selection / annotation interior (draw mode).
+    /// White “＋” used inside the selection / annotation interior (shape draw mode).
     static let whitePlus: NSCursor = {
         let size: CGFloat = 24
         let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
@@ -345,4 +497,86 @@ enum AnnotationCursors {
         }
         return NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
     }()
+
+    /// Transparent cursor while pencil is stroking (Snipaste: crosshair vanishes; only the ink shows).
+    static let hidden: NSCursor = {
+        let image = NSImage(size: NSSize(width: 1, height: 1), flipped: false) { _ in true }
+        return NSCursor(image: image, hotSpot: .zero)
+    }()
+
+    private static var pencilCrosshairCache: (key: UInt64, cursor: NSCursor)?
+
+    /// Snipaste-style pencil reticle: center dot + four short thin arms, tinted to stroke color.
+    static func pencilCrosshair(color: NSColor) -> NSCursor {
+        let rgb = color.usingColorSpace(.genericRGB) ?? color
+        let key =
+            (UInt64((rgb.redComponent * 255).rounded()) << 24)
+            | (UInt64((rgb.greenComponent * 255).rounded()) << 16)
+            | (UInt64((rgb.blueComponent * 255).rounded()) << 8)
+            | UInt64((rgb.alphaComponent * 255).rounded())
+        if let cache = pencilCrosshairCache, cache.key == key {
+            return cache.cursor
+        }
+        let cursor = makePencilCrosshair(color: rgb)
+        pencilCrosshairCache = (key, cursor)
+        return cursor
+    }
+
+    private static func makePencilCrosshair(color: NSColor) -> NSCursor {
+        let size: CGFloat = 23
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            let mid = NSPoint(x: rect.midX, y: rect.midY)
+            // Gap from center to each arm; arm length — keep hairline thin.
+            let gap: CGFloat = 3
+            let arm: CGFloat = 5
+            let ink = color
+
+            let arms = NSBezierPath()
+            arms.move(to: NSPoint(x: mid.x - gap - arm, y: mid.y))
+            arms.line(to: NSPoint(x: mid.x - gap, y: mid.y))
+            arms.move(to: NSPoint(x: mid.x + gap, y: mid.y))
+            arms.line(to: NSPoint(x: mid.x + gap + arm, y: mid.y))
+            arms.move(to: NSPoint(x: mid.x, y: mid.y - gap - arm))
+            arms.line(to: NSPoint(x: mid.x, y: mid.y - gap))
+            arms.move(to: NSPoint(x: mid.x, y: mid.y + gap))
+            arms.line(to: NSPoint(x: mid.x, y: mid.y + gap + arm))
+            arms.lineCapStyle = .butt
+            arms.lineWidth = 1
+
+            // Hairline halo so cyan-on-cyan (etc.) still reads.
+            arms.lineWidth = 2
+            contrastingHalo(for: ink).setStroke()
+            arms.stroke()
+            arms.lineWidth = 1
+            ink.setStroke()
+            arms.stroke()
+
+            let dotR: CGFloat = 1.1
+            let dot = NSBezierPath(ovalIn: CGRect(
+                x: mid.x - dotR,
+                y: mid.y - dotR,
+                width: dotR * 2,
+                height: dotR * 2
+            ))
+            contrastingHalo(for: ink).setFill()
+            NSBezierPath(ovalIn: CGRect(
+                x: mid.x - dotR - 0.6,
+                y: mid.y - dotR - 0.6,
+                width: (dotR + 0.6) * 2,
+                height: (dotR + 0.6) * 2
+            )).fill()
+            ink.setFill()
+            dot.fill()
+            return true
+        }
+        return NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
+    }
+
+    private static func contrastingHalo(for color: NSColor) -> NSColor {
+        let rgb = color.usingColorSpace(.genericRGB) ?? color
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return luminance > 0.55
+            ? NSColor.black.withAlphaComponent(0.35)
+            : NSColor.white.withAlphaComponent(0.45)
+    }
 }

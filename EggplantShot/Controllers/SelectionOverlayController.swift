@@ -26,9 +26,10 @@ final class SelectionOverlayController {
         case draw(start: CGPoint)
         case move(startRect: CGRect, startPoint: CGPoint)
         case resize(handle: Handle, startRect: CGRect, startPoint: CGPoint)
+        /// Shape or pencil in-progress stroke (tool decides payload).
         case annotateDraw(startLocal: CGPoint)
-        case annotateMove(id: UUID, startRect: CGRect, startPoint: CGPoint)
-        case annotateResize(id: UUID, handle: Handle, startRect: CGRect, startPoint: CGPoint)
+        case annotateMove(id: UUID, start: Annotation, startPoint: CGPoint)
+        case annotateResize(id: UUID, handle: Handle, start: Annotation, startPoint: CGPoint)
     }
 
     private enum Handle: CaseIterable {
@@ -74,8 +75,8 @@ final class SelectionOverlayController {
     /// Sub-toolbar rect / oval switch (next draw + selected mark).
     private var annotationKind: ShapeKind = AnnotationPrefs.load().kind
     private let annotationHistory = AnnotationHistory()
-    /// In-progress shape while dragging (selection-local).
-    private var draftAnnotationRect: CGRect?
+    /// In-progress mark while dragging (selection-local geometry).
+    private var draftAnnotation: Annotation?
 
     private var annotations: [Annotation] { annotationHistory.document.marks }
     private var selectedAnnotationID: UUID? { annotationHistory.document.selectedID }
@@ -85,12 +86,17 @@ final class SelectionOverlayController {
     private let handleHitSize: CGFloat = 12
     private let minSelection: CGFloat = 2
     private let minAnnotation: CGFloat = 4
+    /// Freehand sample distance (points). Dense enough to turn freely without
+    /// the old rubber-band feel; 120Hz tip polling fills gaps between drag events.
+    private let pencilSampleSpacing: CGFloat = 0.15
+    /// High-frequency tip polling while stroking.
+    private var pencilSampleTimer: Timer?
     /// Movement past this distance abandons window pick and starts free drag.
     private let windowPickDragThreshold: CGFloat = 4
     /// Half-width of the annotation border hit corridor (beyond stroke).
     private let annotationBorderHitSlop: CGFloat = 5
 
-    /// Where the pointer sits relative to annotations while the shape tool is active.
+    /// Where the pointer sits relative to annotations while an annotate tool is active.
     private enum AnnotationPointerTarget {
         case handle(id: UUID, handle: Handle)
         case border(id: UUID)
@@ -216,7 +222,8 @@ final class SelectionOverlayController {
         annotationStyle = prefs.style
         annotationKind = prefs.kind
         annotationHistory.reset()
-        draftAnnotationRect = nil
+        draftAnnotation = nil
+        stopPencilSampling()
         historyCursor = nil
         playbackBaseImage = nil
         phase = .idle
@@ -390,32 +397,23 @@ final class SelectionOverlayController {
     }
 
     private func handleRefineMouseDown(at point: CGPoint) {
-        // Shape tool: handle → resize; border → move; interior / empty → draw (nested OK).
+        // Annotate tool: handle → resize; stroke/border → move; interior → draw (nested OK).
         if annotateTool != .none {
             switch annotationPointerTarget(at: point) {
             case .handle(let id, let handle):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
                 annotationHistory.select(id)
-                annotationStyle = ann.style
-                annotationKind = ann.kind
-                toolbar?.syncStyle(ann.style, kind: ann.kind)
+                syncToolbar(from: ann)
                 annotationHistory.beginGesture()
-                dragKind = .annotateResize(
-                    id: id,
-                    handle: handle,
-                    startRect: ann.rect,
-                    startPoint: point
-                )
+                dragKind = .annotateResize(id: id, handle: handle, start: ann, startPoint: point)
                 resizeCursor(for: handle).set()
 
             case .border(let id):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
                 annotationHistory.select(id)
-                annotationStyle = ann.style
-                annotationKind = ann.kind
-                toolbar?.syncStyle(ann.style, kind: ann.kind)
+                syncToolbar(from: ann)
                 annotationHistory.beginGesture()
-                dragKind = .annotateMove(id: id, startRect: ann.rect, startPoint: point)
+                dragKind = .annotateMove(id: id, start: ann, startPoint: point)
                 NSCursor.closedHand.set()
                 updateHighlight(showHandles: true)
 
@@ -423,8 +421,14 @@ final class SelectionOverlayController {
                 annotationHistory.select(nil)
                 let local = toLocal(point)
                 dragKind = .annotateDraw(startLocal: local)
-                draftAnnotationRect = CGRect(origin: local, size: .zero)
-                AnnotationCursors.whitePlus.set()
+                draftAnnotation = makeDraftAnnotation(startingAt: local)
+                // Pencil: hide reticle so only the ink tip shows (Snipaste).
+                if annotateTool == .pencil {
+                    AnnotationCursors.hidden.set()
+                    startPencilSampling()
+                } else {
+                    AnnotationCursors.whitePlus.set()
+                }
                 updateHighlight(showHandles: true)
 
             case .outside:
@@ -452,7 +456,7 @@ final class SelectionOverlayController {
                 doc.marks = []
                 doc.selectedID = nil
             }
-            draftAnnotationRect = nil
+            draftAnnotation = nil
             annotateTool = .none
             let prefs = AnnotationPrefs.load()
             annotationStyle = prefs.style
@@ -507,32 +511,19 @@ final class SelectionOverlayController {
             repositionToolbar()
 
         case .annotateDraw(let startLocal):
-            let end = clampLocal(toLocal(point))
-            let start = clampLocal(startLocal)
-            var draft = CGRect(
-                x: min(start.x, end.x),
-                y: min(start.y, end.y),
-                width: abs(end.x - start.x),
-                height: abs(end.y - start.y)
-            )
-            // Shift → square / circle from the drag start corner.
-            if NSEvent.modifierFlags.contains(.shift) {
-                draft = constrainedSquare(from: start, toward: end)
-            }
-            draftAnnotationRect = draft
-            updateHighlight(showHandles: true)
+            appendPencilOrShapeDraft(startLocal: startLocal, globalPoint: point)
 
-        case .annotateMove(let id, let startRect, let startPoint):
+        case .annotateMove(let id, let start, let startPoint):
             let dx = point.x - startPoint.x
             let dy = point.y - startPoint.y
-            var next = startRect.offsetBy(dx: dx, dy: dy)
-            next = clampAnnotationRect(next)
-            updateAnnotation(id: id) { $0.rect = next }
+            var next = start
+            next.translate(by: CGSize(width: dx, height: dy))
+            clampAnnotationInSelection(&next)
+            updateAnnotation(id: id) { $0.payload = next.payload }
             updateHighlight(showHandles: true)
 
-        case .annotateResize(let id, let handle, let startRect, let startPoint):
-            // Resize in global space, then convert back to local.
-            let startGlobal = toGlobal(startRect)
+        case .annotateResize(let id, let handle, let start, let startPoint):
+            let startGlobal = toGlobal(start.boundingRect)
             let resizedGlobal = resizedRect(
                 handle: handle,
                 startRect: startGlobal,
@@ -540,9 +531,10 @@ final class SelectionOverlayController {
                 point: point,
                 minSize: minAnnotation
             )
-            var local = toLocal(resizedGlobal)
-            local = clampAnnotationRect(local)
-            updateAnnotation(id: id) { $0.rect = local }
+            var local = clampAnnotationRect(toLocal(resizedGlobal))
+            var next = start
+            next.mapBoundingRect(to: local)
+            updateAnnotation(id: id) { $0.payload = next.payload }
             updateHighlight(showHandles: true)
         }
     }
@@ -584,17 +576,15 @@ final class SelectionOverlayController {
         case .refining:
             switch dragKind {
             case .annotateDraw:
-                if let draft = draftAnnotationRect {
-                    draftAnnotationRect = nil
-                    if draft.width >= minAnnotation, draft.height >= minAnnotation {
-                        let ann = Annotation(
-                            kind: annotationKind,
-                            rect: clampAnnotationRect(draft),
-                            style: annotationStyle
-                        )
+                stopPencilSampling()
+                if let draft = draftAnnotation {
+                    draftAnnotation = nil
+                    if isDraftWorthKeeping(draft) {
+                        let ann = finalizedDraft(draft)
                         annotationHistory.commit { doc in
                             doc.marks.append(ann)
-                            doc.selectedID = ann.id
+                            // Pencil: keep drawing clean — no auto-select / resize chrome.
+                            doc.selectedID = ann.isPencil ? nil : ann.id
                         }
                         refreshHistoryChrome()
                     }
@@ -648,6 +638,17 @@ final class SelectionOverlayController {
         return r
     }
 
+    /// Keep mark geometry inside the selection without changing its size when possible.
+    private func clampAnnotationInSelection(_ annotation: inout Annotation) {
+        let bounds = annotation.boundingRect
+        guard !bounds.isNull else { return }
+        let maxX = max(0, currentRect.width - bounds.width)
+        let maxY = max(0, currentRect.height - bounds.height)
+        let ox = min(max(bounds.origin.x, 0), maxX)
+        let oy = min(max(bounds.origin.y, 0), maxY)
+        annotation.translate(by: CGSize(width: ox - bounds.origin.x, height: oy - bounds.origin.y))
+    }
+
     /// Axis-aligned square / circle bounding box from drag start toward `toward`.
     private func constrainedSquare(from start: CGPoint, toward end: CGPoint) -> CGRect {
         let dx = end.x - start.x
@@ -656,6 +657,130 @@ final class SelectionOverlayController {
         let ox = dx < 0 ? -side : 0
         let oy = dy < 0 ? -side : 0
         return CGRect(x: start.x + ox, y: start.y + oy, width: side, height: side)
+    }
+
+    private func syncToolbar(from annotation: Annotation) {
+        annotationStyle = annotation.style
+        if annotation.isShape {
+            annotationKind = annotation.kind
+        }
+        toolbar?.syncStyle(annotation.style, kind: annotationKind)
+    }
+
+    private func makeDraftAnnotation(startingAt local: CGPoint) -> Annotation {
+        switch annotateTool {
+        case .pencil:
+            var style = annotationStyle
+            style.isFilled = false
+            return Annotation(points: [local], style: style)
+        case .rectangle, .none:
+            return Annotation(
+                kind: annotationKind,
+                rect: CGRect(origin: local, size: .zero),
+                style: annotationStyle
+            )
+        }
+    }
+
+    private func appendPencilOrShapeDraft(startLocal: CGPoint, globalPoint: CGPoint) {
+        let end = clampLocal(toLocal(globalPoint))
+        let start = clampLocal(startLocal)
+        draftAnnotation = updatedDraft(from: start, to: end)
+        updateHighlight(showHandles: true)
+    }
+
+    /// Poll mouse while pencil is down so the stroke tracks between sparse drag events.
+    private func startPencilSampling() {
+        stopPencilSampling()
+        let timer = Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.samplePencilAtMouse()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pencilSampleTimer = timer
+    }
+
+    private func stopPencilSampling() {
+        pencilSampleTimer?.invalidate()
+        pencilSampleTimer = nil
+    }
+
+    private func samplePencilAtMouse() {
+        guard case .annotateDraw(let startLocal) = dragKind, annotateTool == .pencil else {
+            stopPencilSampling()
+            return
+        }
+        // Shift-straight is endpoint-only; polling would fight it.
+        if NSEvent.modifierFlags.contains(.shift) { return }
+        appendPencilOrShapeDraft(startLocal: startLocal, globalPoint: NSEvent.mouseLocation)
+    }
+
+    private func updatedDraft(from start: CGPoint, to end: CGPoint) -> Annotation {
+        switch annotateTool {
+        case .pencil:
+            var style = annotationStyle
+            style.isFilled = false
+            if NSEvent.modifierFlags.contains(.shift) {
+                // Straight line at any angle (start → tip); no 45° quantization.
+                return Annotation(points: [start, end], style: style)
+            }
+            // Append densely — never rubber-band a long segment from the last committed point.
+            var points = draftAnnotation?.points ?? [start]
+            if points.isEmpty { points = [start] }
+            if let last = points.last {
+                let distance = hypot(end.x - last.x, end.y - last.y)
+                if distance >= pencilSampleSpacing {
+                    points.append(end)
+                }
+            } else {
+                points.append(end)
+            }
+            return Annotation(points: points, style: style)
+
+        case .rectangle, .none:
+            var draft = CGRect(
+                x: min(start.x, end.x),
+                y: min(start.y, end.y),
+                width: abs(end.x - start.x),
+                height: abs(end.y - start.y)
+            )
+            // Shift → square / circle from the drag start corner.
+            if NSEvent.modifierFlags.contains(.shift) {
+                draft = constrainedSquare(from: start, toward: end)
+            }
+            return Annotation(kind: annotationKind, rect: draft, style: annotationStyle)
+        }
+    }
+
+    private func isDraftWorthKeeping(_ draft: Annotation) -> Bool {
+        switch draft.payload {
+        case .shape(_, let rect, _):
+            return rect.width >= minAnnotation && rect.height >= minAnnotation
+        case .pencil(let points, _):
+            guard points.count >= 2, let first = points.first, let last = points.last else { return false }
+            return hypot(last.x - first.x, last.y - first.y) >= minAnnotation
+                || pathLength(points) >= minAnnotation
+        }
+    }
+
+    private func pathLength(_ points: [CGPoint]) -> CGFloat {
+        guard points.count > 1 else { return 0 }
+        var total: CGFloat = 0
+        for i in 0..<(points.count - 1) {
+            total += hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y)
+        }
+        return total
+    }
+
+    private func finalizedDraft(_ draft: Annotation) -> Annotation {
+        switch draft.payload {
+        case .shape(let kind, let rect, let style):
+            return Annotation(kind: kind, rect: clampAnnotationRect(rect), style: style)
+        case .pencil(let points, let style):
+            let clamped = points.map(clampLocal)
+            return Annotation(points: clamped, style: style)
+        }
     }
 
     private func updateAnnotation(id: UUID, mutate: (inout Annotation) -> Void) {
@@ -676,7 +801,7 @@ final class SelectionOverlayController {
         updateAnnotateCursor(at: NSEvent.mouseLocation)
     }
 
-    /// Priority: selected handles → any border (topmost) → draw zone inside selection.
+    /// Priority: selected handles → any stroke/border (topmost) → draw zone inside selection.
     private func annotationPointerTarget(at point: CGPoint) -> AnnotationPointerTarget {
         guard annotateTool != .none else { return .outside }
         guard currentRect.contains(point) else { return .outside }
@@ -688,7 +813,7 @@ final class SelectionOverlayController {
         }
 
         for ann in annotations.reversed() {
-            if isOnAnnotationBorder(ann, at: point) {
+            if isOnAnnotationStroke(ann, at: point) {
                 return .border(id: ann.id)
             }
         }
@@ -696,7 +821,7 @@ final class SelectionOverlayController {
         return .draw
     }
 
-    private func isOnAnnotationBorder(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
+    private func isOnAnnotationStroke(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
         switch annotation.payload {
         case .shape(let kind, let localRect, let style):
             let rect = toGlobal(localRect)
@@ -717,12 +842,18 @@ final class SelectionOverlayController {
             case .ellipse:
                 return isOnEllipseRing(size: rect.size, localPoint: local, tolerance: tolerance)
             }
+
+        case .pencil(let points, let style):
+            let local = toLocal(globalPoint)
+            let tolerance = max(style.strokeWidth / 2 + 2, annotationBorderHitSlop)
+            return AnnotationDrawing.distance(from: local, toPolyline: points) <= tolerance
         }
     }
 
     private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
-        guard case .shape(_, let localRect, _) = annotation.payload else { return nil }
-        let global = toGlobal(localRect)
+        // Pencil is freehand — no resize chrome (keeps the canvas uncluttered).
+        guard !annotation.isPencil else { return nil }
+        let global = toGlobal(annotation.boundingRect)
         for handle in Handle.allCases {
             if handleHitRect(handle, in: global).contains(point) {
                 return handle
@@ -769,7 +900,11 @@ final class SelectionOverlayController {
         case .border:
             NSCursor.openHand.set()
         case .draw:
-            AnnotationCursors.whitePlus.set()
+            if annotateTool == .pencil {
+                AnnotationCursors.pencilCrosshair(color: annotationStyle.strokeColor).set()
+            } else {
+                AnnotationCursors.whitePlus.set()
+            }
         case .outside:
             NSCursor.arrow.set()
         }
@@ -799,6 +934,10 @@ final class SelectionOverlayController {
         if tool == .none {
             annotationHistory.select(nil)
             NSCursor.arrow.set()
+        } else if tool == .pencil, annotationStyle.isFilled {
+            // Pencil has no fill; fall back to last stroke width.
+            annotationStyle.isFilled = false
+            AnnotationPrefs.save(style: annotationStyle, kind: annotationKind)
         }
         toolbar?.setAnnotateTool(tool)
         updateHighlight(showHandles: true)
@@ -809,28 +948,37 @@ final class SelectionOverlayController {
     }
 
     private func applyStyle(_ style: AnnotationStyle) {
-        annotationStyle = style
-        AnnotationPrefs.save(style: style, kind: annotationKind)
-        if selectedAnnotationID != nil {
+        var next = style
+        if annotateTool == .pencil {
+            next.isFilled = false
+        }
+        annotationStyle = next
+        AnnotationPrefs.save(style: next, kind: annotationKind)
+        if let id = selectedAnnotationID,
+           let selected = annotations.first(where: { $0.id == id }) {
+            var applied = next
+            // Don't push fill onto a pencil mark.
+            if selected.isPencil {
+                applied.isFilled = false
+            }
             annotationHistory.commit { doc in
-                guard let id = doc.selectedID,
-                      let idx = doc.marks.firstIndex(where: { $0.id == id })
-                else { return }
-                doc.marks[idx].style = style
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+                doc.marks[idx].style = applied
             }
             updateHighlight(showHandles: true)
             refreshHistoryChrome()
         }
+        updateAnnotateCursor(at: NSEvent.mouseLocation)
     }
 
     private func applyKind(_ kind: ShapeKind) {
         annotationKind = kind
         AnnotationPrefs.save(style: annotationStyle, kind: kind)
-        if selectedAnnotationID != nil {
+        if let id = selectedAnnotationID,
+           let selected = annotations.first(where: { $0.id == id }),
+           selected.isShape {
             annotationHistory.commit { doc in
-                guard let id = doc.selectedID,
-                      let idx = doc.marks.firstIndex(where: { $0.id == id })
-                else { return }
+                guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
                 doc.marks[idx].kind = kind
             }
             updateHighlight(showHandles: true)
@@ -853,9 +1001,7 @@ final class SelectionOverlayController {
     private func syncAfterHistoryChange() {
         if let id = selectedAnnotationID,
            let ann = annotations.first(where: { $0.id == id }) {
-            annotationStyle = ann.style
-            annotationKind = ann.kind
-            toolbar?.syncStyle(ann.style, kind: ann.kind)
+            syncToolbar(from: ann)
         }
         updateHighlight(showHandles: true)
         refreshHistoryChrome()
@@ -996,7 +1142,7 @@ final class SelectionOverlayController {
         dragKind = nil
         pendingWindowPick = nil
         hoveredWindowRect = nil
-        draftAnnotationRect = nil
+        draftAnnotation = nil
         annotateTool = .none
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style
@@ -1024,9 +1170,7 @@ final class SelectionOverlayController {
                 showHandles: showHandles && annotateTool == .none,
                 handleVisualSize: handleVisualSize,
                 annotations: annotations,
-                draftRect: draftAnnotationRect,
-                draftStyle: annotationStyle,
-                draftKind: annotationKind,
+                draftAnnotation: draftAnnotation,
                 selectedAnnotation: selected,
                 annotationHandleSize: annotationHandleVisualSize,
                 playbackImage: playbackBaseImage
@@ -1108,9 +1252,12 @@ private final class RefineToolbarController: NSObject {
 
     private let rootStack = NSStackView()
     private var shapeButton: NSButton!
+    private var pencilButton: NSButton!
     private var undoButton: NSButton!
     private var redoButton: NSButton!
     private var subToolbarContainer: NSView!
+    /// Shape-only chrome (fill + rect/oval). Hidden for pencil.
+    private var shapeOnlyViews: [NSView] = []
     private var strokeButtons: [NSButton] = []
     private var fillButton: NSButton!
     private var rectKindButton: NSButton!
@@ -1189,11 +1336,17 @@ private final class RefineToolbarController: NSObject {
             enabled: true,
             action: #selector(shapeTapped)
         )
+        pencilButton = iconButton(
+            systemName: "pencil",
+            tooltip: "Pen",
+            enabled: true,
+            action: #selector(pencilTapped)
+        )
 
         let annotateViews: [NSView] = [
             shapeButton,
             iconButton(systemName: "arrow.up.right", tooltip: "Arrow", enabled: false, action: nil),
-            iconButton(systemName: "pencil", tooltip: "Pen", enabled: false, action: nil),
+            pencilButton,
             iconButton(systemName: "paintbrush.pointed", tooltip: "Marker", enabled: false, action: nil),
             iconButton(systemName: "square.grid.3x3", tooltip: "Mosaic", enabled: false, action: nil),
             iconButton(systemName: "textformat", tooltip: "Text", enabled: false, action: nil),
@@ -1293,7 +1446,8 @@ private final class RefineToolbarController: NSObject {
         fillButton.image = fillSwatchImage(selected: false)
         stack.addArrangedSubview(fillButton)
 
-        stack.addArrangedSubview(miniDivider())
+        let afterFillDivider = miniDivider()
+        stack.addArrangedSubview(afterFillDivider)
 
         // Switch group 2: rectangle ↔ ellipse / circle.
         rectKindButton = iconButton(
@@ -1311,7 +1465,12 @@ private final class RefineToolbarController: NSObject {
         stack.addArrangedSubview(rectKindButton)
         stack.addArrangedSubview(ovalKindButton)
 
-        stack.addArrangedSubview(miniDivider())
+        let afterKindDivider = miniDivider()
+        stack.addArrangedSubview(afterKindDivider)
+
+        // Shared by shape + pencil: hide fill / kind for pencil (Snipaste pen options).
+        // Keep `afterKindDivider` visible so stroke → line-style stays separated.
+        shapeOnlyViews = [fillButton, afterFillDivider, rectKindButton, ovalKindButton]
 
         // Item 7: border line style dropdown (Snipaste 5 patterns).
         lineStyleButton = NSButton(frame: .zero)
@@ -1418,24 +1577,32 @@ private final class RefineToolbarController: NSObject {
 
     private func refreshSelectionChrome() {
         tintSelected(shapeButton, selected: tool == .rectangle)
+        tintSelected(pencilButton, selected: tool == .pencil)
         colorPreview.layer?.backgroundColor = style.strokeColor.cgColor
 
+        let shapeExtrasVisible = (tool == .rectangle)
+        for view in shapeOnlyViews {
+            view.isHidden = !shapeExtrasVisible
+        }
+
         let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
+        let treatAsStroke = !style.isFilled || tool == .pencil
         for button in strokeButtons {
             let option = StrokeWidthOption(rawValue: button.tag) ?? .medium
-            let on = !style.isFilled && option == selectedStroke
+            let on = treatAsStroke && option == selectedStroke
             button.image = strokeDotImage(diameter: option.previewDiameter, selected: on)
             tintSelected(button, selected: on)
         }
-        fillButton.image = fillSwatchImage(selected: style.isFilled)
-        tintSelected(fillButton, selected: style.isFilled)
+        fillButton.image = fillSwatchImage(selected: style.isFilled && tool == .rectangle)
+        tintSelected(fillButton, selected: style.isFilled && tool == .rectangle)
 
         tintSelected(rectKindButton, selected: kind == .rectangle)
         tintSelected(ovalKindButton, selected: kind == .ellipse)
 
         lineStyleButton.image = lineStylePreviewImage(style.lineStyle)
-        lineStyleButton.isEnabled = !style.isFilled
-        lineStyleButton.alphaValue = style.isFilled ? 0.45 : 1
+        let lineEnabled = treatAsStroke
+        lineStyleButton.isEnabled = lineEnabled
+        lineStyleButton.alphaValue = lineEnabled ? 1 : 0.45
     }
 
     private func tintSelected(_ button: NSButton, selected: Bool) {
@@ -1590,8 +1757,18 @@ private final class RefineToolbarController: NSObject {
     }
 
     @objc private func shapeTapped() {
-        let next: AnnotateTool = (tool == .rectangle) ? .none : .rectangle
+        selectTool(tool == .rectangle ? .none : .rectangle)
+    }
+
+    @objc private func pencilTapped() {
+        selectTool(tool == .pencil ? .none : .pencil)
+    }
+
+    private func selectTool(_ next: AnnotateTool) {
         tool = next
+        if next == .pencil {
+            style.isFilled = false
+        }
         subToolbarContainer.isHidden = (next == .none)
         refreshSelectionChrome()
         if let content = panel.contentView {
@@ -1609,6 +1786,7 @@ private final class RefineToolbarController: NSObject {
     }
 
     @objc private func fillTapped() {
+        guard tool == .rectangle else { return }
         style.isFilled = true
         refreshSelectionChrome()
         onEvent(.styleChanged(style))
@@ -1682,6 +1860,9 @@ private final class RefineToolbarController: NSObject {
 
     func setAnnotateTool(_ tool: AnnotateTool) {
         self.tool = tool
+        if tool == .pencil {
+            style.isFilled = false
+        }
         subToolbarContainer.isHidden = (tool == .none)
         refreshSelectionChrome()
         if let content = panel.contentView {
@@ -1788,9 +1969,7 @@ private final class SelectionPanel: NSPanel {
         showHandles: Bool,
         handleVisualSize: CGFloat,
         annotations: [Annotation],
-        draftRect: CGRect?,
-        draftStyle: AnnotationStyle,
-        draftKind: ShapeKind,
+        draftAnnotation: Annotation?,
         selectedAnnotation: Annotation?,
         annotationHandleSize: CGFloat,
         playbackImage: NSImage?
@@ -1810,9 +1989,7 @@ private final class SelectionPanel: NSPanel {
         overlayView.showHandles = showHandles
         overlayView.handleVisualSize = handleVisualSize
         overlayView.annotations = annotations
-        overlayView.draftRect = draftRect
-        overlayView.draftStyle = draftStyle
-        overlayView.draftKind = draftKind
+        overlayView.draftAnnotation = draftAnnotation
         overlayView.selectedAnnotation = selectedAnnotation
         overlayView.annotationHandleSize = annotationHandleSize
         overlayView.playbackImage = playbackImage
@@ -1828,9 +2005,7 @@ private final class SelectionOverlayNSView: NSView {
     var showHandles = false
     var handleVisualSize: CGFloat = 8
     var annotations: [Annotation] = []
-    var draftRect: CGRect?
-    var draftStyle: AnnotationStyle = .default
-    var draftKind: ShapeKind = .rectangle
+    var draftAnnotation: Annotation?
     var selectedAnnotation: Annotation?
     var annotationHandleSize: CGFloat = 7
     /// Historical crop drawn inside the selection (`,` / `.` playback).
@@ -1925,21 +2100,17 @@ private final class SelectionOverlayNSView: NSView {
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: selectionRect).addClip()
 
+        let origin = selectionRect.origin
         for ann in annotations {
-            switch ann.payload {
-            case .shape(_, let localRect, _):
-                let r = localRect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
-                AnnotationDrawing.draw(ann, in: r)
-            }
+            AnnotationDrawing.draw(ann, origin: origin)
         }
 
-        if let draft = draftRect, draft.width > 0, draft.height > 0 {
-            let r = draft.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
-            AnnotationDrawing.draw(Annotation(kind: draftKind, rect: draft, style: draftStyle), in: r)
+        if let draft = draftAnnotation {
+            AnnotationDrawing.draw(draft, origin: origin)
         }
 
-        if let selected = selectedAnnotation, case .shape(_, let localRect, _) = selected.payload {
-            let r = localRect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
+        if let selected = selectedAnnotation, !selected.isPencil {
+            let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
             AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
         }
 

@@ -68,16 +68,12 @@ enum ShapeKind: Equatable { case rectangle, ellipse }
 
 enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
-    // later: arrow, stroke (pen/marker), mosaic, text, step, …
-}
-
-struct Annotation: Equatable {
-    let id: UUID
-    var payload: AnnotationPayload
+    case pencil(points: [CGPoint], style: AnnotationStyle)
+    // later: arrow, marker, mosaic, text, step, …
 }
 ```
 
-Disk schema v1 still writes shape marks as `{ "type": "shape", "kind", "rect", "style" }`. Unknown `type` values are skipped on load so older clients / future tools stay compatible.
+Disk schema v1 writes marks with a `type` discriminator (`"shape"`, `"pencil"`, …). Shape keeps `kind` / `rect`; pencil stores `points` (+ optional hull `rect`). Unknown `type` values are skipped on load.
 
 ### `AnnotationDocument`
 
@@ -190,9 +186,9 @@ P0–P4 done:
 - Overlay routes mutations through `AnnotationHistory`, returns `AnnotationDocument` on confirm.
 - `SnipController` composites for output and appends `SnipRecord` (memory + disk).
 - `,` / `.` restore selection + base + document into the active overlay.
-- Marks use `AnnotationPayload` (`shape` today); disk `type` discriminator ready for new tools.
+- Marks use `AnnotationPayload` (`shape`, `pencil`); disk `type` discriminator ready for new tools.
 
-Next product work: pencil / arrow / … add payload cases + drawing + hit-testing only.
+Next product work: arrow / marker / … add payload cases + drawing + hit-testing only.
 
 ## Coordinate conventions
 
@@ -355,6 +351,8 @@ How to try: Pin a snip with shapes → F1 again → press `,` → edit → Pin (
 
 New tools add a `AnnotationPayload` case + draw/hit-test; history / store / confirm paths stay unchanged.
 
+Pencil: `.pencil(points:style:)` — freehand polyline, Shift → straight any angle.
+
 ## Relationship to current MVP
 
 | Area | Status |
@@ -363,6 +361,6 @@ New tools add a `AnnotationPayload` case + draw/hit-test; history / store / conf
 | Confirm | Bake + disk `SnipRecord` |
 | `,` / `.` | History playback |
 | Pin window | Flat image (no layer reopen) |
-| Mark model | `AnnotationPayload` (`shape` today) |
+| Mark model | `AnnotationPayload` (`shape`, `pencil`) |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

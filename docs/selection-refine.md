@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / color, draw / move / resize) + **in-session undo/redo**. Other annotate / OCR remain stubs.
+Annotate: **shape** (rect / ellipse) + **pencil** (freehand; Shift → straight any angle) + **in-session undo/redo**. Other annotate / OCR remain stubs.
 
 Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4 done).
 
@@ -27,8 +27,18 @@ Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-do
    - Stroke / fill / line style / color / kind changes apply to the selected mark (or the next one drawn).
    - Delete removes the selected mark.
    - Confirm composites annotations onto the capture before pin / copy / save.
-5. On confirm → crop final rect from freeze snapshot → tear down overlay → (optional annotate bake) → pin, clipboard, or save panel.
-6. Esc in refine cancels the whole snip.
+5. **Pencil annotate** (main toolbar pencil button):
+   - Same sub-toolbar **stroke / line-style / color** (fill + rect/oval hidden).
+   - Hover: stroke-colored reticle (center dot + four thin arms). Mouse-down hides the cursor; only the ink tip shows.
+   - Freehand polyline (dense live sampling + 120Hz tip poll). Hold **Shift** for a straight line that follows the tip at any angle.
+   - No resize handles (keeps freehand uncluttered). Hit the stroke to move; Delete works if selected.
+   - After mouse-up, the stroke is **not** auto-selected (ready to draw the next segment).
+6. On confirm → crop final rect from freeze snapshot → tear down overlay → (optional annotate bake) → pin, clipboard, or save panel.
+7. Esc in refine cancels the whole snip.
+
+### Deferred (pencil)
+
+- Live sampling is dense (~0.15pt + 120Hz poll) for follow-feel. If long strokes lag or history JSON bloats, **simplify the polyline on mouse-up** (e.g. Ramer–Douglas–Peucker) while keeping live sampling dense.
 
 ### Snip vs Snip and copy
 
@@ -47,12 +57,12 @@ Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-do
 ## Toolbar layout (parity with Snipaste)
 
 ```
-[ shape† | arrow | pen | marker | mosaic | T | step | magnifier | eraser ]
+[ shape† | arrow | pen† | marker | mosaic | T | step | magnifier | eraser ]
 | [ OCR | undo | redo ]
 | [ ✕ | pin | save | copy | …‡ ]
 
-† Shape tool expands a **separate** options card below the main toolbar (~4pt gap):
-  [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ preview 24 + palette 2×10 ]
+† Shape expands options: [ thin | med | thick | fill ] | [ rect | oval ] | [ line-style ▾ ] | [ preview 24 + palette 2×10 ]
+  Pen reuses the same card without fill / rect / oval: [ thin | med | thick ] | [ line-style ▾ ] | [ palette ]
   Palette chips ≈11pt, gap ≈2pt (Snipaste-measured).
 ‡ More is stub / disabled today.
 ```
@@ -75,5 +85,6 @@ Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-do
 - [x] ⌘F1 entry; primary action matches mode
 - [x] Pin soft glow + drag
 - [x] Shape tool: stroke/fill + rect/oval + line-style dropdown + 2×10 palette; draw / move / resize, bake into capture
+- [x] Pencil tool: stroke + line-style + palette; color reticle; freehand / Shift any-angle; move (no resize chrome); bake into capture
 - [x] Undo / Redo toolbar + ⌘Z / ⇧⌘Z restore annotation document states
 - [x] Debug build succeeds

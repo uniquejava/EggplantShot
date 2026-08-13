@@ -31,8 +31,24 @@ enum AnnotationCoding {
         var id: String
         var type: String
         var kind: String?
-        var rect: RectDTO
+        /// Shape bounding rect; also written for pencil as the path hull (optional on decode).
+        var rect: RectDTO?
+        var points: [PointDTO]?
         var style: StyleDTO
+    }
+
+    struct PointDTO: Codable {
+        var x: Double
+        var y: Double
+
+        init(_ point: CGPoint) {
+            x = Double(point.x)
+            y = Double(point.y)
+        }
+
+        var cgPoint: CGPoint {
+            CGPoint(x: x, y: y)
+        }
     }
 
     struct StyleDTO: Codable {
@@ -111,6 +127,16 @@ enum AnnotationCoding {
                 type: "shape",
                 kind: kindString(kind),
                 rect: RectDTO(rect),
+                points: nil,
+                style: encode(style)
+            )
+        case .pencil(let points, let style):
+            return MarkDTO(
+                id: annotation.id.uuidString,
+                type: "pencil",
+                kind: nil,
+                rect: RectDTO(annotation.boundingRect),
+                points: points.map(PointDTO.init),
                 style: encode(style)
             )
         }
@@ -123,10 +149,23 @@ enum AnnotationCoding {
         }
         switch dto.type {
         case "shape":
+            guard let rect = dto.rect?.cgRect else {
+                NSLog("SnipHistory: skipping shape mark without rect")
+                return nil
+            }
             let kind = kindFromString(dto.kind) ?? .rectangle
             return Annotation(
                 id: id,
-                payload: .shape(kind, rect: dto.rect.cgRect, style: decode(dto.style))
+                payload: .shape(kind, rect: rect, style: decode(dto.style))
+            )
+        case "pencil":
+            guard let points = dto.points, points.count >= 2 else {
+                NSLog("SnipHistory: skipping pencil mark without points")
+                return nil
+            }
+            return Annotation(
+                id: id,
+                payload: .pencil(points: points.map(\.cgPoint), style: decode(dto.style))
             )
         default:
             NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)

@@ -15,10 +15,7 @@ enum AnnotationCompositor {
                 fraction: 1
             )
             for annotation in annotations {
-                switch annotation.payload {
-                case .shape(_, let rect, _):
-                    AnnotationDrawing.draw(annotation, in: rect)
-                }
+                AnnotationDrawing.draw(annotation, origin: .zero)
             }
             return true
         }
