@@ -1816,7 +1816,7 @@ enum AnnotationDrawing {
         let pad = style.textPadding
 
         if style.hasBackground {
-            let bg = contrastingBackground(for: style.color)
+            let bg = ContrastChrome.textPlate(behind: style.color)
             bg.setFill()
             NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
         }
@@ -1824,15 +1824,6 @@ enum AnnotationDrawing {
         let textRect = rect.insetBy(dx: pad, dy: pad)
         // Wrap to the mark’s width (must match the field editor / commit sizing).
         attributed.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading])
-    }
-
-    /// Light plate behind dark ink; dark plate behind light ink.
-    private static func contrastingBackground(for color: NSColor) -> NSColor {
-        let rgb = color.usingColorSpace(.genericRGB) ?? color
-        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-        return luminance > 0.55
-            ? NSColor.black.withAlphaComponent(0.55)
-            : NSColor.white.withAlphaComponent(0.85)
     }
 
     private static func applyStroke(_ style: AnnotationStyle, to path: NSBezierPath) {
@@ -2085,7 +2076,7 @@ enum AnnotationCursors {
 
             // Hairline halo so cyan-on-cyan (etc.) still reads.
             arms.lineWidth = 2
-            contrastingHalo(for: ink).setStroke()
+            ContrastChrome.halo(for: ink).setStroke()
             arms.stroke()
             arms.lineWidth = 1
             ink.setStroke()
@@ -2098,7 +2089,7 @@ enum AnnotationCursors {
                 width: dotR * 2,
                 height: dotR * 2
             ))
-            contrastingHalo(for: ink).setFill()
+            ContrastChrome.halo(for: ink).setFill()
             NSBezierPath(ovalIn: CGRect(
                 x: mid.x - dotR - 0.6,
                 y: mid.y - dotR - 0.6,
@@ -2168,13 +2159,5 @@ enum AnnotationCursors {
             return true
         }
         return NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
-    }
-
-    private static func contrastingHalo(for color: NSColor) -> NSColor {
-        let rgb = color.usingColorSpace(.genericRGB) ?? color
-        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-        return luminance > 0.55
-            ? NSColor.black.withAlphaComponent(0.35)
-            : NSColor.white.withAlphaComponent(0.45)
     }
 }

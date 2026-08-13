@@ -53,7 +53,7 @@ EggplantShot/
   Controllers/TextAnnotationEditor.swift
   Controllers/SelectionOverlayPanel.swift
   Controllers/PinBoardController.swift
-  Annotation/AnnotationModels.swift + AnnotationDocument.swift + AnnotationCoding.swift + AnnotationCompositor.swift
+  Annotation/AnnotationModels.swift + AnnotationDocument.swift + AnnotationCoding.swift + AnnotationCompositor.swift + ContrastChrome.swift
   History/SnipRecord.swift + SnipHistoryStore.swift
   UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift
   Assets.xcassets/

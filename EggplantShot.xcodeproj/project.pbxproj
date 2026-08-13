@@ -24,6 +24,7 @@
 		B10000000000000000000007 /* PinBoardController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000007 /* PinBoardController.swift */; };
 		B10000000000000000000008 /* SnipController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000008 /* SnipController.swift */; };
 		B10000000000000000000010 /* AnnotationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000010 /* AnnotationModels.swift */; };
+		B1000000000000000000001D /* ContrastChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001D /* ContrastChrome.swift */; };
 		B10000000000000000000011 /* AnnotationCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* AnnotationCompositor.swift */; };
 		B10000000000000000000013 /* AnnotationDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000013 /* AnnotationDocument.swift */; };
 		B10000000000000000000016 /* AnnotationCoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000016 /* AnnotationCoding.swift */; };
@@ -54,6 +55,7 @@
 		C10000000000000000000007 /* PinBoardController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinBoardController.swift; sourceTree = "<group>"; };
 		C10000000000000000000008 /* SnipController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipController.swift; sourceTree = "<group>"; };
 		C10000000000000000000010 /* AnnotationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationModels.swift; sourceTree = "<group>"; };
+		C1000000000000000000001D /* ContrastChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContrastChrome.swift; sourceTree = "<group>"; };
 		C10000000000000000000011 /* AnnotationCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCompositor.swift; sourceTree = "<group>"; };
 		C10000000000000000000013 /* AnnotationDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationDocument.swift; sourceTree = "<group>"; };
 		C10000000000000000000016 /* AnnotationCoding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCoding.swift; sourceTree = "<group>"; };
@@ -151,6 +153,7 @@
 			isa = PBXGroup;
 			children = (
 				C10000000000000000000010 /* AnnotationModels.swift */,
+				C1000000000000000000001D /* ContrastChrome.swift */,
 				C10000000000000000000013 /* AnnotationDocument.swift */,
 				C10000000000000000000016 /* AnnotationCoding.swift */,
 				C10000000000000000000011 /* AnnotationCompositor.swift */,
@@ -271,6 +274,7 @@
 				B10000000000000000000007 /* PinBoardController.swift in Sources */,
 				B10000000000000000000008 /* SnipController.swift in Sources */,
 				B10000000000000000000010 /* AnnotationModels.swift in Sources */,
+				B1000000000000000000001D /* ContrastChrome.swift in Sources */,
 				B10000000000000000000013 /* AnnotationDocument.swift in Sources */,
 				B10000000000000000000016 /* AnnotationCoding.swift in Sources */,
 				B10000000000000000000014 /* SnipRecord.swift in Sources */,

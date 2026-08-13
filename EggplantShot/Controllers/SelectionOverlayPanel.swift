@@ -231,7 +231,7 @@ final class SelectionOverlayNSView: NSView {
            let hovered = annotations.first(where: { $0.id == hid }),
            hovered.isText {
             let r = hovered.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
-            drawTextHoverOutline(in: r)
+            drawTextHoverOutline(in: r, style: hovered.textStyle)
         }
     }
 
@@ -259,45 +259,34 @@ final class SelectionOverlayNSView: NSView {
 
     /// Sample freeze under `point` (view / image space); fall back to white on unknown dark.
     private func contrastChromeColor(around point: CGPoint) -> NSColor {
-        guard let freezeImage,
-              let cg = freezeImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        else { return .white }
-        let scaleX = CGFloat(cg.width) / freezeImage.size.width
-        let scaleY = CGFloat(cg.height) / freezeImage.size.height
-        let sample = CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4)
-        let pixel = CGRect(
-            x: sample.minX * scaleX,
-            y: (freezeImage.size.height - sample.maxY) * scaleY,
-            width: sample.width * scaleX,
-            height: sample.height * scaleY
-        ).integral
-        guard pixel.width >= 1, pixel.height >= 1,
-              let cropped = cg.cropping(to: pixel)
-        else { return .white }
-        let rep = NSBitmapImageRep(cgImage: cropped)
-        var sum: CGFloat = 0
-        var count: CGFloat = 0
-        for x in 0..<rep.pixelsWide {
-            for y in 0..<rep.pixelsHigh {
-                guard let rgb = rep.colorAt(x: x, y: y)?.usingColorSpace(.genericRGB) else { continue }
-                sum += 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-                count += 1
-            }
-        }
-        guard count > 0 else { return .white }
-        // Outside the blue selection the overlay dims ~45% black.
-        var luminance = sum / count
-        if !selectionRect.isNull, !selectionRect.contains(point) {
-            luminance *= 0.55
-        }
-        return luminance < 0.55 ? .white : .black
+        let sampled = freezeImage.flatMap {
+            ContrastChrome.averageLuminance(in: $0, aroundPointInImageSpace: point)
+        } ?? 0.2
+        return ContrastChrome.hairline(
+            onLuminance: ContrastChrome.adjustedLuminance(
+                sampled,
+                point: point,
+                selectionRect: selectionRect
+            )
+        )
     }
 
-    /// 1px white dashed frame (Snipaste text mouse-over).
-    private func drawTextHoverOutline(in rect: CGRect) {
+    /// 1px dashed hover frame; black on light / white on dark (matches edit chrome).
+    private func drawTextHoverOutline(in rect: CGRect, style: TextStyle) {
         let scale = window?.backingScaleFactor ?? 2
         let w = 1 / max(scale, 1)
-        NSColor.white.setStroke()
+        let point = CGPoint(x: rect.midX, y: rect.midY)
+        let sampled = freezeImage.flatMap {
+            ContrastChrome.averageLuminance(in: $0, aroundPointInImageSpace: point)
+        } ?? 0.2
+        ContrastChrome.textHairline(
+            style: style,
+            freezeLuminance: ContrastChrome.adjustedLuminance(
+                sampled,
+                point: point,
+                selectionRect: selectionRect
+            )
+        ).setStroke()
         let path = NSBezierPath(rect: rect.insetBy(dx: w / 2, dy: w / 2))
         path.lineWidth = w
         let dash: [CGFloat] = [3, 2]

@@ -71,17 +71,7 @@ enum ScreenCapturer {
               let cropped = full.cropping(to: pixel)
         else { return nil }
         let rep = NSBitmapImageRep(cgImage: cropped)
-        var sum: CGFloat = 0
-        var count: CGFloat = 0
-        for x in 0..<rep.pixelsWide {
-            for y in 0..<rep.pixelsHigh {
-                guard let rgb = rep.colorAt(x: x, y: y)?.usingColorSpace(.genericRGB) else { continue }
-                sum += 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-                count += 1
-            }
-        }
-        guard count > 0 else { return nil }
-        return sum / count
+        return ContrastChrome.averageLuminance(of: rep)
     }
 
     /// Capture a rectangular region in Cocoa global coordinates (points, bottom-left origin).

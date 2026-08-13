@@ -1666,7 +1666,7 @@ final class SelectionOverlayController {
         // Only the explicit “background” style toggle fills behind glyphs.
         if ann.textStyle.hasBackground {
             tv.drawsBackground = true
-            tv.backgroundColor = Self.textEditorBackground(for: ann.textStyle.color)
+            tv.backgroundColor = ContrastChrome.textPlate(behind: ann.textStyle.color)
         }
         tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = true
@@ -1784,7 +1784,7 @@ final class SelectionOverlayController {
         tv.textColor = style.color
         if style.hasBackground {
             tv.drawsBackground = true
-            tv.backgroundColor = Self.textEditorBackground(for: style.color)
+            tv.backgroundColor = ContrastChrome.textPlate(behind: style.color)
             tv.textContainerInset = NSSize(width: style.textPadding, height: style.textPadding)
         } else {
             tv.drawsBackground = false
@@ -1846,30 +1846,17 @@ final class SelectionOverlayController {
         chrome.needsDisplay = true
     }
 
-    private static func textEditorBackground(for color: NSColor) -> NSColor {
-        let rgb = color.usingColorSpace(.genericRGB) ?? color
-        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-        return luminance > 0.55
-            ? NSColor.black.withAlphaComponent(0.55)
-            : NSColor.white.withAlphaComponent(0.85)
-    }
-
     /// Hairline + caret: white on dark, black on light (not the palette / text color).
     private func applyTextChromeContrast(style: TextStyle, globalPoint: CGPoint) {
-        let color = contrastChromeColor(style: style, at: globalPoint)
+        let color = ContrastChrome.textHairline(
+            style: style,
+            freezeLuminance: freezeLuminance(at: globalPoint)
+        )
         textChromeView?.strokeColor = color
         textEditor?.insertionPointColor = color
     }
 
-    private func contrastChromeColor(style: TextStyle, at globalPoint: CGPoint) -> NSColor {
-        if style.hasBackground {
-            let bg = Self.textEditorBackground(for: style.color)
-            return Self.isLightColor(bg) ? .black : .white
-        }
-        return freezeContrastColor(at: globalPoint)
-    }
-
-    private func freezeContrastColor(at globalPoint: CGPoint) -> NSColor {
+    private func freezeLuminance(at globalPoint: CGPoint) -> CGFloat {
         let frame = freezeFrames.first { NSMouseInRect(globalPoint, $0.screen.frame, false) }
             ?? freezeFrames.first
         var luminance: CGFloat = 0.2
@@ -1881,17 +1868,11 @@ final class SelectionOverlayController {
            ) {
             luminance = sampled
         }
-        if !currentRect.isNull, !currentRect.contains(globalPoint) {
-            // Overlay dim is 45% black over the freeze.
-            luminance *= 0.55
-        }
-        return luminance < 0.55 ? .white : .black
-    }
-
-    private static func isLightColor(_ color: NSColor) -> Bool {
-        let rgb = color.usingColorSpace(.genericRGB) ?? color
-        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
-        return luminance > 0.55
+        return ContrastChrome.adjustedLuminance(
+            luminance,
+            point: globalPoint,
+            selectionRect: currentRect
+        )
     }
 
     // MARK: - Geometry
