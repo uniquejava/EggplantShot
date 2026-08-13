@@ -104,26 +104,34 @@ enum AnnotationCoding {
     }
 
     static func encode(_ annotation: Annotation) -> MarkDTO {
-        MarkDTO(
-            id: annotation.id.uuidString,
-            type: "shape",
-            kind: kindString(annotation.kind),
-            rect: RectDTO(annotation.rect),
-            style: encode(annotation.style)
-        )
+        switch annotation.payload {
+        case .shape(let kind, let rect, let style):
+            return MarkDTO(
+                id: annotation.id.uuidString,
+                type: "shape",
+                kind: kindString(kind),
+                rect: RectDTO(rect),
+                style: encode(style)
+            )
+        }
     }
 
     static func decodeMark(_ dto: MarkDTO) -> Annotation? {
-        guard dto.type == "shape" else {
-            NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
-            return nil
-        }
         guard let id = UUID(uuidString: dto.id) else {
             NSLog("SnipHistory: skipping mark with invalid id")
             return nil
         }
-        let kind = kindFromString(dto.kind) ?? .rectangle
-        return Annotation(id: id, kind: kind, rect: dto.rect.cgRect, style: decode(dto.style))
+        switch dto.type {
+        case "shape":
+            let kind = kindFromString(dto.kind) ?? .rectangle
+            return Annotation(
+                id: id,
+                payload: .shape(kind, rect: dto.rect.cgRect, style: decode(dto.style))
+            )
+        default:
+            NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
+            return nil
+        }
     }
 
     static func encode(_ style: AnnotationStyle) -> StyleDTO {
@@ -209,14 +217,14 @@ enum AnnotationCoding {
 
     // MARK: - Private
 
-    private static func kindString(_ kind: Annotation.Kind) -> String {
+    private static func kindString(_ kind: ShapeKind) -> String {
         switch kind {
         case .rectangle: return "rectangle"
         case .ellipse: return "ellipse"
         }
     }
 
-    private static func kindFromString(_ raw: String?) -> Annotation.Kind? {
+    private static func kindFromString(_ raw: String?) -> ShapeKind? {
         switch raw {
         case "rectangle": return .rectangle
         case "ellipse": return .ellipse

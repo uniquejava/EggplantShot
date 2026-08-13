@@ -72,7 +72,7 @@ final class SelectionOverlayController {
     private var annotateTool: AnnotateTool = .none
     private var annotationStyle: AnnotationStyle = AnnotationPrefs.load().style
     /// Sub-toolbar rect / oval switch (next draw + selected mark).
-    private var annotationKind: Annotation.Kind = AnnotationPrefs.load().kind
+    private var annotationKind: ShapeKind = AnnotationPrefs.load().kind
     private let annotationHistory = AnnotationHistory()
     /// In-progress shape while dragging (selection-local).
     private var draftAnnotationRect: CGRect?
@@ -697,24 +697,38 @@ final class SelectionOverlayController {
     }
 
     private func isOnAnnotationBorder(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
-        let rect = toGlobal(annotation.rect)
-        let halfStroke = annotation.style.isFilled ? 0 : annotation.style.strokeWidth / 2
-        let tolerance = max(halfStroke + 2, annotationBorderHitSlop)
-        let local = CGPoint(x: globalPoint.x - rect.minX, y: globalPoint.y - rect.minY)
+        switch annotation.payload {
+        case .shape(let kind, let localRect, let style):
+            let rect = toGlobal(localRect)
+            let halfStroke = style.isFilled ? 0 : style.strokeWidth / 2
+            let tolerance = max(halfStroke + 2, annotationBorderHitSlop)
+            let local = CGPoint(x: globalPoint.x - rect.minX, y: globalPoint.y - rect.minY)
 
-        switch annotation.kind {
-        case .rectangle:
-            let outer = rect.insetBy(dx: -tolerance, dy: -tolerance)
-            guard outer.contains(globalPoint) else { return false }
-            if rect.width <= tolerance * 2 || rect.height <= tolerance * 2 {
-                return true
+            switch kind {
+            case .rectangle:
+                let outer = rect.insetBy(dx: -tolerance, dy: -tolerance)
+                guard outer.contains(globalPoint) else { return false }
+                if rect.width <= tolerance * 2 || rect.height <= tolerance * 2 {
+                    return true
+                }
+                let inner = rect.insetBy(dx: tolerance, dy: tolerance)
+                return !inner.contains(globalPoint)
+
+            case .ellipse:
+                return isOnEllipseRing(size: rect.size, localPoint: local, tolerance: tolerance)
             }
-            let inner = rect.insetBy(dx: tolerance, dy: tolerance)
-            return !inner.contains(globalPoint)
-
-        case .ellipse:
-            return isOnEllipseRing(size: rect.size, localPoint: local, tolerance: tolerance)
         }
+    }
+
+    private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
+        guard case .shape(_, let localRect, _) = annotation.payload else { return nil }
+        let global = toGlobal(localRect)
+        for handle in Handle.allCases {
+            if handleHitRect(handle, in: global).contains(point) {
+                return handle
+            }
+        }
+        return nil
     }
 
     /// `localPoint` is relative to the ellipse bounding rect's origin.
@@ -737,16 +751,6 @@ final class SelectionOverlayController {
         let outer = (dx * dx) / (rxOuter * rxOuter) + (dy * dy) / (ryOuter * ryOuter)
         let inner = (dx * dx) / (rxInner * rxInner) + (dy * dy) / (ryInner * ryInner)
         return outer <= 1 && inner >= 1
-    }
-
-    private func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
-        let global = toGlobal(annotation.rect)
-        for handle in Handle.allCases {
-            if handleHitRect(handle, in: global).contains(point) {
-                return handle
-            }
-        }
-        return nil
     }
 
     private func updateAnnotateCursor(at point: CGPoint) {
@@ -819,7 +823,7 @@ final class SelectionOverlayController {
         }
     }
 
-    private func applyKind(_ kind: Annotation.Kind) {
+    private func applyKind(_ kind: ShapeKind) {
         annotationKind = kind
         AnnotationPrefs.save(style: annotationStyle, kind: kind)
         if selectedAnnotationID != nil {
@@ -1091,7 +1095,7 @@ private final class RefineToolbarController: NSObject {
         case confirm(ConfirmAction)
         case selectTool(AnnotateTool)
         case styleChanged(AnnotationStyle)
-        case kindChanged(Annotation.Kind)
+        case kindChanged(ShapeKind)
         case undo
         case redo
     }
@@ -1100,7 +1104,7 @@ private final class RefineToolbarController: NSObject {
     private let onEvent: (Event) -> Void
     private var style: AnnotationStyle
     private var tool: AnnotateTool
-    private var kind: Annotation.Kind
+    private var kind: ShapeKind
 
     private let rootStack = NSStackView()
     private var shapeButton: NSButton!
@@ -1118,7 +1122,7 @@ private final class RefineToolbarController: NSObject {
         primaryAction: SelectionOverlayController.ConfirmAction,
         initialTool: AnnotateTool,
         initialStyle: AnnotationStyle,
-        initialKind: Annotation.Kind,
+        initialKind: ShapeKind,
         onEvent: @escaping (Event) -> Void
     ) {
         self.onEvent = onEvent
@@ -1685,7 +1689,7 @@ private final class RefineToolbarController: NSObject {
         }
     }
 
-    func syncStyle(_ style: AnnotationStyle, kind: Annotation.Kind) {
+    func syncStyle(_ style: AnnotationStyle, kind: ShapeKind) {
         self.style = style
         self.kind = kind
         refreshSelectionChrome()
@@ -1786,7 +1790,7 @@ private final class SelectionPanel: NSPanel {
         annotations: [Annotation],
         draftRect: CGRect?,
         draftStyle: AnnotationStyle,
-        draftKind: Annotation.Kind,
+        draftKind: ShapeKind,
         selectedAnnotation: Annotation?,
         annotationHandleSize: CGFloat,
         playbackImage: NSImage?
@@ -1826,7 +1830,7 @@ private final class SelectionOverlayNSView: NSView {
     var annotations: [Annotation] = []
     var draftRect: CGRect?
     var draftStyle: AnnotationStyle = .default
-    var draftKind: Annotation.Kind = .rectangle
+    var draftKind: ShapeKind = .rectangle
     var selectedAnnotation: Annotation?
     var annotationHandleSize: CGFloat = 7
     /// Historical crop drawn inside the selection (`,` / `.` playback).
@@ -1922,8 +1926,11 @@ private final class SelectionOverlayNSView: NSView {
         NSBezierPath(rect: selectionRect).addClip()
 
         for ann in annotations {
-            let r = ann.rect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
-            AnnotationDrawing.draw(ann, in: r)
+            switch ann.payload {
+            case .shape(_, let localRect, _):
+                let r = localRect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
+                AnnotationDrawing.draw(ann, in: r)
+            }
         }
 
         if let draft = draftRect, draft.width > 0, draft.height > 0 {
@@ -1931,8 +1938,8 @@ private final class SelectionOverlayNSView: NSView {
             AnnotationDrawing.draw(Annotation(kind: draftKind, rect: draft, style: draftStyle), in: r)
         }
 
-        if let selected = selectedAnnotation {
-            let r = selected.rect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
+        if let selected = selectedAnnotation, case .shape(_, let localRect, _) = selected.payload {
+            let r = localRect.offsetBy(dx: selectionRect.minX, dy: selectionRect.minY)
             AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
         }
 

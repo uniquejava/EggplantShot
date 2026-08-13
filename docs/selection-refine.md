@@ -3,7 +3,7 @@
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
 Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / color, draw / move / resize) + **in-session undo/redo**. Other annotate / OCR remain stubs.
 
-Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P3 done; P4 pending).
+Undo/redo, editable snip history (`,` / `.`), and on-disk records: see [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4 done).
 
 ## Behaviour
 

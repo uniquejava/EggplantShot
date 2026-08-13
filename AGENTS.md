@@ -72,9 +72,9 @@ EggplantShot/
 
 ## Next (not done yet)
 
-→ Remaining annotate tools (arrow / pen / marker / mosaic / text / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Shape annotate + undo/redo + snip history (`,` / `.`, disk) are in. Split overlay only when annotation needs its own canvas.
+→ Remaining annotate tools (arrow / pen / marker / mosaic / text / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Shape annotate + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload` are in. Split overlay only when annotation needs its own canvas.
 
-→ Extensible annotation payload before new tools — see [`docs/snip-document-architecture.md`](docs/snip-document-architecture.md) (P0–P3 done; P4 pending).
+→ Next annotate tool: add a payload case (e.g. pencil stroke) — see [`docs/snip-document-architecture.md`](docs/snip-document-architecture.md) (P0–P4 done).
 
 ## Prefer
 

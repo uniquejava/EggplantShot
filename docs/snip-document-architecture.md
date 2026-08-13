@@ -1,6 +1,6 @@
 # Snip Document architecture
 
-Status: **P0–P3 implemented** (document + undo/redo; in-memory/disk `SnipRecord`; `,` / `.` playback). P4 not started.  
+Status: **P0–P4 implemented** (document + undo/redo; disk `SnipRecord`; `,` / `.` playback; extensible `AnnotationPayload`).  
 Related UI behaviour: [`selection-refine.md`](selection-refine.md).
 
 This document defines the extensible model for annotations, session undo/redo, and Snipaste-like snip history playback (`,` / `.`), including on-disk persistence.
@@ -63,18 +63,21 @@ flowchart TB
 
 One drawable mark. Geometry is **selection-local** Cocoa points (origin = selection bottom-left), same as today.
 
-Today: `kind` is rectangle / ellipse plus `rect` + `AnnotationStyle`.
-
-**P4 target**: replace narrow `Kind` with an extensible payload so new tools do not fork history/store code:
-
 ```swift
-enum AnnotationPayload: Equatable, Codable {
+enum ShapeKind: Equatable { case rectangle, ellipse }
+
+enum AnnotationPayload: Equatable {
     case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
     // later: arrow, stroke (pen/marker), mosaic, text, step, …
 }
+
+struct Annotation: Equatable {
+    let id: UUID
+    var payload: AnnotationPayload
+}
 ```
 
-Until P4, serialize the current shape fields with a `type` discriminator so the on-disk schema can grow without a break.
+Disk schema v1 still writes shape marks as `{ "type": "shape", "kind", "rect", "style" }`. Unknown `type` values are skipped on load so older clients / future tools stay compatible.
 
 ### `AnnotationDocument`
 
@@ -182,13 +185,14 @@ EggplantShot/History/         # or under Annotation/
 
 ### Migration from current code
 
-P0–P3 done:
+P0–P4 done:
 
 - Overlay routes mutations through `AnnotationHistory`, returns `AnnotationDocument` on confirm.
 - `SnipController` composites for output and appends `SnipRecord` (memory + disk).
 - `,` / `.` restore selection + base + document into the active overlay.
+- Marks use `AnnotationPayload` (`shape` today); disk `type` discriminator ready for new tools.
 
-Still pending (P4): extensible `AnnotationPayload` before arrow/pen.
+Next product work: pencil / arrow / … add payload cases + drawing + hit-testing only.
 
 ## Coordinate conventions
 
@@ -308,7 +312,7 @@ No sandbox entitlements required (Sandbox OFF).
 3. Bump `schemaVersion` when meta shape changes; keep a single loader switch.
 4. Do not bake into `baseImage` until confirm; playback always edits vectors on the saved base.
 
-## Implementation phases (future sessions)
+## Implementation phases
 
 ### P0 — Document + History skeleton
 
@@ -345,18 +349,20 @@ How to try: Pin a snip with shapes → F1 again → press `,` → edit → Pin (
 
 ### P4 — Extensible annotation payload
 
-- [ ] Introduce `AnnotationPayload` (or equivalent) before arrow/pen land
-- [ ] Update compositor, hit-testing, and disk `type` discriminator together
-- [ ] Acceptance: existing shape records from schema v1 still load
+- [x] Introduce `AnnotationPayload` (or equivalent) before arrow/pen land
+- [x] Update compositor, hit-testing, and disk `type` discriminator together
+- [x] Acceptance: existing shape records from schema v1 still load
+
+New tools add a `AnnotationPayload` case + draw/hit-test; history / store / confirm paths stay unchanged.
 
 ## Relationship to current MVP
 
-| Area | Today (after P3) | After P4 |
-|------|------------------|----------|
-| Undo / redo toolbar | Live | Live |
-| Confirm | Bake + disk `SnipRecord` | Same |
-| `,` / `.` | History playback | Same |
-| Pin window | Flat image | Still flat (no layer reopen) |
-| Mark model | Shape fields + `type` on disk | `AnnotationPayload` |
+| Area | Status |
+|------|--------|
+| Undo / redo toolbar | Live |
+| Confirm | Bake + disk `SnipRecord` |
+| `,` / `.` | History playback |
+| Pin window | Flat image (no layer reopen) |
+| Mark model | `AnnotationPayload` (`shape` today) |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

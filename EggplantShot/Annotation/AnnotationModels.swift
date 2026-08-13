@@ -31,7 +31,7 @@ enum AnnotationPrefs {
     private static let paletteKey = "annotate.palette"
     private static let kindKey = "annotate.kind"
 
-    static func load() -> (style: AnnotationStyle, kind: Annotation.Kind) {
+    static func load() -> (style: AnnotationStyle, kind: ShapeKind) {
         let defaults = UserDefaults.standard
         var style = AnnotationStyle.default
         if defaults.object(forKey: strokeWidthKey) != nil {
@@ -46,11 +46,11 @@ enum AnnotationPrefs {
            let swatch = PaletteColor(rawValue: defaults.integer(forKey: paletteKey)) {
             style.strokeColor = swatch.color
         }
-        let kind: Annotation.Kind = defaults.integer(forKey: kindKey) == 1 ? .ellipse : .rectangle
+        let kind: ShapeKind = defaults.integer(forKey: kindKey) == 1 ? .ellipse : .rectangle
         return (style, kind)
     }
 
-    static func save(style: AnnotationStyle, kind: Annotation.Kind) {
+    static func save(style: AnnotationStyle, kind: ShapeKind) {
         let defaults = UserDefaults.standard
         defaults.set(Double(style.strokeWidth), forKey: strokeWidthKey)
         defaults.set(style.isFilled, forKey: isFilledKey)
@@ -181,53 +181,116 @@ enum PaletteColor: Int, CaseIterable {
     }
 }
 
+/// Shape kinds for the rectangle annotate tool (rect ↔ oval).
+enum ShapeKind: Equatable {
+    case rectangle
+    case ellipse
+}
+
+/// Extensible mark payload. New tools add cases here without forking history/store.
+enum AnnotationPayload: Equatable {
+    case shape(ShapeKind, rect: CGRect, style: AnnotationStyle)
+    // later: arrow, stroke (pen/marker), mosaic, text, step, …
+}
+
 /// One drawable mark. Geometry is in **selection-local** Cocoa points
 /// (origin = selection bottom-left).
 struct Annotation: Equatable {
-    enum Kind: Equatable {
-        case rectangle
-        case ellipse
+    let id: UUID
+    var payload: AnnotationPayload
+
+    init(id: UUID = UUID(), payload: AnnotationPayload) {
+        self.id = id
+        self.payload = payload
     }
 
-    let id: UUID
-    var kind: Kind
-    var rect: CGRect
-    var style: AnnotationStyle
-
-    init(id: UUID = UUID(), kind: Kind = .rectangle, rect: CGRect, style: AnnotationStyle) {
+    /// Convenience for the shape tool (only payload today).
+    init(id: UUID = UUID(), kind: ShapeKind = .rectangle, rect: CGRect, style: AnnotationStyle) {
         self.id = id
-        self.kind = kind
-        self.rect = rect
-        self.style = style
+        self.payload = .shape(kind, rect: rect, style: style)
+    }
+
+    /// Disk / tooling type discriminator (`"shape"`, later `"stroke"`, …).
+    var typeName: String {
+        switch payload {
+        case .shape: return "shape"
+        }
+    }
+
+    // MARK: Shape accessors (no-ops / defaults for non-shape payloads)
+
+    var kind: ShapeKind {
+        get {
+            if case .shape(let kind, _, _) = payload { return kind }
+            return .rectangle
+        }
+        set {
+            guard case .shape(_, let rect, let style) = payload else { return }
+            payload = .shape(newValue, rect: rect, style: style)
+        }
+    }
+
+    var rect: CGRect {
+        get {
+            if case .shape(_, let rect, _) = payload { return rect }
+            return .null
+        }
+        set {
+            guard case .shape(let kind, _, let style) = payload else { return }
+            payload = .shape(kind, rect: newValue, style: style)
+        }
+    }
+
+    var style: AnnotationStyle {
+        get {
+            if case .shape(_, _, let style) = payload { return style }
+            return .default
+        }
+        set {
+            guard case .shape(let kind, let rect, _) = payload else { return }
+            payload = .shape(kind, rect: rect, style: newValue)
+        }
+    }
+
+    var isShape: Bool {
+        if case .shape = payload { return true }
+        return false
     }
 }
 
 enum AnnotationDrawing {
     /// Stroke or fill an annotation into the current graphics context. `rect` is already in context space.
     static func draw(_ annotation: Annotation, in rect: CGRect) {
+        switch annotation.payload {
+        case .shape(let kind, _, let style):
+            drawShape(kind: kind, style: style, in: rect)
+        }
+    }
+
+    private static func drawShape(kind: ShapeKind, style: AnnotationStyle, in rect: CGRect) {
         let path: NSBezierPath
-        switch annotation.kind {
+        switch kind {
         case .rectangle:
             path = NSBezierPath(rect: rect.insetBy(dx: 0.5, dy: 0.5))
         case .ellipse:
             path = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
         }
 
-        if annotation.style.isFilled {
-            annotation.style.strokeColor.setFill()
+        if style.isFilled {
+            style.strokeColor.setFill()
             path.fill()
         } else {
-            path.lineWidth = annotation.style.strokeWidth
+            path.lineWidth = style.strokeWidth
             path.lineJoinStyle = .miter
             // Butt caps keep dash segments as rectangles (Snipaste-style).
             path.lineCapStyle = .butt
-            let dash = annotation.style.lineStyle.dashPattern(strokeWidth: annotation.style.strokeWidth)
+            let dash = style.lineStyle.dashPattern(strokeWidth: style.strokeWidth)
             if dash.isEmpty {
                 path.setLineDash(nil, count: 0, phase: 0)
             } else {
                 path.setLineDash(dash, count: dash.count, phase: 0)
             }
-            annotation.style.strokeColor.setStroke()
+            style.strokeColor.setStroke()
             path.stroke()
         }
     }
