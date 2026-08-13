@@ -11,7 +11,8 @@ final class SelectionOverlayController {
 
     enum Outcome {
         case cancelled
-        case confirmed(CGRect, action: ConfirmAction, annotations: [Annotation])
+        /// `image` is cropped from the freeze snapshot taken when the overlay opened.
+        case confirmed(CGRect, image: NSImage, action: ConfirmAction, annotations: [Annotation])
     }
 
     private enum Phase {
@@ -46,8 +47,15 @@ final class SelectionOverlayController {
 
     /// Snapshot of app windows taken before overlays cover the screen.
     private var windowHitTester = WindowHitTester.snapshot()
+    /// Per-display freeze frames captured before overlays appear (Snipaste-style).
+    private var freezeFrames: [FreezeFrame] = []
     /// Window frame under the cursor while idle (Cocoa global coords).
     private var hoveredWindowRect: CGRect?
+
+    private struct FreezeFrame {
+        let screen: NSScreen
+        let cgImage: CGImage
+    }
     /// On mouse-down over a window: wait to see if this is a click-lock or a free drag.
     private var pendingWindowPick: (start: CGPoint, frame: CGRect)?
 
@@ -118,16 +126,35 @@ final class SelectionOverlayController {
         }
         let rect = currentRect
         let marks = annotations
+        guard let image = cropFromFreeze(rect) else {
+            tearDownOverlays()
+            finish(.cancelled)
+            return
+        }
         tearDownOverlays()
-        finish(.confirmed(rect, action: action, annotations: marks))
+        finish(.confirmed(rect, image: image, action: action, annotations: marks))
+    }
+
+    private func cropFromFreeze(_ rect: CGRect) -> NSImage? {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let frame = freezeFrames.first { NSMouseInRect(center, $0.screen.frame, false) }
+            ?? freezeFrames.first
+        guard let frame else { return nil }
+        return ScreenCapturer.crop(frame.cgImage, rectInScreenPoints: rect, on: frame.screen)
     }
 
     private func showOverlays() {
         tearDownOverlays()
-        // Capture window list before our dimmed panels cover everything.
+        // Window list + freeze frames before our panels cover the displays.
         windowHitTester = WindowHitTester.snapshot()
+        freezeFrames = []
         for screen in NSScreen.screens {
-            let panel = SelectionPanel(screen: screen)
+            let cgImage = ScreenCapturer.captureDisplay(screen)
+            if let cgImage {
+                freezeFrames.append(FreezeFrame(screen: screen, cgImage: cgImage))
+            }
+            let backdrop = cgImage.map { NSImage(cgImage: $0, size: screen.frame.size) }
+            let panel = SelectionPanel(screen: screen, freezeImage: backdrop)
             panels.append(panel)
             panel.orderFrontRegardless()
         }
@@ -149,6 +176,7 @@ final class SelectionOverlayController {
             panel.close()
         }
         panels.removeAll()
+        freezeFrames = []
         dragKind = nil
         currentRect = .null
         hoveredWindowRect = nil
@@ -1512,9 +1540,12 @@ private final class SelectionPanel: NSPanel {
     let screenFrame: CGRect
     private let overlayView: SelectionOverlayNSView
 
-    init(screen: NSScreen) {
+    init(screen: NSScreen, freezeImage: NSImage?) {
         self.screenFrame = screen.frame
-        self.overlayView = SelectionOverlayNSView(frame: CGRect(origin: .zero, size: screen.frame.size))
+        self.overlayView = SelectionOverlayNSView(
+            frame: CGRect(origin: .zero, size: screen.frame.size),
+            freezeImage: freezeImage
+        )
 
         super.init(
             contentRect: screen.frame,
@@ -1524,8 +1555,9 @@ private final class SelectionPanel: NSPanel {
         )
 
         level = .screenSaver
-        isOpaque = false
-        backgroundColor = .clear
+        // Opaque when frozen so live desktop cannot show through.
+        isOpaque = freezeImage != nil
+        backgroundColor = freezeImage != nil ? .black : .clear
         hasShadow = false
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true
@@ -1584,20 +1616,48 @@ private final class SelectionOverlayNSView: NSView {
     var selectedAnnotation: Annotation?
     var annotationHandleSize: CGFloat = 7
 
+    private let freezeImage: NSImage?
     private let accent = NSColor.systemBlue
+
+    init(frame frameRect: NSRect, freezeImage: NSImage?) {
+        self.freezeImage = freezeImage
+        super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { true }
     override var isFlipped: Bool { false }
+    override var isOpaque: Bool { freezeImage != nil }
 
     override func draw(_ dirtyRect: NSRect) {
+        // Freeze backdrop (Snipaste-style). Without it, fall back to punch-through dim.
+        if let freezeImage {
+            freezeImage.draw(
+                in: bounds,
+                from: CGRect(origin: .zero, size: freezeImage.size),
+                operation: .copy,
+                fraction: 1
+            )
+        }
+
+        let dimPath = NSBezierPath(rect: bounds)
+        if !selectionRect.isNull, selectionRect.width > 0, selectionRect.height > 0 {
+            dimPath.append(NSBezierPath(rect: selectionRect))
+            dimPath.windingRule = .evenOdd
+        }
         NSColor.black.withAlphaComponent(0.45).setFill()
-        bounds.fill()
+        dimPath.fill()
 
         guard !selectionRect.isNull, selectionRect.width > 0, selectionRect.height > 0 else { return }
 
-        NSGraphicsContext.current?.compositingOperation = .clear
-        selectionRect.fill()
-        NSGraphicsContext.current?.compositingOperation = .sourceOver
+        // Legacy path when freeze capture failed: clear the hole to the live desktop.
+        if freezeImage == nil {
+            NSGraphicsContext.current?.compositingOperation = .clear
+            selectionRect.fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+        }
 
         let border = NSBezierPath(rect: selectionRect.insetBy(dx: 0.5, dy: 0.5))
         border.lineWidth = 1.5

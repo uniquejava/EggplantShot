@@ -5,7 +5,7 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
 
 ## Behaviour
 
-1. F1 / **Snip** → dim overlay → drag region.
+1. F1 / **Snip** → freeze each display → dim overlay on frozen backdrop → drag region.
 2. On mouse-up (if large enough) → **refine mode** (no capture yet):
    - Blue selection rect + **8 circular** resize handles.
    - Drag inside rect to move; drag handles to resize.
@@ -25,7 +25,7 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
    - Stroke / fill / line style / color / kind changes apply to the selected mark (or the next one drawn).
    - Delete removes the selected mark.
    - Confirm composites annotations onto the capture before pin / copy / save.
-5. On confirm → tear down overlay → capture final rect → (optional annotate bake) → pin, clipboard, or save panel.
+5. On confirm → crop final rect from freeze snapshot → tear down overlay → (optional annotate bake) → pin, clipboard, or save panel.
 6. Esc in refine cancels the whole snip.
 
 ### Snip vs Snip and copy
@@ -69,7 +69,7 @@ Annotate: **shape tool** (rect / ellipse, stroke widths / fill / line style / co
 - [x] Handles resize; interior drag moves; size label updates
 - [x] Toolbar under (or above) selection, right-aligned; Pin / Save / Copy / Cancel work
 - [x] Esc cancels refine without capturing
-- [x] Confirm tears down overlay, then captures final rect
+- [x] Confirm crops from freeze snapshot, then tears down overlay
 - [x] ⌘F1 entry; primary action matches mode
 - [x] Pin soft glow + drag
 - [x] Shape tool: stroke/fill + rect/oval + line-style dropdown + 2×10 palette; draw / move / resize, bake into capture

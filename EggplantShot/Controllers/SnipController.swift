@@ -31,13 +31,8 @@ final class SnipController {
             switch outcome {
             case .cancelled:
                 return
-            case .confirmed(let rect, let action, let annotations):
-                // Tiny delay so overlay panels are fully torn down before capture.
-                try? await Task.sleep(nanoseconds: 30_000_000)
-                guard let captured = ScreenCapturer.capture(rectInScreenPoints: rect) else {
-                    NSLog("EggplantShot: capture failed for rect \(rect)")
-                    return
-                }
+            case .confirmed(let rect, let captured, let action, let annotations):
+                // Image is already cropped from the freeze snapshot taken at F1.
                 let image = AnnotationCompositor.composite(annotations, onto: captured)
                 switch action {
                 case .pin:
