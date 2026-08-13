@@ -38,6 +38,7 @@ On first launch, grant Accessibility and Screen Recording when prompted.
 - **Snip and copy** / **⌘F1** — same refine UX; primary action copies to clipboard
 - **Shape annotate** — stroke widths / fill / rect·ellipse / line style / color sub-toolbar; draw, move, resize; baked into pin/copy/save
 - **Text annotate** — click-to-place + inline edit; Bold / Italic / background / size / color; move / resize; baked into pin/copy/save
+- **OCR** — Recognize Text on the toolbar: copy selection text to clipboard, bubble-pop sound, dismiss (no result UI)
 - Pinned images: drag, Esc / double-click to close, stay above other windows
 - **Hide/Show all images** / **⇧F3**
 - Disable hotkeys

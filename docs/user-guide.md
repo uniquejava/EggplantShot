@@ -31,9 +31,10 @@ Floating image above ordinary windows. Drag to move. **Esc** or double-click clo
 
 ## Annotate (during refine)
 
-Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, undo/redo, then cancel / pin / save / copy.
+Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recognize Text** (OCR), undo/redo, then cancel / pin / save / copy.
 
 - Marks work on the **full freeze**, not only inside the blue rect. Pin/Copy/Save still crop to the selection (outside ink is clipped from the baked image).
+- **Recognize Text** runs OCR on the selection, copies text to the clipboard, plays a short success sound, and closes the snip (no result panel).
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
 - **Esc** while editing text ends the editor only; otherwise Esc cancels the whole snip.
 

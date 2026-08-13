@@ -37,6 +37,11 @@ final class SnipController {
             switch outcome {
             case .cancelled:
                 return
+            case .ocr(let text):
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                copyTextToClipboard(text)
+                FeedbackSound.playOCRSuccess()
             case .confirmed(let rect, let baseImage, let action, let document):
                 // Bake for export only; archive keeps the unannotated base + document.
                 let baked = AnnotationCompositor.composite(document.marks, onto: baseImage)
@@ -63,6 +68,12 @@ final class SnipController {
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.writeObjects([image])
+    }
+
+    private func copyTextToClipboard(_ text: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
     }
 
     private func promptScreenPermission() {

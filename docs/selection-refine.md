@@ -1,7 +1,7 @@
 # Selection refine + toolbar
 
 Status: **implemented** (Snipaste-style refine + icon toolbar + pin chrome + save).  
-Annotate live: **shape**, **arrow**, **pencil**, **mosaic**, **text** (+ in-session undo/redo). Marker / step / OCR / magnifier remain stubs.
+Annotate live: **shape**, **arrow**, **pencil**, **mosaic**, **text** (+ in-session undo/redo). **OCR** copies selection text to the clipboard and dismisses (bubble-pop on success). Marker / step / magnifier remain stubs.
 
 Document / undo stacks / `,` / `.` / disk: [`snip-document-architecture.md`](snip-document-architecture.md) (P0–P4).
 
@@ -22,7 +22,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 2. Mouse-up (large enough) → **refine** (no capture yet):
    - Blue selection + **8 circular** handles; interior moves; handles resize; size label `W × H`.
    - Toolbar: white rounded card (≈6pt), icon row + dividers, **right-aligned** under selection (≈4pt gap; flips above near bottom).
-3. Actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** (+ Esc / Return for primary).
+3. Actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** / **OCR** (+ Esc / Return for primary).
 
 ### Snip vs Snip and copy
 
@@ -90,6 +90,12 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - **Hit / cursor:** blank overlay (selection or dimmed) → I-beam for place-new; near text edge / hairline (+~2pt outside) → four-arrow move; deeper interior → I-beam + click to edit. Toolbar only → arrow. While editing: border drag **live-moves** the chrome without ending edit; interior still types. Cursor is re-applied after caret blink so AppKit cannot reset to the system arrow while the pointer is still. Hover → 1px white dashed outline (clears on mouse-out). No resize handles.
 - Esc ends edit only; Return = newline (not confirm). Empty on end-edit → drop mark.
 
+### OCR
+
+- Toolbar **Recognize Text** (`doc.text.viewfinder`): Vision OCR on the **unannotated** selection crop (zh-Hans / zh-Hant / en-US).
+- Dismisses the overlay immediately after crop (no result UI). On non-empty text → pasteboard + short bubble-pop sound (`Resources/ocr-success.wav`). Empty / failure → silent, clipboard unchanged.
+- Does **not** append to snip history.
+
 ## Pin chrome
 
 - Soft glow (`CALayer.shadowRadius`); no hard border. Active blue / inactive gray.
@@ -103,6 +109,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Text field editor: [`TextAnnotationEditor.swift`](../EggplantShot/Controllers/TextAnnotationEditor.swift)
 - Model / bake / history: [`Annotation/`](../EggplantShot/Annotation/)
 - Confirm: [`SnipController.swift`](../EggplantShot/Controllers/SnipController.swift)
+- OCR: [`TextRecognizer.swift`](../EggplantShot/Capture/TextRecognizer.swift) + [`FeedbackSound.swift`](../EggplantShot/Capture/FeedbackSound.swift)
 - Save: [`ImageFileSaver.swift`](../EggplantShot/Capture/ImageFileSaver.swift)
 - Pin: [`PinBoardController.swift`](../EggplantShot/Controllers/PinBoardController.swift)
 
@@ -112,4 +119,5 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
 - [x] Pin soft glow + drag
 - [x] Shape / arrow / pencil / mosaic / text: draw·edit on full overlay; bake clips outside marks; document keeps them
+- [x] OCR: recognize selection → clipboard + bubble-pop; dismiss overlay; no result UI
 - [x] Undo / redo; debug build succeeds

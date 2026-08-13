@@ -14,6 +14,8 @@ final class SelectionOverlayController {
         /// `image` is the **unannotated** crop from the freeze snapshot.
         /// `document` is the editable annotation state at confirm (pre-bake).
         case confirmed(CGRect, image: NSImage, action: ConfirmAction, document: AnnotationDocument)
+        /// OCR finished; `text` may be empty when nothing was recognized.
+        case ocr(text: String)
     }
 
     private enum Phase {
@@ -193,6 +195,35 @@ final class SelectionOverlayController {
         }
         tearDownOverlays()
         finish(.confirmed(rect, image: image, action: action, document: document))
+    }
+
+    /// Crop selection → dismiss overlay → OCR → hand text to `SnipController` (clipboard + sound).
+    private func performOCR() {
+        endTextEditing(commit: true)
+        guard !currentRect.isNull,
+              currentRect.width >= minSelection,
+              currentRect.height >= minSelection
+        else {
+            tearDownOverlays()
+            finish(.cancelled)
+            return
+        }
+        let rect = currentRect
+        let image: NSImage?
+        if let playback = playbackBaseImage {
+            image = Self.baseImageMatchingSelection(playback, size: rect.size)
+        } else {
+            image = cropFromFreeze(rect)
+        }
+        tearDownOverlays()
+        guard let image else {
+            finish(.cancelled)
+            return
+        }
+        Task { @MainActor in
+            let text = await TextRecognizer.recognize(image)
+            finish(.ocr(text: text))
+        }
     }
 
     /// Ensures archived / playback base point size matches the confirm selection.
@@ -2184,6 +2215,8 @@ final class SelectionOverlayController {
                 self.applyKind(kind)
             case .arrowCapsChanged(let caps):
                 self.applyArrowCaps(caps)
+            case .ocr:
+                self.performOCR()
             case .undo:
                 self.performUndo()
             case .redo:

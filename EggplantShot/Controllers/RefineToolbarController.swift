@@ -22,6 +22,7 @@ final class RefineToolbarController: NSObject {
         case mosaicDrawModeChanged(MosaicDrawMode)
         case kindChanged(ShapeKind)
         case arrowCapsChanged(ArrowCaps)
+        case ocr
         case undo
         case redo
     }
@@ -220,7 +221,12 @@ final class RefineToolbarController: NSObject {
             action: #selector(redoTapped)
         )
         let editViews: [NSView] = [
-            iconButton(systemName: "doc.text.viewfinder", tooltip: "OCR", enabled: false, action: nil),
+            iconButton(
+                systemName: "doc.text.viewfinder",
+                tooltip: "Recognize Text",
+                enabled: true,
+                action: #selector(ocrTapped)
+            ),
             undoButton,
             redoButton,
         ]
@@ -1392,6 +1398,7 @@ final class RefineToolbarController: NSObject {
     @objc private func copyTapped() { onEvent(.confirm(.copy)) }
     @objc private func saveTapped() { onEvent(.confirm(.save)) }
     @objc private func cancelTapped() { onEvent(.confirm(.cancel)) }
+    @objc private func ocrTapped() { onEvent(.ocr) }
     @objc private func undoTapped() { onEvent(.undo) }
     @objc private func redoTapped() { onEvent(.redo) }
 
