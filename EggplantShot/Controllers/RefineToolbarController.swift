@@ -77,7 +77,7 @@ final class RefineToolbarController: NSObject {
     private var mosaicRectButton: NSButton!
     private var mosaicOvalButton: NSButton!
     private var mosaicIntensityPreview: MosaicIntensityPreviewView!
-    private var mosaicIntensitySlider: NSSlider!
+    private var mosaicIntensitySlider: MosaicIntensitySlider!
     private var mosaicIntensityLabel: NSTextField!
 
     init(
@@ -581,13 +581,12 @@ final class RefineToolbarController: NSObject {
         ])
         stack.addArrangedSubview(mosaicIntensityPreview)
 
-        mosaicIntensitySlider = NSSlider(value: Double(mosaicStyle.intensity),
-                                         minValue: Double(MosaicStyle.intensityRange.lowerBound),
-                                         maxValue: Double(MosaicStyle.intensityRange.upperBound),
-                                         target: self,
-                                         action: #selector(mosaicIntensityChanged(_:)))
-        mosaicIntensitySlider.isContinuous = true
-        mosaicIntensitySlider.controlSize = .small
+        mosaicIntensitySlider = MosaicIntensitySlider(frame: .zero)
+        mosaicIntensitySlider.minValue = Double(MosaicStyle.intensityRange.lowerBound)
+        mosaicIntensitySlider.maxValue = Double(MosaicStyle.intensityRange.upperBound)
+        mosaicIntensitySlider.doubleValue = Double(mosaicStyle.intensity)
+        mosaicIntensitySlider.target = self
+        mosaicIntensitySlider.action = #selector(mosaicIntensityChanged(_:))
         mosaicIntensitySlider.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             mosaicIntensitySlider.widthAnchor.constraint(equalToConstant: 90),
@@ -1120,7 +1119,7 @@ final class RefineToolbarController: NSObject {
         onEvent(.mosaicDrawModeChanged(mosaicDrawMode))
     }
 
-    @objc private func mosaicIntensityChanged(_ sender: NSSlider) {
+    @objc private func mosaicIntensityChanged(_ sender: MosaicIntensitySlider) {
         mosaicStyle.intensity = MosaicStyle.clampedIntensity(CGFloat(sender.doubleValue))
         mosaicIntensityLabel.stringValue = "\(Int(mosaicStyle.intensity.rounded()))"
         mosaicIntensityPreview.intensity = mosaicStyle.intensity
@@ -1615,6 +1614,168 @@ final class PaletteSwatchChip: NSView {
         strokePath.lineWidth = 1
         NSColor(calibratedWhite: 0.55, alpha: 1).setStroke()
         strokePath.stroke()
+    }
+}
+
+/// Snipaste-like intensity slider: blue filled track to the left of the knob,
+/// gray remainder; circular knob is hollow until hover / drag.
+final class MosaicIntensitySlider: NSView {
+    var minValue: Double = 3
+    var maxValue: Double = 24
+    var doubleValue: Double = 10 {
+        didSet {
+            let clamped = min(max(doubleValue, minValue), maxValue)
+            if clamped != doubleValue {
+                doubleValue = clamped
+                return
+            }
+            needsDisplay = true
+        }
+    }
+
+    weak var target: AnyObject?
+    var action: Selector?
+
+    private var isHovered = false
+    private var isDragging = false
+    private var trackingArea: NSTrackingArea?
+
+    private static let accent = NSColor.systemBlue
+    private static let trackGray = NSColor(calibratedWhite: 0.72, alpha: 1)
+    private static let knobDiameter: CGFloat = 12
+    private static let trackHeight: CGFloat = 3
+
+    override var isOpaque: Bool { false }
+    override var acceptsFirstResponder: Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        // Toolbar is a nonactivating panel — must use `.activeAlways` (same as palette chips).
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        trackingArea = area
+        syncHoverFromMouseLocation()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setHovered(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if !isDragging {
+            setHovered(false)
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        isDragging = true
+        setHovered(true)
+        updateValue(from: event, notify: true)
+        // Keep receiving drag/up even if the pointer leaves the view.
+        var keepGoing = true
+        while keepGoing {
+            guard let next = window?.nextEvent(matching: [.leftMouseUp, .leftMouseDragged]) else { break }
+            switch next.type {
+            case .leftMouseDragged:
+                updateValue(from: next, notify: true)
+            default:
+                keepGoing = false
+            }
+        }
+        isDragging = false
+        syncHoverFromMouseLocation()
+        needsDisplay = true
+    }
+
+    private func setHovered(_ hovered: Bool) {
+        guard isHovered != hovered else { return }
+        isHovered = hovered
+        needsDisplay = true
+    }
+
+    private func syncHoverFromMouseLocation() {
+        guard let window else { return }
+        let loc = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        setHovered(bounds.contains(loc))
+    }
+
+    private func updateValue(from event: NSEvent, notify: Bool) {
+        let x = convert(event.locationInWindow, from: nil).x
+        let inset = Self.knobDiameter / 2
+        let usable = max(bounds.width - Self.knobDiameter, 1)
+        let t = min(max((x - inset) / usable, 0), 1)
+        let next = minValue + t * (maxValue - minValue)
+        guard abs(next - doubleValue) > 0.0001 else { return }
+        doubleValue = next
+        guard notify, let target, let action else { return }
+        _ = target.perform(action, with: self)
+    }
+
+    private var knobCenterX: CGFloat {
+        let inset = Self.knobDiameter / 2
+        let usable = max(bounds.width - Self.knobDiameter, 1)
+        let t = (doubleValue - minValue) / max(maxValue - minValue, 0.0001)
+        return inset + CGFloat(t) * usable
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let midY = bounds.midY
+        let inset = Self.knobDiameter / 2
+        let trackY = midY - Self.trackHeight / 2
+        let trackRect = CGRect(
+            x: inset,
+            y: trackY,
+            width: max(bounds.width - Self.knobDiameter, 0),
+            height: Self.trackHeight
+        )
+        let radius = Self.trackHeight / 2
+        let cx = knobCenterX
+
+        // Right (unfilled) track.
+        let grayPath = NSBezierPath(roundedRect: trackRect, xRadius: radius, yRadius: radius)
+        Self.trackGray.setFill()
+        grayPath.fill()
+
+        // Left (filled) track through the knob center.
+        let filledWidth = max(cx - trackRect.minX, 0)
+        if filledWidth > 0 {
+            let filled = CGRect(
+                x: trackRect.minX,
+                y: trackRect.minY,
+                width: filledWidth,
+                height: trackRect.height
+            )
+            let bluePath = NSBezierPath(roundedRect: filled, xRadius: radius, yRadius: radius)
+            Self.accent.setFill()
+            bluePath.fill()
+        }
+
+        // Circular knob: hollow by default, filled on hover / drag.
+        let knobRect = CGRect(
+            x: cx - Self.knobDiameter / 2,
+            y: midY - Self.knobDiameter / 2,
+            width: Self.knobDiameter,
+            height: Self.knobDiameter
+        )
+        let knobPath = NSBezierPath(ovalIn: knobRect.insetBy(dx: 0.5, dy: 0.5))
+        let fillKnob = isHovered || isDragging
+        if fillKnob {
+            Self.accent.setFill()
+            knobPath.fill()
+        } else {
+            // Punch a hole so the track doesn't show through the hollow ring.
+            NSColor.white.setFill()
+            knobPath.fill()
+            Self.accent.setStroke()
+            knobPath.lineWidth = 1.5
+            knobPath.stroke()
+        }
     }
 }
 
