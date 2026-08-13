@@ -11,8 +11,14 @@ enum SnipMode {
 final class SnipController {
     let overlay = SelectionOverlayController()
     let pinBoard = PinBoardController()
+    /// Editable snip history (memory + disk). Inspect `newest` / `records` after confirm.
+    let historyStore = SnipHistoryStore()
 
     private var isSnipping = false
+
+    init() {
+        overlay.historyStore = historyStore
+    }
 
     func snip(mode: SnipMode) {
         guard !isSnipping, !overlay.isActive else { return }
@@ -31,16 +37,19 @@ final class SnipController {
             switch outcome {
             case .cancelled:
                 return
-            case .confirmed(let rect, let captured, let action, let annotations):
-                // Image is already cropped from the freeze snapshot taken at F1.
-                let image = AnnotationCompositor.composite(annotations, onto: captured)
+            case .confirmed(let rect, let baseImage, let action, let document):
+                // Bake for export only; archive keeps the unannotated base + document.
+                let baked = AnnotationCompositor.composite(document.marks, onto: baseImage)
+                historyStore.append(
+                    SnipRecord(baseImage: baseImage, selection: rect, document: document)
+                )
                 switch action {
                 case .pin:
-                    pinBoard.pin(image, near: rect)
+                    pinBoard.pin(baked, near: rect)
                 case .copy:
-                    copyToClipboard(image)
+                    copyToClipboard(baked)
                 case .save:
-                    ImageFileSaver.saveInteractive(image)
+                    ImageFileSaver.saveInteractive(baked)
                 }
             }
         }

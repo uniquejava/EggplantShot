@@ -50,7 +50,8 @@ EggplantShot/
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift
   Controllers/PinBoardController.swift
-  Annotation/AnnotationModels.swift + AnnotationDocument.swift + AnnotationCompositor.swift
+  Annotation/AnnotationModels.swift + AnnotationDocument.swift + AnnotationCoding.swift + AnnotationCompositor.swift
+  History/SnipRecord.swift + SnipHistoryStore.swift
   UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift
   Assets.xcassets/
   Info.plist                 # LSUIElement = true
@@ -61,18 +62,19 @@ EggplantShot/
 
 1. **Snip (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; Esc / double-click closes).
 2. **Snip and copy (⌘F1)** → same refine UX; Return primary is Copy.
-3. Confirm / Return crops from the freeze snapshot (not a live recapture); then overlay tears down.
+3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
 4. **Esc** during drag/refine cancels the snip. Esc on a pin closes that pin only.
 5. Pins use `.statusBar` level (above ordinary windows; below snip overlay).
 6. **Disable hotkeys** pauses the event tap (persisted).
 7. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
 8. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
+9. During an active snip, **`,`** / **`.`** step through prior snip records (older / newer).
 
 ## Next (not done yet)
 
-→ Remaining annotate tools (arrow / pen / marker / mosaic / text / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Rectangle annotate + in-session undo/redo are in. Split overlay only when annotation needs its own canvas.
+→ Remaining annotate tools (arrow / pen / marker / mosaic / text / step), OCR, magnifier — see [`docs/selection-refine.md`](docs/selection-refine.md). Shape annotate + undo/redo + snip history (`,` / `.`, disk) are in. Split overlay only when annotation needs its own canvas.
 
-→ Snip-record persistence / `,` `.` playback — see [`docs/snip-document-architecture.md`](docs/snip-document-architecture.md) (P0 done; implement P1–P4 there).
+→ Extensible annotation payload before new tools — see [`docs/snip-document-architecture.md`](docs/snip-document-architecture.md) (P0–P3 done; P4 pending).
 
 ## Prefer
 

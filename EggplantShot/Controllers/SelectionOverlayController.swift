@@ -11,8 +11,9 @@ final class SelectionOverlayController {
 
     enum Outcome {
         case cancelled
-        /// `image` is cropped from the freeze snapshot taken when the overlay opened.
-        case confirmed(CGRect, image: NSImage, action: ConfirmAction, annotations: [Annotation])
+        /// `image` is the **unannotated** crop from the freeze snapshot.
+        /// `document` is the editable annotation state at confirm (pre-bake).
+        case confirmed(CGRect, image: NSImage, action: ConfirmAction, document: AnnotationDocument)
     }
 
     private enum Phase {
@@ -44,6 +45,13 @@ final class SelectionOverlayController {
     private var currentRect: CGRect = .null
     private var primaryAction: ConfirmAction = .pin
     private var eventMonitors: [Any] = []
+
+    /// Shared snip history for `,` / `.` playback (owned by `SnipController`).
+    var historyStore: SnipHistoryStore?
+    /// Index into `historyStore.records` while browsing; `nil` = not browsing.
+    private var historyCursor: Int?
+    /// When set, refine/confirm uses this unannotated base instead of cropping the live freeze.
+    private var playbackBaseImage: NSImage?
 
     /// Snapshot of app windows taken before overlays cover the screen.
     private var windowHitTester = WindowHitTester.snapshot()
@@ -97,6 +105,8 @@ final class SelectionOverlayController {
             cancel()
         }
         self.primaryAction = primaryAction
+        historyCursor = nil
+        playbackBaseImage = nil
 
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
@@ -127,14 +137,32 @@ final class SelectionOverlayController {
             return
         }
         let rect = currentRect
-        let marks = annotations
-        guard let image = cropFromFreeze(rect) else {
+        let document = annotationHistory.document
+        let image: NSImage?
+        if let playback = playbackBaseImage {
+            image = Self.baseImageMatchingSelection(playback, size: rect.size)
+        } else {
+            image = cropFromFreeze(rect)
+        }
+        guard let image else {
             tearDownOverlays()
             finish(.cancelled)
             return
         }
         tearDownOverlays()
-        finish(.confirmed(rect, image: image, action: action, annotations: marks))
+        finish(.confirmed(rect, image: image, action: action, document: document))
+    }
+
+    /// Ensures archived / playback base point size matches the confirm selection.
+    private static func baseImageMatchingSelection(_ image: NSImage, size: CGSize) -> NSImage {
+        if abs(image.size.width - size.width) < 0.5,
+           abs(image.size.height - size.height) < 0.5 {
+            return image
+        }
+        return NSImage(size: size, flipped: false) { bounds in
+            image.draw(in: bounds, from: .zero, operation: .copy, fraction: 1)
+            return true
+        }
     }
 
     private func cropFromFreeze(_ rect: CGRect) -> NSImage? {
@@ -189,6 +217,8 @@ final class SelectionOverlayController {
         annotationKind = prefs.kind
         annotationHistory.reset()
         draftAnnotationRect = nil
+        historyCursor = nil
+        playbackBaseImage = nil
         phase = .idle
         NSCursor.arrow.set()
     }
@@ -227,6 +257,17 @@ final class SelectionOverlayController {
                 self.tearDownOverlays()
                 self.finish(.cancelled)
                 return nil
+            }
+            // `,` / `.` snip-history browse (any phase while overlay is up).
+            if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+                if event.keyCode == 43 || event.charactersIgnoringModifiers == "," {
+                    self.browseHistory(older: true)
+                    return nil
+                }
+                if event.keyCode == 47 || event.charactersIgnoringModifiers == "." {
+                    self.browseHistory(older: false)
+                    return nil
+                }
             }
             if self.phase == .refining {
                 // ⌘Z undo; ⇧⌘Z / ⌘Y redo.
@@ -401,11 +442,12 @@ final class SelectionOverlayController {
             annotationHistory.select(nil)
             dragKind = .move(startRect: currentRect, startPoint: point)
         } else {
-            // Start a new rough selection (or window pick again). Clears annotations.
+            // Start a new rough selection (or window pick again). Clears annotations + playback.
             toolbar?.close()
             toolbar = nil
             phase = .idle
             dragKind = nil
+            playbackBaseImage = nil
             annotationHistory.commit { doc in
                 doc.marks = []
                 doc.selectedID = nil
@@ -910,9 +952,62 @@ final class SelectionOverlayController {
         }) ?? NSScreen.main else { return }
 
         var r = currentRect
+        // If the restored rect is larger than the screen, shrink to fit while keeping aspect.
+        if r.width > screen.frame.width {
+            r.size.width = screen.frame.width
+        }
+        if r.height > screen.frame.height {
+            r.size.height = screen.frame.height
+        }
         r.origin.x = min(max(r.origin.x, screen.frame.minX), screen.frame.maxX - r.width)
         r.origin.y = min(max(r.origin.y, screen.frame.minY), screen.frame.maxY - r.height)
         currentRect = r
+    }
+
+    // MARK: - History playback (, / .)
+
+    private func browseHistory(older: Bool) {
+        guard let store = historyStore, store.count > 0 else { return }
+
+        let nextIndex: Int
+        if let cursor = historyCursor {
+            nextIndex = older ? cursor - 1 : cursor + 1
+        } else if older {
+            // First `,` jumps to newest record.
+            nextIndex = store.count - 1
+        } else {
+            // First `.` with no cursor: already past newest — no-op.
+            return
+        }
+
+        guard store.records.indices.contains(nextIndex),
+              let record = store.record(at: nextIndex)
+        else { return }
+
+        historyCursor = nextIndex
+        restoreRecord(record)
+    }
+
+    private func restoreRecord(_ record: SnipRecord) {
+        dragKind = nil
+        pendingWindowPick = nil
+        hoveredWindowRect = nil
+        draftAnnotationRect = nil
+        annotateTool = .none
+        let prefs = AnnotationPrefs.load()
+        annotationStyle = prefs.style
+        annotationKind = prefs.kind
+        NSCursor.arrow.set()
+
+        currentRect = record.selection
+        clampRectToScreens()
+        playbackBaseImage = record.baseImage
+        annotationHistory.reset(to: record.document)
+
+        phase = .refining
+        updateHighlight(showHandles: true)
+        showToolbar()
+        refreshHistoryChrome()
     }
 
     // MARK: - Drawing / toolbar
@@ -929,7 +1024,8 @@ final class SelectionOverlayController {
                 draftStyle: annotationStyle,
                 draftKind: annotationKind,
                 selectedAnnotation: selected,
-                annotationHandleSize: annotationHandleVisualSize
+                annotationHandleSize: annotationHandleVisualSize,
+                playbackImage: playbackBaseImage
             )
         }
     }
@@ -1692,7 +1788,8 @@ private final class SelectionPanel: NSPanel {
         draftStyle: AnnotationStyle,
         draftKind: Annotation.Kind,
         selectedAnnotation: Annotation?,
-        annotationHandleSize: CGFloat
+        annotationHandleSize: CGFloat,
+        playbackImage: NSImage?
     ) {
         let local: CGRect
         if globalRect.isNull {
@@ -1714,6 +1811,7 @@ private final class SelectionPanel: NSPanel {
         overlayView.draftKind = draftKind
         overlayView.selectedAnnotation = selectedAnnotation
         overlayView.annotationHandleSize = annotationHandleSize
+        overlayView.playbackImage = playbackImage
         overlayView.needsDisplay = true
     }
 
@@ -1731,6 +1829,8 @@ private final class SelectionOverlayNSView: NSView {
     var draftKind: Annotation.Kind = .rectangle
     var selectedAnnotation: Annotation?
     var annotationHandleSize: CGFloat = 7
+    /// Historical crop drawn inside the selection (`,` / `.` playback).
+    var playbackImage: NSImage?
 
     private let freezeImage: NSImage?
     private let accent = NSColor.systemBlue
@@ -1773,6 +1873,16 @@ private final class SelectionOverlayNSView: NSView {
             NSGraphicsContext.current?.compositingOperation = .clear
             selectionRect.fill()
             NSGraphicsContext.current?.compositingOperation = .sourceOver
+        }
+
+        // History playback: paint archived base inside the selection (rest of screen stays freeze).
+        if let playbackImage {
+            playbackImage.draw(
+                in: selectionRect,
+                from: CGRect(origin: .zero, size: playbackImage.size),
+                operation: .copy,
+                fraction: 1
+            )
         }
 
         let border = NSBezierPath(rect: selectionRect.insetBy(dx: 0.5, dy: 0.5))

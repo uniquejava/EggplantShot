@@ -1,6 +1,6 @@
 # Snip Document architecture
 
-Status: **P0 implemented** (document + in-session undo/redo). P1–P4 not started.  
+Status: **P0–P3 implemented** (document + undo/redo; in-memory/disk `SnipRecord`; `,` / `.` playback). P4 not started.  
 Related UI behaviour: [`selection-refine.md`](selection-refine.md).
 
 This document defines the extensible model for annotations, session undo/redo, and Snipaste-like snip history playback (`,` / `.`), including on-disk persistence.
@@ -182,16 +182,13 @@ EggplantShot/History/         # or under Annotation/
 
 ### Migration from current code
 
-Today:
+P0–P3 done:
 
-- [`SelectionOverlayController`](../EggplantShot/Controllers/SelectionOverlayController.swift) keeps `annotations` / `selectedAnnotationID` and mutates them in place.
-- [`SnipController`](../EggplantShot/Controllers/SnipController.swift) composites then pins/copies/saves; no archive.
+- Overlay routes mutations through `AnnotationHistory`, returns `AnnotationDocument` on confirm.
+- `SnipController` composites for output and appends `SnipRecord` (memory + disk).
+- `,` / `.` restore selection + base + document into the active overlay.
 
-Target:
-
-- Overlay exposes / returns `AnnotationDocument` (or full `SnipRecord` ingredients: cropped base + selection + document) on confirm.
-- Overlay routes draw / move / resize / style / delete through `AnnotationHistory`.
-- `SnipController` composites for output **and** builds `SnipRecord` with the **pre-bake** image.
+Still pending (P4): extensible `AnnotationPayload` before arrow/pen.
 
 ## Coordinate conventions
 
@@ -206,7 +203,7 @@ When restoring a record:
 1. Set overlay selection to `record.selection` (global).
 2. Use `record.baseImage` as the refine **content** for that rect (playback mode), not a fresh crop from the current freeze.
 3. `history.reset(to: record.document)`.
-4. Keep or discard the live freeze backdrop outside the selection as convenient; dimmed “rest of screen” may still show the *current* freeze — only the editable crop must come from the record. Prefer: show record base inside the selection; freeze elsewhere can remain current-session freeze for simplicity (document this in the P3 PR if UX differs).
+4. Keep or discard the live freeze backdrop outside the selection as convenient; dimmed “rest of screen” may still show the *current* freeze — only the editable crop must come from the record. **Implemented:** record base is drawn inside the selection; freeze remains elsewhere.
 
 ## Session interactions
 
@@ -322,23 +319,29 @@ No sandbox entitlements required (Sandbox OFF).
 
 ### P1 — Confirm produces in-memory `SnipRecord`
 
-- [ ] On confirm, retain unannotated base + document (before/without relying on bake)
-- [ ] `SnipHistoryStore` in-memory `append` only
-- [ ] Acceptance: after pin, in-debugger / temporary API can read last record marks matching what was drawn
+- [x] On confirm, retain unannotated base + document (before/without relying on bake)
+- [x] `SnipHistoryStore` in-memory `append` only
+- [x] Acceptance: after pin, in-debugger / temporary API can read last record marks matching what was drawn
+
+Debug: `AppState.shared.snipController.historyStore.newest` (or `.records`).
 
 ### P2 — Disk `SnipHistoryStore`
 
-- [ ] Write `index.json` + per-record `meta.json` / `base.png`
-- [ ] Load on launch; prune to `maxCount`
-- [ ] Codable path for colors and marks (`schemaVersion` 1)
-- [ ] Acceptance: quit and relaunch; store still lists prior records with images
+- [x] Write `index.json` + per-record `meta.json` / `base.png`
+- [x] Load on launch; prune to `maxCount`
+- [x] Codable path for colors and marks (`schemaVersion` 1)
+- [x] Acceptance: quit and relaunch; store still lists prior records with images
+
+Disk root: `~/Library/Application Support/click.yinsb.EggplantShot/snip-history/`
 
 ### P3 — `,` / `.` playback
 
-- [ ] Key handling in overlay (local key monitor alongside existing Esc/Return)
-- [ ] Restore selection + base + document; reset undo stacks
-- [ ] Empty store / ends of list: no-op
-- [ ] Acceptance: F1 → `,` shows last confirm’s crop and marks; edit + Pin appends a new record
+- [x] Key handling in overlay (local key monitor alongside existing Esc/Return)
+- [x] Restore selection + base + document; reset undo stacks
+- [x] Empty store / ends of list: no-op
+- [x] Acceptance: F1 → `,` shows last confirm’s crop and marks; edit + Pin appends a new record
+
+How to try: Pin a snip with shapes → F1 again → press `,` → edit → Pin (appends a new record).
 
 ### P4 — Extensible annotation payload
 
@@ -348,11 +351,12 @@ No sandbox entitlements required (Sandbox OFF).
 
 ## Relationship to current MVP
 
-| Area | Today | After P0–P3 |
-|------|--------|-------------|
-| Undo / redo toolbar | Stub | Live |
-| Confirm | Bake only | Bake + append `SnipRecord` |
-| `,` / `.` | Unused in snip | History playback |
+| Area | Today (after P3) | After P4 |
+|------|------------------|----------|
+| Undo / redo toolbar | Live | Live |
+| Confirm | Bake + disk `SnipRecord` | Same |
+| `,` / `.` | History playback | Same |
 | Pin window | Flat image | Still flat (no layer reopen) |
+| Mark model | Shape fields + `type` on disk | `AnnotationPayload` |
 
 Toolbar chrome and shape UX remain defined in [`selection-refine.md`](selection-refine.md); this file owns document/history/persistence only.

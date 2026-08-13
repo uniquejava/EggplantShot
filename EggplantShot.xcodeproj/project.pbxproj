@@ -20,6 +20,9 @@
 		B10000000000000000000010 /* AnnotationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000010 /* AnnotationModels.swift */; };
 		B10000000000000000000011 /* AnnotationCompositor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000011 /* AnnotationCompositor.swift */; };
 		B10000000000000000000013 /* AnnotationDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000013 /* AnnotationDocument.swift */; };
+		B10000000000000000000016 /* AnnotationCoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000016 /* AnnotationCoding.swift */; };
+		B10000000000000000000014 /* SnipRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000014 /* SnipRecord.swift */; };
+		B10000000000000000000015 /* SnipHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000015 /* SnipHistoryStore.swift */; };
 		B10000000000000000000009 /* StatusMenuContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000009 /* StatusMenuContent.swift */; };
 		B1000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* SettingsView.swift */; };
 		B10000000000000000000012 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* AboutView.swift */; };
@@ -41,6 +44,9 @@
 		C10000000000000000000010 /* AnnotationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationModels.swift; sourceTree = "<group>"; };
 		C10000000000000000000011 /* AnnotationCompositor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCompositor.swift; sourceTree = "<group>"; };
 		C10000000000000000000013 /* AnnotationDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationDocument.swift; sourceTree = "<group>"; };
+		C10000000000000000000016 /* AnnotationCoding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationCoding.swift; sourceTree = "<group>"; };
+		C10000000000000000000014 /* SnipRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipRecord.swift; sourceTree = "<group>"; };
+		C10000000000000000000015 /* SnipHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnipHistoryStore.swift; sourceTree = "<group>"; };
 		C10000000000000000000009 /* StatusMenuContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMenuContent.swift; sourceTree = "<group>"; };
 		C1000000000000000000000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C10000000000000000000012 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -76,6 +82,7 @@
 				A50000000000000000000005 /* Capture */,
 				A50000000000000000000006 /* Controllers */,
 				A50000000000000000000008 /* Annotation */,
+				A50000000000000000000009 /* History */,
 				A50000000000000000000007 /* UI */,
 				C1000000000000000000000B /* Assets.xcassets */,
 				C1000000000000000000000C /* Info.plist */,
@@ -127,9 +134,19 @@
 			children = (
 				C10000000000000000000010 /* AnnotationModels.swift */,
 				C10000000000000000000013 /* AnnotationDocument.swift */,
+				C10000000000000000000016 /* AnnotationCoding.swift */,
 				C10000000000000000000011 /* AnnotationCompositor.swift */,
 			);
 			path = Annotation;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000009 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				C10000000000000000000014 /* SnipRecord.swift */,
+				C10000000000000000000015 /* SnipHistoryStore.swift */,
+			);
+			path = History;
 			sourceTree = "<group>";
 		};
 		A50000000000000000000007 /* UI */ = {
@@ -223,6 +240,9 @@
 				B10000000000000000000008 /* SnipController.swift in Sources */,
 				B10000000000000000000010 /* AnnotationModels.swift in Sources */,
 				B10000000000000000000013 /* AnnotationDocument.swift in Sources */,
+				B10000000000000000000016 /* AnnotationCoding.swift in Sources */,
+				B10000000000000000000014 /* SnipRecord.swift in Sources */,
+				B10000000000000000000015 /* SnipHistoryStore.swift in Sources */,
 				B10000000000000000000011 /* AnnotationCompositor.swift in Sources */,
 				B10000000000000000000009 /* StatusMenuContent.swift in Sources */,
 				B1000000000000000000000A /* SettingsView.swift in Sources */,
