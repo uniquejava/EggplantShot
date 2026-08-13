@@ -100,11 +100,14 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ### Step
 
 - Sub-toolbar: **filled** / **outline** / **plain** chrome | size ▾ | color grid.
-- Click anywhere on freeze → place next number (`max(existing)+1`, or `1`); auto-select; drag to move. No resize handles; no inline edit.
-- Styles: filled = color disk + white digit; outline = color ring + color digit; plain = color digit only.
+- Defaults: **filled**, size **4**, cyan (last-used prefs override).
+- Cursor is a live badge of the **next** number (current style) — click stamps at the hotspot; cursor then advances.
+- Place: click anywhere on freeze → `max(existing)+1` (or `1`); auto-select; drag to move. No resize handles; no inline edit.
+- Styles: filled = color disk + white digit; outline = color ring + color digit; plain = color digit only (toolbar chip uses a dashed plate so it still reads as a button).
 - Size levels map to diameter (`10 + size×3.2` pt). Style / size / color apply to selection (or next place).
 - Edit chrome: dashed contrast square around the badge (Snipaste).
 - Disk: `type: "step"` with `number`, `points: [center]`, `stepStyle` (`kind` / `size` / `color`).
+- P4: vector payload only; mutate via `AnnotationHistory`; unknown types skip on load.
 
 ## Pin chrome
 

@@ -362,7 +362,7 @@ Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Itali
 
 Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
-Step: `.step(number:center:style:)` — click-to-place auto-increment; filled / outline / plain; size + color; move only; disk `stepStyle` + `number` + center point.
+Step: `.step(number:center:style:)` — click-to-place auto-increment; cursor shows next badge; filled / outline / plain; default size 4; move only; disk `stepStyle` + `number` + center point.
 
 ## Relationship to current MVP
 
