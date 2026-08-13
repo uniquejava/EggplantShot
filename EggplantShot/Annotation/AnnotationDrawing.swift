@@ -25,7 +25,7 @@ enum AnnotationDrawing {
             let offset = points.map { CGPoint(x: $0.x + origin.x, y: $0.y + origin.y) }
             drawPencil(points: offset, style: style)
         case .marker(let geometry, let style):
-            drawMarker(geometry: geometry, style: style, drawOrigin: origin)
+            drawMarker(geometry: geometry, style: style, drawOrigin: origin, sample: sample)
         case .mosaic(let geometry, let style):
             drawMosaic(geometry: geometry, style: style, drawOrigin: origin, sample: sample)
         case .eraser(let geometry, let style):

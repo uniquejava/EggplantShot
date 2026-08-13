@@ -367,7 +367,7 @@ Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Itali
 
 Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius, linear ~0.7…14 pt); samples freeze/base at draw time; disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
-Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **sourceOver wash** (~40% alpha highlighter; multiply skipped on the transparent marks layer — it read as opaque fill) instead of blur; region chrome = solid while draw/move/resize, handles-only when idle, dashed on non-selected hover; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
+Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **multiply** color fill (Snipaste highlighter; stamps freeze under the clip on the transparent marks layer so multiply isn’t against clear; near-white → sourceOver wash) instead of blur; region chrome = solid while draw/move/resize, handles-only when idle, dashed on non-selected hover; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
 
 Eraser: `.eraser(geometry:style:)` — same first-five modes as mosaic (brush 14/18/24 + rect/oval); punches prior marks via `destinationOut` on a marks layer (never mutates `baseImage`); region auto-select + mosaic-like hairline chrome; disk `eraserStyle` (brushWidth).
 
