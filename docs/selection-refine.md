@@ -47,7 +47,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 § Step: [ filled | outline | plain ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 ♯ Eraser: [ · | ·· | ··· ] | [ rect region | oval region ]  (same first 5 as mosaic; punches marks only)
-  Magnifier: [ rect | oval ] | [ thin | med | thick ] | [ includeAnnotations ] | [ preview 24 + palette 2×10 ]
+  Magnifier: [ thin | med | thick ] | [ rect | oval ] | [ includeAnnotations ] | [ scale preview + slider 1…6 + value ] | [ preview 24 + palette 2×10 ]
   More stub / disabled
 ```
 
@@ -128,13 +128,13 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 ### Magnifier
 
-- Drag defines the **source** sample rect; on mouse-up, a concentric **lens** is created at **2×** (same center). Shift → square/circle source.
-- Zoom is derived (`lens / source`). **Lens handles** resize the projection (primary zoom control); **source handles** change the sampled region. Move each frame independently.
+- Drag defines the **source** sample rect; on mouse-up, a concentric **lens** is created at the current **scale** (default **2.5×**, same center). Shift → square/circle source.
+- Zoom is `lens / source` (avg of width & height ratios). **Scale slider** (1.00…6.00, two decimals) resizes the lens about its center; **lens handles** also change zoom; **source handles** change the sampled region. Move each frame independently.
 - When the lens is dragged away from a concentric nest, a stroke connector links nearest edges; nested/concentric hides the line.
-- Sub-toolbar: rect ↔ oval | stroke widths | **include annotations** toggle (`rectangle.on.rectangle`) | color grid.
+- Sub-toolbar: stroke widths | rect ↔ oval | **include annotations** toggle (`rectangle.on.rectangle`) | **scale** (solid preview dot + slider + value) | color grid.
 - `includeAnnotations == false`: sample freeze/base only. `true`: sample freeze/base + marks drawn **before** this magnifier (excludes self; **source-crop composite** only — not full-display; P4 vector data, no bake into `baseImage`).
 - Auto-select after create; dual 8-handle chrome on source + lens.
-- Disk: `type: "magnifier"` with `kind`, `rect` (source), `lensRect`, `magnifierStyle` (`strokeWidth` / `color` / `includeAnnotations`).
+- Disk: `type: "magnifier"` with `kind`, `rect` (source), `lensRect`, `magnifierStyle` (`strokeWidth` / `color` / `includeAnnotations` / optional `scale`).
 
 ### OCR
 

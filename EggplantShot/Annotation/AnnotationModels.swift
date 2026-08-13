@@ -698,18 +698,29 @@ struct MagnifierStyle: Equatable {
     var color: NSColor
     /// When true, sample freeze/base **plus prior marks** into the lens (excludes self).
     var includeAnnotations: Bool
+    /// Preferred / displayed zoom (`lens / source`). Geometry remains source of truth while editing.
+    var scale: CGFloat
+
+    static let scaleRange: ClosedRange<CGFloat> = 1...6
 
     static let `default` = MagnifierStyle(
         strokeWidth: StrokeWidthOption.medium.points,
         color: PaletteColor.red.color,
-        includeAnnotations: false
+        includeAnnotations: false,
+        scale: defaultScale
     )
 
     /// Default lens / source scale when creating a concentric pair.
-    static let defaultScale: CGFloat = 2
+    /// Slightly above 2× so source vs lens size reads clearly when nested.
+    static let defaultScale: CGFloat = 2.5
 
     mutating func clamp() {
         strokeWidth = StrokeWidthOption.matching(strokeWidth).points
+        scale = Self.clampedScale(scale)
+    }
+
+    static func clampedScale(_ value: CGFloat) -> CGFloat {
+        min(max(value, scaleRange.lowerBound), scaleRange.upperBound)
     }
 }
 
@@ -719,6 +730,7 @@ enum MagnifierAnnotationPrefs {
     private static let strokeWidthKey = "annotate.magnifier.strokeWidth"
     private static let colorKey = "annotate.magnifier.palette"
     private static let includeKey = "annotate.magnifier.includeAnnotations"
+    private static let scaleKey = "annotate.magnifier.scale"
 
     static func load() -> (kind: ShapeKind, style: MagnifierStyle) {
         let defaults = UserDefaults.standard
@@ -733,6 +745,9 @@ enum MagnifierAnnotationPrefs {
         if defaults.object(forKey: includeKey) != nil {
             style.includeAnnotations = defaults.bool(forKey: includeKey)
         }
+        if defaults.object(forKey: scaleKey) != nil {
+            style.scale = MagnifierStyle.clampedScale(CGFloat(defaults.double(forKey: scaleKey)))
+        }
         style.clamp()
         let kind: ShapeKind = defaults.integer(forKey: kindKey) == 1 ? .ellipse : .rectangle
         return (kind, style)
@@ -746,6 +761,7 @@ enum MagnifierAnnotationPrefs {
         defaults.set(Double(clamped.strokeWidth), forKey: strokeWidthKey)
         defaults.set(PaletteColor.matching(clamped.color).rawValue, forKey: colorKey)
         defaults.set(clamped.includeAnnotations, forKey: includeKey)
+        defaults.set(Double(clamped.scale), forKey: scaleKey)
     }
 }
 
@@ -1414,14 +1430,31 @@ struct Annotation: Equatable {
         }
     }
 
-    /// Concentric lens around `source` at `scale` (default 2×).
+    /// Average width/height zoom of lens vs source (clamped to `MagnifierStyle.scaleRange`).
+    static func magnifierScale(source: CGRect, lens: CGRect) -> CGFloat {
+        guard source.width > 0.5, source.height > 0.5 else { return MagnifierStyle.defaultScale }
+        let sx = lens.width / source.width
+        let sy = lens.height / source.height
+        return MagnifierStyle.clampedScale((sx + sy) / 2)
+    }
+
+    /// Concentric lens around `source` at `scale` (default `MagnifierStyle.defaultScale`).
     static func concentricMagnifierLens(for source: CGRect, scale: CGFloat = MagnifierStyle.defaultScale) -> CGRect {
-        let s = max(scale, 1.01)
-        let w = max(source.width * s, source.width + 1)
-        let h = max(source.height * s, source.height + 1)
+        scaledMagnifierLens(
+            source: source,
+            scale: scale,
+            center: CGPoint(x: source.midX, y: source.midY)
+        )
+    }
+
+    /// Lens sized to `source * scale`, centered on `center` (keeps offset when slider changes).
+    static func scaledMagnifierLens(source: CGRect, scale: CGFloat, center: CGPoint) -> CGRect {
+        let s = MagnifierStyle.clampedScale(scale)
+        let w = max(source.width * s, 1)
+        let h = max(source.height * s, 1)
         return CGRect(
-            x: source.midX - w / 2,
-            y: source.midY - h / 2,
+            x: center.x - w / 2,
+            y: center.y - h / 2,
             width: w,
             height: h
         )

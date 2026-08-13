@@ -75,7 +75,7 @@ final class RefineToolbarController: NSObject {
     private var eraserOptionsRow: NSView!
     /// Step options row (chrome kind / size / palette).
     private var stepOptionsRow: NSView!
-    /// Magnifier options row (rect/oval / stroke / includeAnnotations / palette).
+    /// Magnifier options row (stroke / rect-oval / includeAnnotations / scale / palette).
     private var magnifierOptionsRow: NSView!
     /// Shape-only chrome (fill + rect/oval). Hidden for pencil / arrow.
     private var shapeOnlyViews: [NSView] = []
@@ -119,6 +119,9 @@ final class RefineToolbarController: NSObject {
     private var magnifierOvalButton: NSButton!
     private var magnifierStrokeButtons: [NSButton] = []
     private var magnifierIncludeButton: NSButton!
+    private var magnifierScalePreview: MagnifierScalePreviewView!
+    private var magnifierScaleSlider: MosaicIntensitySlider!
+    private var magnifierScaleLabel: NSTextField!
     private var magnifierColorPreview: NSView!
 
     init(
@@ -667,35 +670,19 @@ final class RefineToolbarController: NSObject {
         stack.addArrangedSubview(miniDivider())
 
         mosaicIntensityPreview = MosaicIntensityPreviewView(frame: .zero)
-        mosaicIntensityPreview.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            mosaicIntensityPreview.widthAnchor.constraint(equalToConstant: 24),
-            mosaicIntensityPreview.heightAnchor.constraint(equalToConstant: 24),
-        ])
-        stack.addArrangedSubview(mosaicIntensityPreview)
-
-        mosaicIntensitySlider = MosaicIntensitySlider(frame: .zero)
-        mosaicIntensitySlider.minValue = Double(MosaicStyle.intensityRange.lowerBound)
-        mosaicIntensitySlider.maxValue = Double(MosaicStyle.intensityRange.upperBound)
-        mosaicIntensitySlider.doubleValue = Double(mosaicStyle.intensity)
-        mosaicIntensitySlider.target = self
-        mosaicIntensitySlider.action = #selector(mosaicIntensityChanged(_:))
-        mosaicIntensitySlider.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            mosaicIntensitySlider.widthAnchor.constraint(equalToConstant: 90),
-            mosaicIntensitySlider.heightAnchor.constraint(equalToConstant: 18),
-        ])
-        stack.addArrangedSubview(mosaicIntensitySlider)
-
-        mosaicIntensityLabel = NSTextField(labelWithString: "\(Int(mosaicStyle.intensity.rounded()))")
-        mosaicIntensityLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        mosaicIntensityLabel.textColor = NSColor(calibratedWhite: 0.28, alpha: 1)
-        mosaicIntensityLabel.alignment = .right
-        mosaicIntensityLabel.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            mosaicIntensityLabel.widthAnchor.constraint(equalToConstant: 22),
-        ])
-        stack.addArrangedSubview(mosaicIntensityLabel)
+        mosaicIntensityPreview.intensity = mosaicStyle.intensity
+        let intensityControls = appendValueSlider(
+            to: stack,
+            preview: mosaicIntensityPreview,
+            minValue: Double(MosaicStyle.intensityRange.lowerBound),
+            maxValue: Double(MosaicStyle.intensityRange.upperBound),
+            value: Double(mosaicStyle.intensity),
+            labelText: "\(Int(mosaicStyle.intensity.rounded()))",
+            labelWidth: 18,
+            action: #selector(mosaicIntensityChanged(_:))
+        )
+        mosaicIntensitySlider = intensityControls.slider
+        mosaicIntensityLabel = intensityControls.label
 
         stack.translatesAutoresizingMaskIntoConstraints = false
         return stack
@@ -942,22 +929,6 @@ final class RefineToolbarController: NSObject {
         stack.spacing = 4
         stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
 
-        magnifierRectButton = iconButton(
-            systemName: "rectangle",
-            tooltip: "Rectangle",
-            enabled: true,
-            action: #selector(magnifierRectTapped)
-        )
-        magnifierOvalButton = iconButton(
-            systemName: "oval",
-            tooltip: "Ellipse / Circle",
-            enabled: true,
-            action: #selector(magnifierOvalTapped)
-        )
-        stack.addArrangedSubview(magnifierRectButton)
-        stack.addArrangedSubview(magnifierOvalButton)
-        stack.addArrangedSubview(miniDivider())
-
         magnifierStrokeButtons = StrokeWidthOption.allCases.map { option in
             let button = NSButton(frame: .zero)
             button.bezelStyle = .inline
@@ -981,6 +952,22 @@ final class RefineToolbarController: NSObject {
         }
         stack.addArrangedSubview(miniDivider())
 
+        magnifierRectButton = iconButton(
+            systemName: "rectangle",
+            tooltip: "Rectangle",
+            enabled: true,
+            action: #selector(magnifierRectTapped)
+        )
+        magnifierOvalButton = iconButton(
+            systemName: "oval",
+            tooltip: "Ellipse / Circle",
+            enabled: true,
+            action: #selector(magnifierOvalTapped)
+        )
+        stack.addArrangedSubview(magnifierRectButton)
+        stack.addArrangedSubview(magnifierOvalButton)
+        stack.addArrangedSubview(miniDivider())
+
         magnifierIncludeButton = iconButton(
             systemName: "rectangle.on.rectangle",
             tooltip: "Include annotations in magnifier",
@@ -988,6 +975,22 @@ final class RefineToolbarController: NSObject {
             action: #selector(magnifierIncludeTapped)
         )
         stack.addArrangedSubview(magnifierIncludeButton)
+        stack.addArrangedSubview(miniDivider())
+
+        magnifierScalePreview = MagnifierScalePreviewView(frame: .zero)
+        magnifierScalePreview.scale = magnifierStyle.scale
+        let scaleControls = appendValueSlider(
+            to: stack,
+            preview: magnifierScalePreview,
+            minValue: Double(MagnifierStyle.scaleRange.lowerBound),
+            maxValue: Double(MagnifierStyle.scaleRange.upperBound),
+            value: Double(magnifierStyle.scale),
+            labelText: Self.formatMagnifierScale(magnifierStyle.scale),
+            labelWidth: 28,
+            action: #selector(magnifierScaleChanged(_:))
+        )
+        magnifierScaleSlider = scaleControls.slider
+        magnifierScaleLabel = scaleControls.label
         stack.addArrangedSubview(miniDivider())
 
         let preview = NSView(frame: .zero)
@@ -1057,6 +1060,61 @@ final class RefineToolbarController: NSObject {
         card.installContent(child)
     }
 
+    /// Shared mosaic / magnifier control: preview chip + slider + value (tight slider→label gap).
+    private func appendValueSlider(
+        to stack: NSStackView,
+        preview: NSView,
+        minValue: Double,
+        maxValue: Double,
+        value: Double,
+        labelText: String,
+        labelWidth: CGFloat,
+        action: Selector
+    ) -> (slider: MosaicIntensitySlider, label: NSTextField) {
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            preview.widthAnchor.constraint(equalToConstant: 24),
+            preview.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        stack.addArrangedSubview(preview)
+
+        // Nested so slider↔value sits tighter than the outer 4pt toolbar spacing.
+        // spacing 0 + leading align: avoid the old right-aligned fixed-width gap.
+        let cluster = NSStackView(views: [])
+        cluster.orientation = .horizontal
+        cluster.alignment = .centerY
+        cluster.spacing = 0
+
+        let slider = MosaicIntensitySlider(frame: .zero)
+        slider.minValue = minValue
+        slider.maxValue = maxValue
+        slider.doubleValue = value
+        slider.target = self
+        slider.action = action
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            slider.widthAnchor.constraint(equalToConstant: 90),
+            slider.heightAnchor.constraint(equalToConstant: 18),
+        ])
+        cluster.addArrangedSubview(slider)
+
+        let label = NSTextField(labelWithString: labelText)
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        label.textColor = NSColor(calibratedWhite: 0.28, alpha: 1)
+        label.alignment = .left
+        label.isEditable = false
+        label.isBordered = false
+        label.drawsBackground = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            label.widthAnchor.constraint(equalToConstant: labelWidth),
+        ])
+        cluster.addArrangedSubview(label)
+
+        stack.addArrangedSubview(cluster)
+        return (slider, label)
+    }
+
     private func layoutPanel(content: NSView) {
         content.layoutSubtreeIfNeeded()
         let fitting = rootStack.fittingSize
@@ -1116,6 +1174,10 @@ final class RefineToolbarController: NSObject {
             tintSelected(button, selected: on)
         }
         tintSelected(magnifierIncludeButton, selected: magnifierStyle.includeAnnotations)
+        magnifierScaleSlider.doubleValue = Double(magnifierStyle.scale)
+        magnifierScaleLabel.stringValue = Self.formatMagnifierScale(magnifierStyle.scale)
+        magnifierScalePreview.scale = magnifierStyle.scale
+        magnifierScalePreview.needsDisplay = true
 
         let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
         let treatAsStroke = !style.isFilled || tool == .pencil || tool == .arrow
@@ -1684,6 +1746,18 @@ final class RefineToolbarController: NSObject {
         magnifierStyle.includeAnnotations.toggle()
         refreshSelectionChrome()
         emitMagnifierChanged()
+    }
+
+    @objc private func magnifierScaleChanged(_ sender: MosaicIntensitySlider) {
+        magnifierStyle.scale = MagnifierStyle.clampedScale(CGFloat(sender.doubleValue))
+        magnifierScaleLabel.stringValue = Self.formatMagnifierScale(magnifierStyle.scale)
+        magnifierScalePreview.scale = magnifierStyle.scale
+        magnifierScalePreview.needsDisplay = true
+        emitMagnifierChanged()
+    }
+
+    private static func formatMagnifierScale(_ scale: CGFloat) -> String {
+        String(format: "%.2f", MagnifierStyle.clampedScale(scale))
     }
 
     private func emitMagnifierChanged() {
@@ -2491,8 +2565,8 @@ final class PaletteSwatchChip: NSView {
     }
 }
 
-/// Snipaste-like intensity slider: blue filled track to the left of the knob,
-/// gray remainder; circular knob is hollow until hover / drag.
+/// Snipaste-like value slider (mosaic intensity / magnifier scale): blue filled track
+/// to the left of the knob, gray remainder; circular knob is hollow until hover / drag.
 final class MosaicIntensitySlider: NSView {
     var minValue: Double = 3
     var maxValue: Double = 24
@@ -2650,6 +2724,33 @@ final class MosaicIntensitySlider: NSView {
             knobPath.lineWidth = 1.5
             knobPath.stroke()
         }
+    }
+}
+
+/// Solid dot whose diameter tracks magnifier zoom (1×…6×) — Snipaste-style scale preview.
+final class MagnifierScalePreviewView: NSView {
+    var scale: CGFloat = MagnifierStyle.defaultScale {
+        didSet { needsDisplay = true }
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.clear.setFill()
+        bounds.fill()
+
+        let s = MagnifierStyle.clampedScale(scale)
+        let t = (s - MagnifierStyle.scaleRange.lowerBound)
+            / (MagnifierStyle.scaleRange.upperBound - MagnifierStyle.scaleRange.lowerBound)
+        let diameter = 4 + t * 10 // 4pt @ 1× → 14pt @ 6×
+        let rect = CGRect(
+            x: (bounds.width - diameter) / 2,
+            y: (bounds.height - diameter) / 2,
+            width: diameter,
+            height: diameter
+        )
+        NSColor(calibratedWhite: 0.18, alpha: 1).setFill()
+        NSBezierPath(ovalIn: rect).fill()
     }
 }
 

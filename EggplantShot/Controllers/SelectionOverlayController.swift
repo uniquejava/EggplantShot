@@ -790,6 +790,11 @@ final class SelectionOverlayController {
                     minSize: minAnnotation
                 )
                 next.mapMagnifierPart(magnifierPart, to: toLocal(resizedGlobal))
+                var style = next.magnifierStyle
+                style.scale = Annotation.magnifierScale(source: next.magnifierSource, lens: next.magnifierLens)
+                next.magnifierStyle = style
+                magnifierStyle = style
+                toolbar?.syncMagnifier(kind: magnifierKind, style: magnifierStyle)
             } else {
                 let startGlobal = toGlobal(start.boundingRect)
                 let resizedGlobal = resizedRect(
@@ -884,6 +889,9 @@ final class SelectionOverlayController {
                 }
             case .annotateMove, .annotateResize, .annotateEndpoint:
                 annotationHistory.endGesture()
+                if case .annotateResize(_, _, let start, _, _) = dragKind, start.isMagnifier {
+                    MagnifierAnnotationPrefs.save(kind: magnifierKind, style: magnifierStyle)
+                }
                 refreshHistoryChrome()
             default:
                 break
@@ -976,7 +984,12 @@ final class SelectionOverlayController {
             return
         }
         if annotation.isMagnifier {
-            magnifierStyle = annotation.magnifierStyle
+            var style = annotation.magnifierStyle
+            style.scale = Annotation.magnifierScale(
+                source: annotation.magnifierSource,
+                lens: annotation.magnifierLens
+            )
+            magnifierStyle = style
             magnifierKind = annotation.magnifierKind
             toolbar?.syncMagnifier(kind: magnifierKind, style: magnifierStyle)
             return
@@ -1082,7 +1095,7 @@ final class SelectionOverlayController {
             return Annotation(
                 magnifierKind: magnifierKind,
                 source: source,
-                lens: Annotation.concentricMagnifierLens(for: source),
+                lens: Annotation.concentricMagnifierLens(for: source, scale: magnifierStyle.scale),
                 magnifierStyle: magnifierStyle
             )
         case .rectangle, .none:
@@ -1260,7 +1273,7 @@ final class SelectionOverlayController {
             return Annotation(
                 magnifierKind: magnifierKind,
                 source: source,
-                lens: Annotation.concentricMagnifierLens(for: source),
+                lens: Annotation.concentricMagnifierLens(for: source, scale: magnifierStyle.scale),
                 magnifierStyle: magnifierStyle
             )
 
@@ -2055,6 +2068,8 @@ final class SelectionOverlayController {
     private func applyMagnifier(kind: ShapeKind, style: MagnifierStyle) {
         var next = style
         next.clamp()
+        let previousScale = magnifierStyle.scale
+        let scaleChanged = abs(next.scale - previousScale) > 0.0005
         magnifierKind = kind
         magnifierStyle = next
         MagnifierAnnotationPrefs.save(kind: kind, style: next)
@@ -2065,6 +2080,16 @@ final class SelectionOverlayController {
                 guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
                 doc.marks[idx].magnifierKind = kind
                 doc.marks[idx].magnifierStyle = next
+                if scaleChanged {
+                    let source = doc.marks[idx].magnifierSource
+                    let lens = doc.marks[idx].magnifierLens
+                    let scaled = Annotation.scaledMagnifierLens(
+                        source: source,
+                        scale: next.scale,
+                        center: CGPoint(x: lens.midX, y: lens.midY)
+                    )
+                    doc.marks[idx].mapMagnifierPart(.lens, to: scaled)
+                }
             }
             updateHighlight(showHandles: true)
             refreshHistoryChrome()

@@ -61,6 +61,8 @@ enum AnnotationCoding {
         var strokeWidth: Double
         var color: ColorDTO
         var includeAnnotations: Bool
+        /// Optional for backward compatibility; geometry remains source of truth on load.
+        var scale: Double?
     }
 
     struct MosaicStyleDTO: Codable {
@@ -571,12 +573,15 @@ enum AnnotationCoding {
                 NSLog("SnipHistory: skipping magnifier mark without source/lens/style")
                 return nil
             }
+            var style = decode(magDTO)
+            // Geometry is authoritative for zoom; keep style.scale in sync for toolbar / prefs.
+            style.scale = Annotation.magnifierScale(source: source, lens: lens)
             return Annotation(
                 id: id,
                 magnifierKind: kindFromString(dto.kind) ?? .rectangle,
                 source: source,
                 lens: lens,
-                magnifierStyle: decode(magDTO)
+                magnifierStyle: style
             )
         default:
             NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
@@ -687,7 +692,8 @@ enum AnnotationCoding {
         MagnifierStyleDTO(
             strokeWidth: Double(style.strokeWidth),
             color: encode(style.color),
-            includeAnnotations: style.includeAnnotations
+            includeAnnotations: style.includeAnnotations,
+            scale: Double(style.scale)
         )
     }
 
@@ -695,7 +701,8 @@ enum AnnotationCoding {
         var style = MagnifierStyle(
             strokeWidth: CGFloat(dto.strokeWidth),
             color: decode(dto.color),
-            includeAnnotations: dto.includeAnnotations
+            includeAnnotations: dto.includeAnnotations,
+            scale: dto.scale.map { MagnifierStyle.clampedScale(CGFloat($0)) } ?? MagnifierStyle.defaultScale
         )
         style.clamp()
         return style
