@@ -8,15 +8,20 @@ struct WindowHitTester {
     private let frames: [CGRect]
 
     /// Snapshot visible windows, excluding our process, Dock, menu bar, and desktop chrome.
-    static func snapshot(excludingPID pid: pid_t = ProcessInfo.processInfo.processIdentifier) -> WindowHitTester {
+    /// `additionalFrames` (e.g. pin images) are prepended front → back so they win over windows underneath.
+    static func snapshot(
+        excludingPID pid: pid_t = ProcessInfo.processInfo.processIdentifier,
+        additionalFrames: [CGRect] = []
+    ) -> WindowHitTester {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
-            return WindowHitTester(frames: [])
+            return WindowHitTester(frames: additionalFrames)
         }
 
         let dockLevel = CGWindowLevelForKey(.dockWindow)
         var frames: [CGRect] = []
-        frames.reserveCapacity(infoList.count)
+        frames.reserveCapacity(additionalFrames.count + infoList.count)
+        frames.append(contentsOf: additionalFrames)
 
         for info in infoList {
             if let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t, ownerPID == pid {

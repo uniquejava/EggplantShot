@@ -15,6 +15,7 @@ enum ScreenCapturer {
     }
 
     /// Freeze every connected display. Fetches shareable content once, then captures in parallel.
+    /// Includes this app’s pin panels and menu-bar icon so F1 can re-snip them (Snipaste parity).
     static func captureAllDisplays() async -> [(screen: NSScreen, image: CGImage)] {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return [] }
@@ -100,13 +101,11 @@ enum ScreenCapturer {
             throw CaptureError.displayNotFound(displayID)
         }
 
-        let excludedApps = content.applications.filter {
-            $0.bundleIdentifier == Bundle.main.bundleIdentifier
-                || $0.processID == ProcessInfo.processInfo.processIdentifier
-        }
+        // Do not exclude our app: pins + menu-bar icon must stay in the freeze so the user
+        // can re-snip them. Overlays are shown only after this capture returns.
         let filter = SCContentFilter(
             display: display,
-            excludingApplications: excludedApps,
+            excludingApplications: [],
             exceptingWindows: []
         )
 

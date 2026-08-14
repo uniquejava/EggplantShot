@@ -81,6 +81,38 @@ final class PinBoardController: ObservableObject {
         panels[id]?.orderFrontRegardless()
         imagesHidden = false
     }
+
+    /// Pin image frames for hover hit-test during snip, front → back.
+    /// Empty when pins are hidden via Hide all images.
+    ///
+    /// Do not use `NSApp.orderedWindows` — nonactivating pin panels are often omitted.
+    func visiblePinFrames() -> [CGRect] {
+        guard !imagesHidden, !panels.isEmpty else { return [] }
+        let pad = PinPanel.chromePadding
+        let byNumber = Dictionary(uniqueKeysWithValues: panels.map { ($0.value.windowNumber, $0.value) })
+
+        // CGWindowList is front → back and includes our pin panels.
+        let options: CGWindowListOption = [.optionOnScreenOnly]
+        if let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] {
+            var frames: [CGRect] = []
+            frames.reserveCapacity(byNumber.count)
+            for info in infoList {
+                guard let number = info[kCGWindowNumber as String] as? Int,
+                      let panel = byNumber[number],
+                      panel.isVisible
+                else { continue }
+                // Image content only (skip soft glow padding) so click-lock matches the bitmap.
+                frames.append(panel.frame.insetBy(dx: pad, dy: pad))
+            }
+            if !frames.isEmpty { return frames }
+        }
+
+        // Fallback: newest pin first.
+        return items.reversed().compactMap { item in
+            guard let panel = panels[item.id], panel.isVisible else { return nil }
+            return panel.frame.insetBy(dx: pad, dy: pad)
+        }
+    }
 }
 
 private final class PinPanel: NSPanel {

@@ -154,7 +154,11 @@ final class SelectionOverlayController {
 
     var isActive: Bool { continuation != nil }
 
-    func beginSelection(primaryAction: ConfirmAction = .pin, skipsRefine: Bool = false) async -> Outcome {
+    func beginSelection(
+        primaryAction: ConfirmAction = .pin,
+        skipsRefine: Bool = false,
+        pinFrames: [CGRect] = []
+    ) async -> Outcome {
         if continuation != nil {
             cancel()
         }
@@ -164,7 +168,8 @@ final class SelectionOverlayController {
         playbackBaseImage = nil
 
         // Window list + freeze frames before our panels cover the displays.
-        windowHitTester = WindowHitTester.snapshot()
+        // Pin frames so hover / click-lock can target pinned images for re-snip.
+        windowHitTester = WindowHitTester.snapshot(additionalFrames: pinFrames)
         let captured = await ScreenCapturer.captureAllDisplays()
 
         return await withCheckedContinuation { continuation in
