@@ -147,6 +147,97 @@ extension SelectionOverlayController {
         }
     }
 
+    /// Quick palette: **R** / **G** / **B** → red / green / cyan.
+    /// Applies to the selected colored mark, else the armed tool’s next-draw color.
+    @discardableResult
+    func applyPaletteHotkey(_ swatch: PaletteColor) -> Bool {
+        let color = swatch.color
+        if let target = paletteColorTargetFromSelection() ?? paletteColorTargetFromTool() {
+            switch target {
+            case .stroke:
+                var next = annotationStyle
+                next.strokeColor = color
+                applyStyle(next)
+                toolbar?.syncStyle(next, kind: annotationKind, arrowCaps: arrowCaps)
+            case .text:
+                var next = textStyle
+                if let id = selectedAnnotationID,
+                   let mark = annotations.first(where: { $0.id == id }),
+                   mark.isText {
+                    next = mark.textStyle
+                }
+                next.color = color
+                applyTextStyle(next)
+                toolbar?.syncTextStyle(next)
+            case .marker:
+                var next = markerStyle
+                if let id = selectedAnnotationID,
+                   let mark = annotations.first(where: { $0.id == id }),
+                   mark.isMarker {
+                    next = mark.markerStyle
+                }
+                next.color = color
+                applyMarkerStyle(next)
+                toolbar?.syncMarkerStyle(next)
+            case .step:
+                var next = stepStyle
+                if let id = selectedAnnotationID,
+                   let mark = annotations.first(where: { $0.id == id }),
+                   mark.isStep {
+                    next = mark.stepStyle
+                }
+                next.color = color
+                applyStepStyle(next)
+                toolbar?.syncStepStyle(next)
+            case .magnifier:
+                var next = magnifierStyle
+                var kind = magnifierKind
+                if let id = selectedAnnotationID,
+                   let mark = annotations.first(where: { $0.id == id }),
+                   mark.isMagnifier {
+                    next = mark.magnifierStyle
+                    kind = mark.magnifierKind
+                }
+                next.color = color
+                applyMagnifier(kind: kind, style: next)
+                toolbar?.syncMagnifier(kind: kind, style: next)
+            }
+            return true
+        }
+        return false
+    }
+
+    private enum PaletteColorTarget {
+        case stroke
+        case text
+        case marker
+        case step
+        case magnifier
+    }
+
+    private func paletteColorTargetFromSelection() -> PaletteColorTarget? {
+        guard let id = selectedAnnotationID,
+              let mark = annotations.first(where: { $0.id == id })
+        else { return nil }
+        if mark.isShape || mark.isArrow || mark.isPencil { return .stroke }
+        if mark.isText { return .text }
+        if mark.isMarker { return .marker }
+        if mark.isStep { return .step }
+        if mark.isMagnifier { return .magnifier }
+        return nil
+    }
+
+    private func paletteColorTargetFromTool() -> PaletteColorTarget? {
+        switch annotateTool {
+        case .rectangle, .arrow, .pencil: return .stroke
+        case .text: return .text
+        case .marker: return .marker
+        case .step: return .step
+        case .magnifier: return .magnifier
+        case .none, .mosaic, .eraser: return nil
+        }
+    }
+
     func applyStyle(_ style: AnnotationStyle) {
         var next = style
         if annotateTool == .pencil || annotateTool == .arrow {

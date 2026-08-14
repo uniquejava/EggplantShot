@@ -151,6 +151,12 @@ extension SelectionOverlayController {
                     case "e": self.toggleRefineTool(.eraser); return nil
                     case "p": self.confirm(.pin); return nil
                     case "o": self.performOCR(); return nil
+                    case "r":
+                        if self.applyPaletteHotkey(.red) { return nil }
+                    case "g":
+                        if self.applyPaletteHotkey(.green) { return nil }
+                    case "b":
+                        if self.applyPaletteHotkey(.cyan) { return nil }
                     default: break
                     }
                 }
