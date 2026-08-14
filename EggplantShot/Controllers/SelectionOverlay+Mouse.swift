@@ -147,7 +147,7 @@ extension SelectionOverlayController {
                     case "d": self.toggleRefineTool(.pencil); return nil
                     case "f": self.toggleRefineTool(.marker); return nil
                     case "m": self.toggleRefineTool(.mosaic); return nil
-                    case "t": self.toggleRefineTool(.text); return nil
+                    case "i": self.armTextToolFromHotkey(); return nil
                     case "n": self.toggleRefineTool(.step); return nil
                     case "e": self.toggleRefineTool(.eraser); return nil
                     case "p": self.confirm(.pin); return nil

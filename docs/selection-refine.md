@@ -18,8 +18,9 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Esc ladder (not editing text): abort in-progress drag → disarm tool → deselect mark → with marks, first Esc shows “Press Esc again to discard”, second Esc discards (toolbar **✕** still immediate).
 - Delete removes the selected mark. Undo / redo: toolbar + ⌘Z / ⇧⌘Z.
 - Refine tool / action hotkeys (armed after selection; ignored while editing text or mid-drag):
-  **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **T** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy.
+  **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy.
   **R** / **G** / **B** → palette red / green / cyan (selected colored mark, else armed tool; no-op for mosaic / eraser).
+  ASDF row mnemonics: **A** ≈ ⌘A “select with a rect” · **S** ≈ S-curve arrow · **D**raw · **F** like a brush (highlight). **I** = Insert (text).
 
 ## Refine shell
 
@@ -114,6 +115,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 - Sub-toolbar: Bold / Italic / background | font size | color (system UI font; no family / rotation yet).
 - Click anywhere on freeze → place + inline edit (click = left edge + vertical center of the first line).
+- **I** (Insert) arms the text tool and, when not toggling off / not over the toolbar, places + edits at the cursor. Toolbar tap still arms only (click to place).
 - **Edit chrome:** 1px hairline; white border + white caret on dark backdrops, black + black on light (not the palette color). Transparent fill unless bg toggle.
 - Frame hugs glyphs with tiny padding (~2pt); **grows with text width** (including IME preedit before commit); soft-wrap only near screen edge. Empty editor is caret-wide (no trailing blank).
 - **Hit / cursor:** blank overlay (selection or dimmed) → I-beam for place-new; near text edge / hairline (+~2pt outside) → four-arrow move; deeper interior → I-beam + click to edit. Toolbar only → arrow. While editing: border drag **live-moves** the chrome without ending edit; interior still types. Cursor is re-applied after caret blink so AppKit cannot reset to the system arrow while the pointer is still. Hover → 1px contrast dashed outline (black on light freeze, white on dark; clears on mouse-out). No resize handles.

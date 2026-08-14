@@ -27,6 +27,23 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
+    /// **I** (Insert): arm text tool; if arming (not disarming) and the pointer is
+    /// not over the toolbar, place + edit at the cursor (toolbar tap stays click-to-place).
+    func armTextToolFromHotkey() {
+        if annotateTool == .text {
+            toggleRefineTool(.text)
+            return
+        }
+        if let toolbar {
+            toolbar.selectTool(.text)
+        } else {
+            setAnnotateTool(.text)
+        }
+        let point = NSEvent.mouseLocation
+        if toolbar?.containsGlobalPoint(point) == true { return }
+        placeAndEditText(at: point)
+    }
+
     func placeAndEditText(at globalPoint: CGPoint) {
         // Selection-local, may be outside the blue rect (Snipaste free placement).
         let local = toLocal(globalPoint)

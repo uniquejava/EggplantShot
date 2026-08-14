@@ -55,7 +55,8 @@ Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recogn
 - Marks work on the **full freeze**, not only inside the blue rect. Pin/Copy/Save still crop to the selection (outside ink is clipped from the baked image).
 - **Recognize Text** runs OCR on the selection, copies text to the clipboard, plays a short success sound, and closes the capture (no result panel).
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
-- Refine hotkeys (after selection is locked; letter keys type while editing text): **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **T** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
+- Refine hotkeys (after selection is locked; letter keys type while editing text): **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
+  - ASDF mnemonics: **A** like ⌘A — box-select with a rectangle; **S** like an S-curve arrow; **D** for Draw; **F** like a brush for highlight. **I** = Insert (text at the cursor).
 - **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → disarm tool → deselect mark → with marks, first Esc tips “Press Esc again to discard”, second Esc cancels (toolbar **✕** still discards anytime).
 
 ### Pencil / mosaic / eraser — move vs draw
