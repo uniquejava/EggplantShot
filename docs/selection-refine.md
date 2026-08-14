@@ -112,7 +112,8 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 Sampling design (mosaic / magnifier): marks render into a `MarksCanvas` (an owned bitmap), and a
 mosaic reads the hull it is about to blur back out of it — so a mosaic over an earlier mosaic sees
-that one's blurred pixels, and nothing re-derives prior marks from vectors. Full write-up, the two
+that one's blurred pixels, and nothing re-derives prior marks from vectors. The overlay caches the
+committed layer so a pencil drag does not re-blur every mosaic per frame. Full write-up, the two
 rejected approaches, measurements, and the rules that must not be broken:
 [`marks-rendering.md`](marks-rendering.md).
 

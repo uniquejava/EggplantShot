@@ -91,7 +91,7 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 → Eraser brush tip: concentric-ring (currently reuses mosaic outline). See deferred note under Eraser in `docs/selection-refine.md`.
 
-→ Marks render into a `MarksCanvas` (owned bitmap) so mosaic / magnifier can read back what is under them, instead of re-deriving prior marks from vectors. Rules, rejected approaches and measurements: [`docs/marks-rendering.md`](docs/marks-rendering.md).
+→ Marks render into a `MarksCanvas` (owned bitmap) so mosaic / magnifier can read back what is under them; the overlay caches the committed layer so a pencil drag does not re-blur every mosaic. Rules, rejected approaches and measurements: [`docs/marks-rendering.md`](docs/marks-rendering.md).
 
 
 ## Prefer

@@ -39,6 +39,45 @@ final class SelectionOverlayNSView: NSView {
     private let accent = NSColor.systemBlue
     private var cursorTrackingArea: NSTrackingArea?
 
+    /// Rendered committed-marks layer, reused while only the draft changes.
+    /// A pencil drag would otherwise re-blur every mosaic on every mouse-move.
+    private var cachedMarksLayer: NSImage?
+    private var cachedMarksKey: MarksLayerKey?
+    /// Freeze with history playback stamped in; rebuilt only when the inputs change, because
+    /// each mosaic rasterizes this image and a block-backed `NSImage` would redo the whole screen.
+    private var cachedStampedFreeze: NSImage?
+    private var cachedStampedKey: StampedFreezeKey?
+
+    /// Everything the committed layer's pixels depend on. Images are held strongly and compared
+    /// by identity: a released `NSImage` could otherwise be replaced at the same address and let
+    /// a stale layer survive.
+    private struct MarksLayerKey: Equatable {
+        let annotations: [Annotation]
+        let size: CGSize
+        let origin: CGPoint
+        let scale: CGFloat
+        let hiddenMagnifierSourceIDs: Set<UUID>
+        let sampleImage: NSImage?
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.sampleImage === rhs.sampleImage
+                && lhs.size == rhs.size
+                && lhs.origin == rhs.origin
+                && lhs.scale == rhs.scale
+                && lhs.hiddenMagnifierSourceIDs == rhs.hiddenMagnifierSourceIDs
+                && lhs.annotations == rhs.annotations
+        }
+    }
+
+    private struct StampedFreezeKey: Equatable {
+        let playback: NSImage
+        let selectionRect: CGRect
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.playback === rhs.playback && lhs.selectionRect == rhs.selectionRect
+        }
+    }
+
     init(frame frameRect: NSRect, freezeImage: NSImage?) {
         self.freezeImage = freezeImage
         super.init(frame: frameRect)
@@ -164,29 +203,49 @@ final class SelectionOverlayNSView: NSView {
     private func drawAnnotations() {
         let origin = selectionRect.origin
         let sample = mosaicSampleContext()
+        let scale = window?.backingScaleFactor ?? 2
+        let space = window?.screen?.colorSpace?.cgColorSpace
         // Fullscreen annotate: marks may sit outside the blue selection — no clip.
         // Offscreen layer so eraser destinationOut punches marks only, not the freeze.
-        var marks: [Annotation] = []
-        marks.reserveCapacity(annotations.count + 1)
+        var committed: [Annotation] = []
+        committed.reserveCapacity(annotations.count)
         for ann in annotations where ann.id != editingAnnotationID {
-            marks.append(ann)
+            committed.append(ann)
         }
-        if let draft = draftAnnotation {
-            marks.append(draft)
+
+        // A draft that erases or samples has to be inside the layer; anything else is just a
+        // stroke on top, which lets the committed layer stay cached for the whole drag.
+        let draftNeedsLayer = draftAnnotation.map(Self.draftBelongsInLayer) ?? false
+        let layer: NSImage?
+        if let draft = draftAnnotation, draftNeedsLayer {
+            layer = AnnotationDrawing.renderMarksLayer(
+                committed + [draft],
+                size: bounds.size,
+                origin: origin,
+                scale: scale,
+                colorSpace: space,
+                sample: sample,
+                hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs
+            )
+        } else {
+            layer = committedMarksLayer(
+                committed,
+                origin: origin,
+                scale: scale,
+                colorSpace: space,
+                sample: sample
+            )
         }
-        if let layer = AnnotationDrawing.renderMarksLayer(
-            marks,
-            size: bounds.size,
-            origin: origin,
-            sample: sample,
-            hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs
-        ) {
+        if let layer {
             layer.draw(
                 in: bounds,
                 from: .zero,
                 operation: .sourceOver,
                 fraction: 1
             )
+        }
+        if let draft = draftAnnotation, !draftNeedsLayer {
+            AnnotationDrawing.draw(draft, origin: origin, sample: sample)
         }
 
         if let draft = draftAnnotation {
@@ -366,6 +425,55 @@ final class SelectionOverlayNSView: NSView {
         }
     }
 
+    /// Drafts that must render inside the marks layer: eraser needs `destinationOut` against the
+    /// marks alone, and mosaic / marker / magnifier sample what is already drawn under them.
+    private static func draftBelongsInLayer(_ draft: Annotation) -> Bool {
+        switch draft.payload {
+        case .eraser, .mosaic, .marker, .magnifier:
+            return true
+        case .shape, .arrow, .pencil, .text, .step:
+            return false
+        }
+    }
+
+    /// Cached render of the committed marks. Only re-renders when something it draws changes.
+    private func committedMarksLayer(
+        _ committed: [Annotation],
+        origin: CGPoint,
+        scale: CGFloat,
+        colorSpace: CGColorSpace?,
+        sample: AnnotationDrawing.MosaicSampleContext?
+    ) -> NSImage? {
+        guard !committed.isEmpty else {
+            cachedMarksLayer = nil
+            cachedMarksKey = nil
+            return nil
+        }
+        let key = MarksLayerKey(
+            annotations: committed,
+            size: bounds.size,
+            origin: origin,
+            scale: scale,
+            hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs,
+            sampleImage: sample?.image
+        )
+        if key == cachedMarksKey, let cachedMarksLayer {
+            return cachedMarksLayer
+        }
+        let layer = AnnotationDrawing.renderMarksLayer(
+            committed,
+            size: bounds.size,
+            origin: origin,
+            scale: scale,
+            colorSpace: colorSpace,
+            sample: sample,
+            hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs
+        )
+        cachedMarksLayer = layer
+        cachedMarksKey = layer == nil ? nil : key
+        return layer
+    }
+
     /// Freeze backdrop, with history playback stamped into the selection when present.
     private func mosaicSampleContext() -> AnnotationDrawing.MosaicSampleContext? {
         guard let freezeImage else { return nil }
@@ -380,24 +488,50 @@ final class SelectionOverlayNSView: NSView {
                 selectionOriginInImage: origin
             )
         }
-        let stamped = NSImage(size: freezeImage.size, flipped: false) { _ in
-            freezeImage.draw(
-                in: CGRect(origin: .zero, size: freezeImage.size),
+        return AnnotationDrawing.MosaicSampleContext(
+            image: stampedFreeze(freezeImage, playback: playbackImage),
+            selectionOriginInImage: origin
+        )
+    }
+
+    /// Flattened eagerly and cached: mosaic reads this through `cgImage(forProposedRect:)`, and a
+    /// block-backed `NSImage` would re-rasterize the full screen for every mosaic, every frame.
+    /// Drawn into an owned bitmap — `lockFocus` here would steal the window's context mid-`draw`.
+    private func stampedFreeze(_ freeze: NSImage, playback: NSImage) -> NSImage {
+        let key = StampedFreezeKey(
+            playback: playback,
+            selectionRect: selectionRect
+        )
+        if key == cachedStampedKey, let cachedStampedFreeze {
+            return cachedStampedFreeze
+        }
+        // Keep the freeze's own pixel density so the blur samples full-resolution pixels.
+        let freezePixels = freeze.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        let freezeScale = freezePixels.map { CGFloat($0.width) / freeze.size.width } ?? 2
+        guard let canvas = MarksCanvas(
+            size: freeze.size,
+            scale: max(freezeScale, 1),
+            colorSpace: freezePixels?.colorSpace
+        ) else {
+            return freeze
+        }
+        canvas.draw {
+            freeze.draw(
+                in: CGRect(origin: .zero, size: freeze.size),
                 from: .zero,
                 operation: .copy,
                 fraction: 1
             )
-            playbackImage.draw(
-                in: self.selectionRect,
-                from: CGRect(origin: .zero, size: playbackImage.size),
+            playback.draw(
+                in: selectionRect,
+                from: CGRect(origin: .zero, size: playback.size),
                 operation: .copy,
                 fraction: 1
             )
-            return true
         }
-        return AnnotationDrawing.MosaicSampleContext(
-            image: stamped,
-            selectionOriginInImage: origin
-        )
+        guard let stamped = canvas.finishedImage() else { return freeze }
+        cachedStampedFreeze = stamped
+        cachedStampedKey = key
+        return stamped
     }
 }

@@ -1,6 +1,6 @@
 # Marks rendering: mosaic sampling and overlay redraw cost
 
-How annotate marks get rendered, why mosaic needs to read pixels back, and the bugs that
+How annotate marks get rendered, why mosaic needs to read pixels back, and the two bugs that
 forced the current design. Written 2026-08-15, after three attempts — two of which are recorded
 here specifically so nobody tries them again.
 
@@ -102,10 +102,41 @@ Magnifier `includeAnnotations` uses the same readback. No recursion anywhere.
 `priorMarks: [Annotation]` parameter threaded through mosaic and magnifier. The `canvas` reference
 replaces all of it.
 
+## The second half: don't re-render every frame
+
+Fixing sampling did not by itself fix the freeze, because the overlay re-rendered **every mark on
+every mouse-move**. During a pencil drag the committed marks do not change at all — only the draft
+grows — so that work was pure waste.
+
+`SelectionOverlayNSView` now caches the rendered committed-marks layer, keyed by the committed
+marks plus size / origin / scale / hidden-magnifier IDs / sample-image identity.
+
+Drafts split by what they need:
+
+| Draft tool | Where it draws | Why |
+|---|---|---|
+| pencil, shape, arrow, text, step | on top of the cached layer | just a stroke; nothing samples or erases |
+| eraser | inside the layer | `destinationOut` must act on marks alone |
+| mosaic, marker, magnifier | inside the layer | they sample what is under them |
+
+So a pencil drag costs one cached blit plus one polyline, instead of a full layer render with a
+blur per mosaic. Region drags for mosaic/marker/eraser still render per frame by design.
+
+Two smaller wins in the same area:
+
+- Freehand rejects samples closer than `pencilSampleSpacing`, so most moves in a fast scribble
+  produce an identical stroke. `appendPencilOrShapeDraft` now compares payloads and skips the
+  redraw entirely instead of re-rendering an unchanged picture.
+- The playback-stamped freeze (`,` / `.`) is built eagerly and cached. It used to be a block-backed
+  full-screen `NSImage` rebuilt per frame, which every mosaic then re-rasterized through
+  `cgImage(forProposedRect:)`.
+- `drawPencil` builds its path with `CGMutablePath.addLines(between:)` rather than a per-point
+  Swift loop.
+
 ## Measurements
 
-Both tables come from compiling the real `Annotation/` sources standalone (*Reproducing the measurements*), so "before" is
-the actual previous implementation, not a reconstruction.
+Both tables come from compiling the real `Annotation/` sources standalone (see *Reproducing the
+measurements*), so "before" is the actual previous implementation, not a reconstruction.
 
 ### Correctness
 
@@ -149,10 +180,11 @@ The cost is inherent. The old lazy block-backed `NSImage` rasterized *directly i
 context*; a readable canvas needs its own buffer plus a blit out of it. That is the price of pixel
 readback.
 
-It is charged on **every** layer render today, so the net is slightly worse than before at low
-mark counts (28.4 vs 26.1 ms) and clearly better at high ones (51.9 vs 58.3 ms). The follow-up is
-therefore to render *less often* rather than to make each render cheaper — the overlay re-renders
-every mark on every mouse-move, which a pencil drag does not need at all.
+It is worth paying because it is now charged **once per change** instead of once per frame — the
+layer cache (*Don't re-render every frame*) removes it from the common drag entirely. It is still
+charged per frame on mosaic/marker/eraser region drags, where at low mark counts the net is
+slightly worse than before (28.4 vs 26.1 ms) and at high mark counts clearly better
+(51.9 vs 58.3 ms).
 
 ## Constraints for future work
 
@@ -163,7 +195,8 @@ once.
 - **Do not re-derive prior marks from vectors** for sampling. Use `snapshotCrop`. See *Attempt 2*.
 - **Do not full-screen recomposite** freeze + marks per brush tip.
 - **No `lockFocus`** inside overlay or `NSImage` drawing handlers — it steals the current context.
-  Use a `MarksCanvas` when you need an offscreen buffer mid-draw.
+  This is why the playback-stamped freeze uses a `MarksCanvas`; the first version of that cache
+  used `lockFocusFlipped` and had to be rewritten.
 - **Give the canvas the destination's colour space** — the screen's for the overlay, the base
   image's for a bake. The block-backed image used to inherit this for free. Hardcoding one
   round-trips P3 marks through sRGB and visibly dulls them.
@@ -171,6 +204,8 @@ once.
   points). Bitmap memory row 0 is the *top* scanline, so `snapshotCrop` flips when converting
   points → pixels. Get this wrong and crops come out vertically mirrored.
 - **`finishedImage()` shares the buffer.** Never draw into a canvas after calling it.
+- **Cache keys hold images strongly and compare by identity** (`===`). An `ObjectIdentifier` on an
+  unretained `NSImage` can collide after dealloc/realloc and serve a stale layer.
 
 Still deferred, unrelated to this work: the eraser's concentric-ring brush tip (it currently
 reuses the mosaic outline).

@@ -12,11 +12,11 @@ extension AnnotationDrawing {
             NSBezierPath(ovalIn: CGRect(x: first.x - r, y: first.y - r, width: r * 2, height: r * 2)).fill()
             return
         }
-        let path = NSBezierPath()
-        path.move(to: first)
-        for p in points.dropFirst() {
-            path.line(to: p)
-        }
+        // Bulk `addLines` beats appending point by point — a long scribble is thousands of points
+        // and the live draft rebuilds this path on every accepted sample.
+        let cgPath = CGMutablePath()
+        cgPath.addLines(between: points)
+        let path = NSBezierPath(cgPath: cgPath)
         // Round caps/joins suit freehand; dash still reuses StrokeLineStyle.
         path.lineJoinStyle = .round
         path.lineCapStyle = .round

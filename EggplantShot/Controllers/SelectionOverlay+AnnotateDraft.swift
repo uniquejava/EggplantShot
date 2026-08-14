@@ -200,7 +200,11 @@ extension SelectionOverlayController {
     func appendPencilOrShapeDraft(startLocal: CGPoint, globalPoint: CGPoint) {
         // Selection-local, may extend outside the blue rect.
         let end = toLocal(globalPoint)
-        draftAnnotation = updatedDraft(from: startLocal, to: end)
+        let updated = updatedDraft(from: startLocal, to: end)
+        // Freehand rejects samples closer than `pencilSampleSpacing`, so most moves in a fast
+        // scribble produce the same stroke. Redrawing those costs a full marks layer for nothing.
+        if let current = draftAnnotation, current.payload == updated.payload { return }
+        draftAnnotation = updated
         updateHighlight(showHandles: true)
     }
 
