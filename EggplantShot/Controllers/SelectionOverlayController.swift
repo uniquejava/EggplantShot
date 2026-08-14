@@ -220,7 +220,7 @@ final class SelectionOverlayController {
         finish(.confirmed(rect, image: image, action: action, document: document))
     }
 
-    /// Crop selection → dismiss overlay → OCR → hand text to `SnipController` (clipboard + sound).
+    /// Crop selection → dismiss overlay → QR / OCR → hand text to `SnipController` (clipboard + sound).
     func performOCR() {
         endTextEditing(commit: true)
         guard !currentRect.isNull,

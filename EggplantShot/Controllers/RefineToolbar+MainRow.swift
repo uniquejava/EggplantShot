@@ -83,7 +83,7 @@ extension RefineToolbarController {
         let editViews: [NSView] = [
             iconButton(
                 systemName: "doc.text.viewfinder",
-                tooltip: "OCR",
+                tooltip: "OCR (QR or text)",
                 enabled: true,
                 action: #selector(ocrTapped)
             ),
