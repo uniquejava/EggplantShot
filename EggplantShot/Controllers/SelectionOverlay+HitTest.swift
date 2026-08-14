@@ -34,6 +34,26 @@ extension SelectionOverlayController {
             }
         }
 
+        let commandHeld = NSEvent.modifierFlags.contains(.command)
+
+        // Paint tools (pencil / marker / mosaic / eraser): never steal move hits from existing
+        // marks — paint/erase over shapes and strokes. Hold ⌘ to move (handles still work above).
+        if annotateTool.drawsThroughMarks, !commandHeld {
+            return .draw
+        }
+
+        // Step is click-to-stamp: place through shapes / arrows / text / etc. Existing step
+        // badges stay moveable so you can rearrange numbers without ⌘.
+        if annotateTool == .step, !commandHeld {
+            for ann in annotations.reversed() {
+                guard ann.isStep else { continue }
+                if toGlobal(ann.boundingRect).insetBy(dx: -2, dy: -2).contains(point) {
+                    return .border(id: ann.id)
+                }
+            }
+            return .draw
+        }
+
         for ann in annotations.reversed() {
             if ann.id == editingTextID { continue }
             if ann.isText {
@@ -66,9 +86,9 @@ extension SelectionOverlayController {
                 }
                 continue
             }
-            // Pencil / mosaic / eraser marks always draw-through while any annotate tool is armed
-            // (keep tool cursor over strokes / blurred / erased areas). Hold ⌘ for temporary move.
-            if (ann.isPencil || ann.isMosaic || ann.isEraser), !NSEvent.modifierFlags.contains(.command) {
+            // Under object tools, paint-like marks still draw-through (keep reticle over ink /
+            // blur / highlight / erase). Hold ⌘ for temporary move.
+            if ann.isPaintLikeMark, !commandHeld {
                 continue
             }
             if isOnAnnotationStroke(ann, at: point) {

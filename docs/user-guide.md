@@ -59,18 +59,22 @@ Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recogn
   - ASDF mnemonics: **A** like ⌘A — box-select with a rectangle; **S** like an S-curve arrow; **D** for Draw; **F** like a brush for highlight. **I** = Insert (text at the cursor).
 - **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → disarm tool → deselect mark → with marks, first Esc tips “Press Esc again to discard”, second Esc cancels (toolbar **✕** still discards anytime).
 
-### Pencil / mosaic / eraser — move vs draw
+### Paint tools — move vs draw
 
-Hovering an existing **pencil**, **mosaic (blur)**, or **eraser** mark **keeps the draw cursor** under any annotate tool, so you can keep painting without accidentally grabbing the mark.
+With **pencil**, **marker**, **mosaic**, or **eraser** armed, hovering **any** existing mark (shapes, arrows, text, …) **keeps the draw cursor**, so you can paint or erase over ink without grabbing it.
 
-To **move** one of those marks without switching tools:
+To **move** a mark without switching tools:
 
 1. Hold **⌘**
 2. Pointer over the mark → four-arrow cursor
 3. Drag to reposition
 4. Release **⌘** to draw again
 
-(Selected mosaic / eraser **regions** still expose resize handles; body move needs **⌘**.)
+(Selected region marks still expose resize handles; body move needs **⌘**.)
+
+Under object tools (shape / arrow / text / …), paint-like marks (pencil / marker / mosaic / eraser) still draw-through the same way; other marks stay hit-to-move.
+
+**Step** is an exception among object tools: it stamps through shapes / arrows / etc. so you can place a number on a border. Hover an existing step badge to move it; hold **⌘** to move other marks.
 
 ### Other handy modifiers
 
@@ -78,7 +82,8 @@ To **move** one of those marks without switching tools:
 |---------|----------|--------|
 | Shape / mosaic region | **Shift** | Square / circle |
 | Arrow / pencil / freehand mosaic | **Shift** | Straight line (arrow also 45° snap) |
-| Pencil / mosaic / eraser marks | **⌘** | Temporary move |
+| Paint tools over any mark | **⌘** | Temporary move |
+| Object tools over paint-like marks | **⌘** | Temporary move |
 
 ## History while capturing
 

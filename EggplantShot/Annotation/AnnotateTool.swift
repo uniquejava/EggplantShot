@@ -14,4 +14,15 @@ enum AnnotateTool: Equatable {
     case step
     case magnifier
     case eraser
+
+    /// Freehand / effect tools: existing marks draw-through so paint/erase isn't stolen by move hits.
+    /// Hold ⌘ for temporary move (selected handles still work without ⌘).
+    var drawsThroughMarks: Bool {
+        switch self {
+        case .pencil, .marker, .mosaic, .eraser:
+            return true
+        case .none, .rectangle, .arrow, .text, .step, .magnifier:
+            return false
+        }
+    }
 }

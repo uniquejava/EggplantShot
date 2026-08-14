@@ -187,7 +187,7 @@ extension SelectionOverlayController {
             eventMonitors.append(mon)
         }
 
-        // ⌘ up/down: refresh move-vs-draw cursor over pencil / mosaic / eraser without waiting for mouse move.
+        // ⌘ up/down: refresh move-vs-draw cursor (paint tools over any mark; object tools over paint marks).
         let flagsMask: NSEvent.EventTypeMask = .flagsChanged
         if let mon = NSEvent.addLocalMonitorForEvents(matching: flagsMask, handler: { [weak self] event in
             self?.handleAnnotateModifierFlagsChanged()
@@ -360,7 +360,8 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// ⌘ over pencil / mosaic / eraser marks: temporary move (cursor updates on key alone).
+    /// ⌘: temporary move while an annotate tool is armed (cursor updates on key alone).
+    /// Paint tools (pencil / marker / mosaic / eraser): move any mark. Object tools: move paint-like marks.
     func handleAnnotateModifierFlagsChanged() {
         guard phase == .refining, annotateTool != .none, dragKind == nil else { return }
         updateOverlayCursor(at: NSEvent.mouseLocation)

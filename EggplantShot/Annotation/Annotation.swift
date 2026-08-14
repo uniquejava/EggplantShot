@@ -99,6 +99,11 @@ struct Annotation: Equatable {
         return false
     }
 
+    /// Pencil / marker / mosaic / eraser — draw-through under object tools unless ⌘.
+    var isPaintLikeMark: Bool {
+        isPencil || isMarker || isMosaic || isEraser
+    }
+
     var isText: Bool {
         if case .text = payload { return true }
         return false

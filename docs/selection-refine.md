@@ -21,6 +21,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
   **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy.
   **R** / **G** / **B** → palette red / green / cyan (selected colored mark, else armed tool; no-op for mosaic / eraser).
   ASDF row mnemonics: **A** ≈ ⌘A “select with a rect” · **S** ≈ S-curve arrow · **D**raw · **F** like a brush (highlight). **I** = Insert (text).
+- **Hit / move vs draw:** Paint tools (**pencil** / **marker** / **mosaic** / **eraser**) draw-through **all** existing marks (including shapes / arrows / text) so brush work isn’t stolen by move hits. Hold **⌘** for temporary move (four-arrow). Selected mark **handles** still resize without ⌘. **Step** draws through foreign marks so you can stamp on a shape border; existing step badges stay hit-to-move (⌘ still moves anything). Other object tools (shape / arrow / text / magnifier) keep hit-to-move on their targets; paint-like marks (pencil / marker / mosaic / eraser) still draw-through under those tools unless **⌘**.
 
 ## Refine shell
 
@@ -80,14 +81,14 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 - Sub-toolbar: stroke + line-style + color (no fill / kind).
 - Color reticle; mouse-down hides cursor. Freehand; Shift → straight any angle.
-- No resize chrome; no auto-select after stroke. Pencil strokes always draw-through under any annotate tool (keep reticle / eraser tip); hold **⌘** for temporary move (four-arrow + drag).
+- No resize chrome; no auto-select after stroke. Under object tools, pencil strokes draw-through (keep reticle); hold **⌘** for temporary move. Under paint tools, all marks draw-through (see Shared rules).
 - Live sampling on mouse-drag only (~2pt spacing; no 120Hz tip poll); **mouse-up** runs RDP simplify so many strokes don’t bloat history / mosaic re-samples.
 
 ### Marker
 
 - Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to highlight an area) | **color card** (preview 24 + palette 2×10) — same layout as mosaic, with color instead of blur intensity.
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
-- Region: drag like mosaic; Shift → square / circle; entire rect/oval is highlighted. **Edit chrome**: while drawing / moving / resizing → **1 device-pixel solid** contrast hairline; after mouse-up (selected idle) → **handles only** (no border); **mouseover** on a non-selected region → dashed contrast outline (like text hover). Hit mark to move; handles resize.
+- Region: drag like mosaic; Shift → square / circle; entire rect/oval is highlighted. **Edit chrome**: while drawing / moving / resizing → **1 device-pixel solid** contrast hairline; after mouse-up (selected idle) → **handles only** (no border); **mouseover** on a non-selected region → dashed contrast outline (like text hover). Under object tools: hit mark to move; handles resize. Under paint tools: draw-through (Shared rules); **⌘** to move.
 - Effect: **multiply** blend (Snipaste highlighter — dark → darker, light glyphs → bright tint). Marks paint on a transparent offscreen layer for eraser, so multiply first stamps the freeze/base under the clip, then tints. Near-white swatches fall back to sourceOver wash. **Vector** stroke/region data only (P4). Default color yellow.
 - Toolbar icon: SF Symbol `paintbrush.pointed`.
 - Disk: `type: "marker"` with `markerStyle` (brushWidth / color) plus either stroke `points` or region `kind` + `rect`.
@@ -99,7 +100,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
 - Effect: **gaussian blur** of freeze/base under the brush/region (`CIGaussianBlur`; linear intensity 3…24 → ~0.7…14 pt). Simple path: crop → blur → clip to stroke/region. **Vector** stroke/region data only (P4; never mutates `baseImage`).
 - Known gap / backlog: sample is freeze/base **only** (not prior marks). Blurring over existing ink on a dark freeze covers that ink with opaque freeze pixels. Fix later with a cheap freeze+marks sample (avoid full-screen recomposite per tip).
-- Hit: mosaic marks draw-through under any annotate tool (no move hand over blurred areas); hold **⌘** to move (region handles still work when selected).
+- Hit: under object tools, mosaic marks draw-through (no move hand over blurred areas); hold **⌘** to move (region handles still work when selected). Under paint tools, all marks draw-through (Shared rules).
 - No color palette.
 
 ### Eraser
@@ -108,7 +109,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking (tip temporarily reuses mosaic brush outline; concentric-ring tip deferred). No resize chrome / no auto-select after stroke.
 - Region: drag like mosaic; Shift → square / circle; auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles.
 - Effect: punches **annotation marks only** (`destinationOut` on a marks layer composited over the freeze/base) — never erases image pixels (P4). Order matters: later marks redraw on top of earlier erasures.
-- Hit: eraser marks draw-through under any annotate tool (no move hand over erased areas); hold **⌘** to move.
+- Hit: under object tools, eraser marks draw-through (no move hand over erased areas); hold **⌘** to move. Under paint tools, all marks draw-through (Shared rules).
 - Disk: `type: "eraser"` with `eraserStyle` (brushWidth) plus either stroke `points` or region `kind` + `rect`.
 
 ### Text
@@ -126,7 +127,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Sub-toolbar: **filled** / **outline** / **plain** chrome | size ▾ | color grid.
 - Defaults: **filled**, size **4**, cyan (last-used prefs override).
 - Cursor is a live badge of the **next** number (current style) — click stamps at the hotspot; cursor then advances.
-- Place: click anywhere on freeze → `max(existing)+1` (or `1`); auto-select; drag to move. No resize handles; no inline edit.
+- Place: click anywhere on freeze → `max(existing)+1` (or `1`); auto-select; drag to move. No resize handles; no inline edit. Stamps through foreign marks (shape borders, etc.); hover an existing step to move it; **⌘** moves other marks.
 - Styles: filled = color disk + white digit; outline = color ring + color digit; plain = color digit only (toolbar chip uses a dashed plate so it still reads as a button).
 - Size levels map to diameter (`10 + size×3.2` pt). Style / size / color apply to selection (or next place).
 - Edit chrome: dashed contrast square around the badge (Snipaste).
