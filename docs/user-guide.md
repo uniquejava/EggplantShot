@@ -1,6 +1,6 @@
 # EggplantShot — User guide
 
-Menu-bar screenshot tool for macOS (Snipaste-style capture → annotate → pin / copy / save).
+Menu-bar screenshot tool for macOS (Snipaste-style capture → annotate → pin / **paste clipboard as floating pin**).
 
 ## Permissions
 
@@ -24,9 +24,29 @@ Without Accessibility, hotkeys do nothing. Without Screen Recording, capture fai
 
 Menu bar → **Disable hotkeys** pauses global shortcuts (persisted).
 
+## Paste (highlight)
+
+| Action | Default |
+|--------|---------|
+| **Paste** | `F3` |
+
+This is **not** the system Paste into another app. EggplantShot turns whatever is on the clipboard into a **floating pin** on your screen (Snipaste-style “paste as image window”).
+
+| Clipboard content | What you get |
+|-------------------|--------------|
+| Image (e.g. after **Capture and copy**) | Pinned bitmap |
+| Color text — `#RRGGBB` / `#RGB`, or three RGB numbers `0–255` or `0–1` | Color swatch card with the value labeled |
+| Plain text or HTML | Text rendered as a small sticky image |
+| Copied **image file** (Finder) | The image itself; press **Paste** again → path as text |
+| Copied non-image file | File path as text image |
+
+Pin appears near the mouse. Works from the menu bar **Paste** item too. Ignored while a capture overlay is active.
+
+**Try this:** `⌘F1` a region → `F3` to float it as a reference while you work in another window. Or copy `#3B82F6` / a paragraph → `F3` for a color card or text sticky.
+
 ## Pins
 
-Floating image above ordinary windows. Drag to move. Scroll wheel zooms ±10% (brief % badge in the top-left). **Esc** or double-click closes that pin only.
+Floating image above ordinary windows. Drag to move. Scroll wheel zooms ±10% (brief % badge in the top-left). **Esc** or double-click closes that pin only. **Hide/Show all images** (`⇧F3`) hides or restores every pin.
 
 ## Annotate (during refine)
 

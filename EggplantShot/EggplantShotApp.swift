@@ -148,6 +148,11 @@ final class AppState: ObservableObject {
         objectWillChange.send()
     }
 
+    func pasteFromClipboard() {
+        snipController.pasteFromClipboard()
+        objectWillChange.send()
+    }
+
     func toggleHotkeysDisabled() {
         setHotkeysDisabled(!hotkeySettings.hotkeysDisabled)
     }
@@ -230,6 +235,8 @@ final class AppState: ObservableObject {
             snip(mode: .pin)
         case .snipAndCopy:
             snip(mode: .copy)
+        case .paste:
+            pasteFromClipboard()
         case .hideShowImages:
             toggleHideShowImages()
         }
@@ -256,7 +263,7 @@ final class AppState: ObservableObject {
             let alert = NSAlert()
             alert.messageText = "Accessibility Access Needed"
             alert.informativeText = """
-            EggplantShot needs Accessibility to listen for F1 and other global hotkeys.
+            EggplantShot needs Accessibility to listen for F1 / F3 and other global hotkeys.
 
             If the app is already checked but hotkeys still fail:
             1. Quit EggplantShot

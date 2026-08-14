@@ -46,7 +46,7 @@ Do **not** open the DerivedData path, and do **not** skip `-derivedDataPath buil
 EggplantShot/
   EggplantShotApp.swift
   Hotkey/HotkeyMonitor.swift + HotkeyShortcut.swift
-  Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift
+  Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift + ClipboardPaster.swift
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (draft / hit-test / style / text / geometry / history / toolbar)
   Controllers/RefineToolbarController.swift + RefineToolbar+*.swift + RefineToolbarViews.swift
@@ -68,10 +68,11 @@ EggplantShot/
 3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
 4. **Esc** during drag/refine cancels the capture. Esc on a pin closes that pin only.
 5. Pins use `.statusBar` level (above ordinary windows; below capture overlay).
-6. **Disable hotkeys** pauses the event tap (persisted).
-7. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
-8. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
-9. During an active **Capture** (refine), **`,`** / **`.`** step through prior capture records (older / newer).
+6. **Paste (F3)** → clipboard → floating pin (image; HEX/RGB color → swatch; plain/HTML text → text image; image file → image, second paste → path text). Ignored while capture overlay is active.
+7. **Disable hotkeys** pauses the event tap (persisted).
+8. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
+9. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
+10. During an active **Capture** (refine), **`,`** / **`.`** step through prior capture records (older / newer).
 
 ## Annotate extensibility (P4 — always)
 

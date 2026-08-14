@@ -22,10 +22,9 @@ struct StatusMenuContent: View {
         .disabled(true)
 
         Button("Paste") {
-            // Stub — future: pin clipboard image.
+            appState.pasteFromClipboard()
         }
         .keyboardShortcut(.f3, modifiers: [])
-        .disabled(true)
 
         Button(appState.snipController.pinBoard.imagesHidden ? "Show all images" : "Hide all images") {
             appState.toggleHideShowImages()

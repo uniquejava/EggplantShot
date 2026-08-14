@@ -56,6 +56,7 @@
 		B1000000000000000000000F /* ImageFileSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000F /* ImageFileSaver.swift */; };
 		B1000000000000000000001A /* TextRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001A /* TextRecognizer.swift */; };
 		B1000000000000000000001B /* FeedbackSound.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001B /* FeedbackSound.swift */; };
+		B1C000000000000000000001 /* ClipboardPaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C000000000000000000001 /* ClipboardPaster.swift */; };
 		B1000000000000000000001C /* ocr-success.wav in Resources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001C /* ocr-success.wav */; };
 		B10000000000000000000006 /* SelectionOverlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000006 /* SelectionOverlayController.swift */; };
 		B10000000000000000000017 /* RefineToolbarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000017 /* RefineToolbarController.swift */; };
@@ -126,6 +127,7 @@
 		C1000000000000000000000F /* ImageFileSaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageFileSaver.swift; sourceTree = "<group>"; };
 		C1000000000000000000001A /* TextRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextRecognizer.swift; sourceTree = "<group>"; };
 		C1000000000000000000001B /* FeedbackSound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackSound.swift; sourceTree = "<group>"; };
+		C1C000000000000000000001 /* ClipboardPaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPaster.swift; sourceTree = "<group>"; };
 		C1000000000000000000001C /* ocr-success.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "ocr-success.wav"; sourceTree = "<group>"; };
 		C10000000000000000000006 /* SelectionOverlayController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOverlayController.swift; sourceTree = "<group>"; };
 		C10000000000000000000017 /* RefineToolbarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefineToolbarController.swift; sourceTree = "<group>"; };
@@ -210,6 +212,7 @@
 				C1000000000000000000000F /* ImageFileSaver.swift */,
 				C1000000000000000000001A /* TextRecognizer.swift */,
 				C1000000000000000000001B /* FeedbackSound.swift */,
+				C1C000000000000000000001 /* ClipboardPaster.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -424,6 +427,7 @@
 				B1000000000000000000000F /* ImageFileSaver.swift in Sources */,
 				B1000000000000000000001A /* TextRecognizer.swift in Sources */,
 				B1000000000000000000001B /* FeedbackSound.swift in Sources */,
+				B1C000000000000000000001 /* ClipboardPaster.swift in Sources */,
 				B10000000000000000000006 /* SelectionOverlayController.swift in Sources */,
 				B10000000000000000000017 /* RefineToolbarController.swift in Sources */,
 				B10000000000000000000018 /* TextAnnotationEditor.swift in Sources */,

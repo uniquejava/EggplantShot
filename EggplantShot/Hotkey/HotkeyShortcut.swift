@@ -81,12 +81,14 @@ struct HotkeyBinding: Equatable, Hashable, Codable {
 enum HotkeyAction: String, CaseIterable, Codable {
     case snip
     case snipAndCopy
+    case paste
     case hideShowImages
 
     var settingsTitle: String {
         switch self {
         case .snip: return "Capture"
         case .snipAndCopy: return "Capture and copy"
+        case .paste: return "Paste"
         case .hideShowImages: return "Hide/Show images"
         }
     }
@@ -103,6 +105,7 @@ final class HotkeySettings: ObservableObject {
 
     @Published private(set) var snip: HotkeyBinding
     @Published private(set) var snipAndCopy: HotkeyBinding
+    @Published private(set) var paste: HotkeyBinding
     @Published private(set) var hideShowImages: HotkeyBinding
 
     static let defaultSnip = HotkeyBinding(keyCode: HotkeyBinding.f1, modifiers: 0)
@@ -110,6 +113,7 @@ final class HotkeySettings: ObservableObject {
         keyCode: HotkeyBinding.f1,
         modifiers: NSEvent.ModifierFlags.command.rawValue
     )
+    static let defaultPaste = HotkeyBinding(keyCode: HotkeyBinding.f3, modifiers: 0)
     static let defaultHideShowImages = HotkeyBinding(
         keyCode: HotkeyBinding.f3,
         modifiers: NSEvent.ModifierFlags.shift.rawValue
@@ -122,10 +126,12 @@ final class HotkeySettings: ObservableObject {
            let decoded = try? JSONDecoder().decode(StoredBindings.self, from: data) {
             snip = decoded.snip
             snipAndCopy = decoded.snipAndCopy
+            paste = decoded.paste ?? Self.defaultPaste
             hideShowImages = decoded.hideShowImages
         } else {
             snip = Self.defaultSnip
             snipAndCopy = Self.defaultSnipAndCopy
+            paste = Self.defaultPaste
             hideShowImages = Self.defaultHideShowImages
         }
     }
@@ -134,6 +140,7 @@ final class HotkeySettings: ObservableObject {
         switch action {
         case .snip: return snip
         case .snipAndCopy: return snipAndCopy
+        case .paste: return paste
         case .hideShowImages: return hideShowImages
         }
     }
@@ -157,6 +164,7 @@ final class HotkeySettings: ObservableObject {
     func resetToDefaults() {
         snip = Self.defaultSnip
         snipAndCopy = Self.defaultSnipAndCopy
+        paste = Self.defaultPaste
         hideShowImages = Self.defaultHideShowImages
         persistBindings()
     }
@@ -165,6 +173,7 @@ final class HotkeySettings: ObservableObject {
         [
             .snip: snip,
             .snipAndCopy: snipAndCopy,
+            .paste: paste,
             .hideShowImages: hideShowImages,
         ]
     }
@@ -173,12 +182,18 @@ final class HotkeySettings: ObservableObject {
         switch action {
         case .snip: snip = binding
         case .snipAndCopy: snipAndCopy = binding
+        case .paste: paste = binding
         case .hideShowImages: hideShowImages = binding
         }
     }
 
     private func persistBindings() {
-        let stored = StoredBindings(snip: snip, snipAndCopy: snipAndCopy, hideShowImages: hideShowImages)
+        let stored = StoredBindings(
+            snip: snip,
+            snipAndCopy: snipAndCopy,
+            paste: paste,
+            hideShowImages: hideShowImages
+        )
         if let data = try? JSONEncoder().encode(stored) {
             UserDefaults.standard.set(data, forKey: Self.bindingsKey)
         }
@@ -187,6 +202,7 @@ final class HotkeySettings: ObservableObject {
     private struct StoredBindings: Codable {
         var snip: HotkeyBinding
         var snipAndCopy: HotkeyBinding
+        var paste: HotkeyBinding?
         var hideShowImages: HotkeyBinding
     }
 }

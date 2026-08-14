@@ -21,7 +21,7 @@ struct SettingsView: View {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 460, height: 340)
+        .frame(width: 460, height: 380)
         .onAppear {
             appState.refreshPermissions()
         }

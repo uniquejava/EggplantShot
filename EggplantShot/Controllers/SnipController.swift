@@ -69,6 +69,18 @@ final class SnipController {
         pinBoard.toggleHideShow()
     }
 
+    /// Snipaste-style Paste: clipboard → floating pin (image / color card / text / image file).
+    func pasteFromClipboard() {
+        guard !overlay.isActive else { return }
+        guard let image = ClipboardPaster.imageFromPasteboard() else { return }
+        if pinBoard.imagesHidden {
+            pinBoard.toggleHideShow()
+        }
+        let mouse = NSEvent.mouseLocation
+        let anchor = CGRect(x: mouse.x - 1, y: mouse.y - 1, width: 2, height: 2)
+        pinBoard.pin(image, near: anchor)
+    }
+
     private func copyToClipboard(_ image: NSImage) {
         let pb = NSPasteboard.general
         pb.clearContents()
