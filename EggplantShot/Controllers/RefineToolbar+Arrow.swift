@@ -171,3 +171,33 @@ extension RefineToolbarController {
     }
 
 }
+/// Caps Switch: press nudges the stacked glyphs down; release restores (Snipaste press feel).
+final class ArrowCapsSwitchButton: NSButton {
+    let pressTranslationY: CGFloat = -1.5
+
+    override func mouseDown(with event: NSEvent) {
+        wantsLayer = true
+        applyPressOffset(pressTranslationY, animated: true)
+        // Blocks until mouse-up, then sends the action.
+        super.mouseDown(with: event)
+        applyPressOffset(0, animated: true)
+    }
+
+    func applyPressOffset(_ y: CGFloat, animated: Bool) {
+        wantsLayer = true
+        let apply = {
+            self.layer?.transform = CATransform3DMakeTranslation(0, y, 0)
+        }
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.07
+                ctx.allowsImplicitAnimation = true
+                apply()
+            }
+        } else {
+            apply()
+        }
+    }
+}
+
+

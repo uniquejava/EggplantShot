@@ -74,6 +74,36 @@
 		B1000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* SettingsView.swift */; };
 		B10000000000000000000012 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* AboutView.swift */; };
 		B1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000B /* Assets.xcassets */; };
+		B1E00000000000000000000018 /* Annotation+Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000018 /* Annotation+Geometry.swift */; };
+		B1E00000000000000000000019 /* Annotation+Shape.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000019 /* Annotation+Shape.swift */; };
+		B1E0000000000000000000001A /* Annotation+Arrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000001A /* Annotation+Arrow.swift */; };
+		B1E0000000000000000000001B /* Annotation+Pencil.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000001B /* Annotation+Pencil.swift */; };
+		B1E0000000000000000000001C /* Annotation+Marker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000001C /* Annotation+Marker.swift */; };
+		B1E0000000000000000000001D /* Annotation+Mosaic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000001D /* Annotation+Mosaic.swift */; };
+		B1E0000000000000000000001E /* Annotation+Eraser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000001E /* Annotation+Eraser.swift */; };
+		B1E0000000000000000000001F /* Annotation+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000001F /* Annotation+Text.swift */; };
+		B1E00000000000000000000020 /* Annotation+Step.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000020 /* Annotation+Step.swift */; };
+		B1E00000000000000000000021 /* Annotation+Magnifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000021 /* Annotation+Magnifier.swift */; };
+		B1E00000000000000000000022 /* AnnotationCoding+Shape.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000022 /* AnnotationCoding+Shape.swift */; };
+		B1E00000000000000000000023 /* AnnotationCoding+Arrow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000023 /* AnnotationCoding+Arrow.swift */; };
+		B1E00000000000000000000024 /* AnnotationCoding+Pencil.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000024 /* AnnotationCoding+Pencil.swift */; };
+		B1E00000000000000000000025 /* AnnotationCoding+Marker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000025 /* AnnotationCoding+Marker.swift */; };
+		B1E00000000000000000000026 /* AnnotationCoding+Mosaic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000026 /* AnnotationCoding+Mosaic.swift */; };
+		B1E00000000000000000000027 /* AnnotationCoding+Eraser.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000027 /* AnnotationCoding+Eraser.swift */; };
+		B1E00000000000000000000028 /* AnnotationCoding+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000028 /* AnnotationCoding+Text.swift */; };
+		B1E00000000000000000000029 /* AnnotationCoding+Step.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000029 /* AnnotationCoding+Step.swift */; };
+		B1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift */; };
+		B1F00000000000000000000010 /* RefineToolbar+MainRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000010 /* RefineToolbar+MainRow.swift */; };
+		B1F00000000000000000000011 /* RefineToolbar+Shape.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000011 /* RefineToolbar+Shape.swift */; };
+		B1F00000000000000000000012 /* RefineToolbar+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000012 /* RefineToolbar+Layout.swift */; };
+		B1F00000000000000000000013 /* RefineToolbar+Sync.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000013 /* RefineToolbar+Sync.swift */; };
+		B1F00000000000000000000014 /* SelectionOverlay+Mouse.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000014 /* SelectionOverlay+Mouse.swift */; };
+		B1F00000000000000000000015 /* RefineToolbarTooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000015 /* RefineToolbarTooltip.swift */; };
+		B1F00000000000000000000016 /* HoverChromeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000016 /* HoverChromeCard.swift */; };
+		B1F00000000000000000000017 /* PaletteSwatch.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000017 /* PaletteSwatch.swift */; };
+		B1F00000000000000000000018 /* IntensitySlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000018 /* IntensitySlider.swift */; };
+		B1F00000000000000000000019 /* PinPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000019 /* PinPanel.swift */; };
+		B1F0000000000000000000001A /* SelectionOverlayNSView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F0000000000000000000001A /* SelectionOverlayNSView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -147,6 +177,36 @@
 		C1000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C1000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C1000000000000000000000D /* EggplantShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = EggplantShot.entitlements; sourceTree = "<group>"; };
+		C1E00000000000000000000018 /* Annotation+Geometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Geometry.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000019 /* Annotation+Shape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Shape.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000001A /* Annotation+Arrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Arrow.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000001B /* Annotation+Pencil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Pencil.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000001C /* Annotation+Marker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Marker.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000001D /* Annotation+Mosaic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Mosaic.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000001E /* Annotation+Eraser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Eraser.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000001F /* Annotation+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Text.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000020 /* Annotation+Step.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Step.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000021 /* Annotation+Magnifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Annotation+Magnifier.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000022 /* AnnotationCoding+Shape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Shape.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000023 /* AnnotationCoding+Arrow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Arrow.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000024 /* AnnotationCoding+Pencil.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Pencil.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000025 /* AnnotationCoding+Marker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Marker.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000026 /* AnnotationCoding+Mosaic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Mosaic.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000027 /* AnnotationCoding+Eraser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Eraser.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000028 /* AnnotationCoding+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Text.swift"; sourceTree = "<group>"; };
+		C1E00000000000000000000029 /* AnnotationCoding+Step.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Step.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Magnifier.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000010 /* RefineToolbar+MainRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+MainRow.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000011 /* RefineToolbar+Shape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Shape.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000012 /* RefineToolbar+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Layout.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000013 /* RefineToolbar+Sync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Sync.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000014 /* SelectionOverlay+Mouse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+Mouse.swift"; sourceTree = "<group>"; };
+		C1F00000000000000000000015 /* RefineToolbarTooltip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RefineToolbarTooltip.swift; sourceTree = "<group>"; };
+		C1F00000000000000000000016 /* HoverChromeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoverChromeCard.swift; sourceTree = "<group>"; };
+		C1F00000000000000000000017 /* PaletteSwatch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteSwatch.swift; sourceTree = "<group>"; };
+		C1F00000000000000000000018 /* IntensitySlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntensitySlider.swift; sourceTree = "<group>"; };
+		C1F00000000000000000000019 /* PinPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinPanel.swift; sourceTree = "<group>"; };
+		C1F0000000000000000000001A /* SelectionOverlayNSView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionOverlayNSView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -236,6 +296,17 @@
 				C1F00000000000000000000D /* SelectionOverlay+Geometry.swift */,
 				C1F00000000000000000000E /* SelectionOverlay+History.swift */,
 				C1F00000000000000000000F /* SelectionOverlay+Toolbar.swift */,
+				C1F00000000000000000000010 /* RefineToolbar+MainRow.swift */,
+				C1F00000000000000000000011 /* RefineToolbar+Shape.swift */,
+				C1F00000000000000000000012 /* RefineToolbar+Layout.swift */,
+				C1F00000000000000000000013 /* RefineToolbar+Sync.swift */,
+				C1F00000000000000000000014 /* SelectionOverlay+Mouse.swift */,
+				C1F00000000000000000000015 /* RefineToolbarTooltip.swift */,
+				C1F00000000000000000000016 /* HoverChromeCard.swift */,
+				C1F00000000000000000000017 /* PaletteSwatch.swift */,
+				C1F00000000000000000000018 /* IntensitySlider.swift */,
+				C1F00000000000000000000019 /* PinPanel.swift */,
+				C1F0000000000000000000001A /* SelectionOverlayNSView.swift */,
 				C10000000000000000000006 /* SelectionOverlayController.swift */,
 				C10000000000000000000017 /* RefineToolbarController.swift */,
 				C10000000000000000000018 /* TextAnnotationEditor.swift */,
@@ -273,6 +344,25 @@
 				C1E000000000000000000015 /* AnnotationDrawing+Step.swift */,
 				C1E000000000000000000016 /* AnnotationDrawing+HitTest.swift */,
 				C1E000000000000000000017 /* AnnotationCursors.swift */,
+				C1E00000000000000000000018 /* Annotation+Geometry.swift */,
+				C1E00000000000000000000019 /* Annotation+Shape.swift */,
+				C1E0000000000000000000001A /* Annotation+Arrow.swift */,
+				C1E0000000000000000000001B /* Annotation+Pencil.swift */,
+				C1E0000000000000000000001C /* Annotation+Marker.swift */,
+				C1E0000000000000000000001D /* Annotation+Mosaic.swift */,
+				C1E0000000000000000000001E /* Annotation+Eraser.swift */,
+				C1E0000000000000000000001F /* Annotation+Text.swift */,
+				C1E00000000000000000000020 /* Annotation+Step.swift */,
+				C1E00000000000000000000021 /* Annotation+Magnifier.swift */,
+				C1E00000000000000000000022 /* AnnotationCoding+Shape.swift */,
+				C1E00000000000000000000023 /* AnnotationCoding+Arrow.swift */,
+				C1E00000000000000000000024 /* AnnotationCoding+Pencil.swift */,
+				C1E00000000000000000000025 /* AnnotationCoding+Marker.swift */,
+				C1E00000000000000000000026 /* AnnotationCoding+Mosaic.swift */,
+				C1E00000000000000000000027 /* AnnotationCoding+Eraser.swift */,
+				C1E00000000000000000000028 /* AnnotationCoding+Text.swift */,
+				C1E00000000000000000000029 /* AnnotationCoding+Step.swift */,
+				C1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift */,
 				C1000000000000000000001D /* ContrastChrome.swift */,
 				C10000000000000000000013 /* AnnotationDocument.swift */,
 				C10000000000000000000016 /* AnnotationCoding.swift */,
@@ -402,6 +492,25 @@
 				B1E000000000000000000015 /* AnnotationDrawing+Step.swift in Sources */,
 				B1E000000000000000000016 /* AnnotationDrawing+HitTest.swift in Sources */,
 				B1E000000000000000000017 /* AnnotationCursors.swift in Sources */,
+				B1E00000000000000000000018 /* Annotation+Geometry.swift in Sources */,
+				B1E00000000000000000000019 /* Annotation+Shape.swift in Sources */,
+				B1E0000000000000000000001A /* Annotation+Arrow.swift in Sources */,
+				B1E0000000000000000000001B /* Annotation+Pencil.swift in Sources */,
+				B1E0000000000000000000001C /* Annotation+Marker.swift in Sources */,
+				B1E0000000000000000000001D /* Annotation+Mosaic.swift in Sources */,
+				B1E0000000000000000000001E /* Annotation+Eraser.swift in Sources */,
+				B1E0000000000000000000001F /* Annotation+Text.swift in Sources */,
+				B1E00000000000000000000020 /* Annotation+Step.swift in Sources */,
+				B1E00000000000000000000021 /* Annotation+Magnifier.swift in Sources */,
+				B1E00000000000000000000022 /* AnnotationCoding+Shape.swift in Sources */,
+				B1E00000000000000000000023 /* AnnotationCoding+Arrow.swift in Sources */,
+				B1E00000000000000000000024 /* AnnotationCoding+Pencil.swift in Sources */,
+				B1E00000000000000000000025 /* AnnotationCoding+Marker.swift in Sources */,
+				B1E00000000000000000000026 /* AnnotationCoding+Mosaic.swift in Sources */,
+				B1E00000000000000000000027 /* AnnotationCoding+Eraser.swift in Sources */,
+				B1E00000000000000000000028 /* AnnotationCoding+Text.swift in Sources */,
+				B1E00000000000000000000029 /* AnnotationCoding+Step.swift in Sources */,
+				B1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift in Sources */,
 				B1F000000000000000000000 /* RefineToolbarViews.swift in Sources */,
 				B1F000000000000000000001 /* RefineToolbar+Text.swift in Sources */,
 				B1F000000000000000000002 /* RefineToolbar+Mosaic.swift in Sources */,
@@ -418,6 +527,17 @@
 				B1F00000000000000000000D /* SelectionOverlay+Geometry.swift in Sources */,
 				B1F00000000000000000000E /* SelectionOverlay+History.swift in Sources */,
 				B1F00000000000000000000F /* SelectionOverlay+Toolbar.swift in Sources */,
+				B1F00000000000000000000010 /* RefineToolbar+MainRow.swift in Sources */,
+				B1F00000000000000000000011 /* RefineToolbar+Shape.swift in Sources */,
+				B1F00000000000000000000012 /* RefineToolbar+Layout.swift in Sources */,
+				B1F00000000000000000000013 /* RefineToolbar+Sync.swift in Sources */,
+				B1F00000000000000000000014 /* SelectionOverlay+Mouse.swift in Sources */,
+				B1F00000000000000000000015 /* RefineToolbarTooltip.swift in Sources */,
+				B1F00000000000000000000016 /* HoverChromeCard.swift in Sources */,
+				B1F00000000000000000000017 /* PaletteSwatch.swift in Sources */,
+				B1F00000000000000000000018 /* IntensitySlider.swift in Sources */,
+				B1F00000000000000000000019 /* PinPanel.swift in Sources */,
+				B1F0000000000000000000001A /* SelectionOverlayNSView.swift in Sources */,
 				B10000000000000000000001 /* EggplantShotApp.swift in Sources */,
 				B10000000000000000000002 /* HotkeyMonitor.swift in Sources */,
 				B10000000000000000000003 /* HotkeyShortcut.swift in Sources */,

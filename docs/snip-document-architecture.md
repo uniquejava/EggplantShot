@@ -168,12 +168,16 @@ Owned by `SnipController` (or a small collaborator it holds). Overlay asks the s
 
 ```
 EggplantShot/Annotation/
-  AnnotateTool / *Style / *Annotation / AnnotationPrefs / Annotation.swift
+  AnnotateTool / *Style / *Annotation / AnnotationPrefs
+  Annotation.swift                    # Payload + shared accessors
+  Annotation+Geometry.swift           # bounds / translate / mapBoundingRect
+  Annotation+{Shape,Arrow,Pencil,Marker,Mosaic,Eraser,Text,Step,Magnifier}.swift
   AnnotationDrawing.swift + AnnotationDrawing+{Shape,Arrow,Pencil,Marker,Mosaic,Eraser,Text,Step,Magnifier,HitTest}.swift
+  AnnotationCoding.swift              # Schema DTOs + document encode/decode
+  AnnotationCoding+{Shape,Arrow,Pencil,Marker,Mosaic,Eraser,Text,Step,Magnifier}.swift
   AnnotationCursors.swift / PolylineSimplifier.swift
-  AnnotationDocument.swift    # Document + History
-  AnnotationCompositor.swift  # bake only
-  AnnotationCoding.swift      # Codable DTOs / color coding
+  AnnotationDocument.swift            # Document + History
+  AnnotationCompositor.swift          # bake only
 
 EggplantShot/History/
   SnipRecord.swift
@@ -311,7 +315,7 @@ No sandbox entitlements required (Sandbox OFF).
 
 ## Extensibility rules
 
-1. New tools add payload cases + drawing + hit-testing; they **must** mutate only via `AnnotationHistory`.
+1. New tools add a payload case + `Annotation+<tool>.swift` + `AnnotationCoding+<tool>.swift` + drawing + hit-testing; they **must** mutate only via `AnnotationHistory`. Also extend `Annotation+Geometry.swift` and the encode/decode switches in `AnnotationCoding.swift`.
 2. Prefer storing mosaic/blur as **data** (regions/strokes), not destructive pixels on `baseImage`, so undo and `,` stay cheap.
 3. Bump `schemaVersion` when meta shape changes; keep a single loader switch.
 4. Do not bake into `baseImage` until confirm; playback always edits vectors on the saved base.

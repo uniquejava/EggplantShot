@@ -204,182 +204,122 @@ extension SelectionOverlayController {
         updateHighlight(showHandles: true)
     }
 
+    /// Freehand sample (~2pt) or Shift → straight segment. Shared by pencil / mosaic / marker / eraser.
+    func sampledStrokePoints(from start: CGPoint, to end: CGPoint) -> [CGPoint] {
+        if NSEvent.modifierFlags.contains(.shift) {
+            return [start, end]
+        }
+        var points = draftAnnotation?.points ?? [start]
+        if points.isEmpty { points = [start] }
+        if let last = points.last {
+            if hypot(end.x - last.x, end.y - last.y) >= pencilSampleSpacing {
+                points.append(end)
+            }
+        } else {
+            points.append(end)
+        }
+        return points
+    }
+
+    /// Drag rect; Shift → square from `start`.
+    func dragRect(from start: CGPoint, to end: CGPoint) -> CGRect {
+        if NSEvent.modifierFlags.contains(.shift) {
+            return constrainedSquare(from: start, toward: end)
+        }
+        return CGRect(
+            x: min(start.x, end.x),
+            y: min(start.y, end.y),
+            width: abs(end.x - start.x),
+            height: abs(end.y - start.y)
+        )
+    }
+
+    func updatedBrushDraft(
+        mode: MosaicDrawMode,
+        from start: CGPoint,
+        to end: CGPoint,
+        stroke: ([CGPoint]) -> Annotation,
+        region: (MosaicDrawMode, CGRect) -> Annotation
+    ) -> Annotation {
+        switch mode {
+        case .freehand:
+            return stroke(sampledStrokePoints(from: start, to: end))
+        case .rectangle, .ellipse:
+            return region(mode, dragRect(from: start, to: end))
+        }
+    }
+
+    func isBrushGeometryWorthKeeping(_ geometry: MosaicGeometry) -> Bool {
+        switch geometry {
+        case .stroke(let points):
+            return !points.isEmpty
+        case .region(_, let rect):
+            return rect.width >= minAnnotation && rect.height >= minAnnotation
+        }
+    }
+
+    func simplifiedBrushPoints(_ points: [CGPoint], brushWidth: CGFloat) -> [CGPoint] {
+        let epsilon = max(brushWidth * 0.04, 0.6)
+        return PolylineSimplifier.simplify(points, epsilon: epsilon)
+    }
+
     func updatedDraft(from start: CGPoint, to end: CGPoint) -> Annotation {
         switch annotateTool {
         case .pencil:
             var style = annotationStyle
             style.isFilled = false
-            if NSEvent.modifierFlags.contains(.shift) {
-                // Straight line at any angle (start → tip); no 45° quantization.
-                return Annotation(points: [start, end], style: style)
-            }
-            // Append on mouse-drag (~2pt spacing) — not sub-pixel / high-Hz.
-            var points = draftAnnotation?.points ?? [start]
-            if points.isEmpty { points = [start] }
-            if let last = points.last {
-                let distance = hypot(end.x - last.x, end.y - last.y)
-                if distance >= pencilSampleSpacing {
-                    points.append(end)
-                }
-            } else {
-                points.append(end)
-            }
-            return Annotation(points: points, style: style)
+            return Annotation(points: sampledStrokePoints(from: start, to: end), style: style)
 
         case .mosaic:
-            switch mosaicDrawMode {
-            case .freehand:
-                if NSEvent.modifierFlags.contains(.shift) {
-                    return Annotation(mosaicPoints: [start, end], mosaicStyle: mosaicStyle)
-                }
-                var points = draftAnnotation?.points ?? [start]
-                if points.isEmpty { points = [start] }
-                if let last = points.last {
-                    let distance = hypot(end.x - last.x, end.y - last.y)
-                    if distance >= pencilSampleSpacing {
-                        points.append(end)
-                    }
-                } else {
-                    points.append(end)
-                }
-                return Annotation(mosaicPoints: points, mosaicStyle: mosaicStyle)
-
-            case .rectangle, .ellipse:
-                var draft = CGRect(
-                    x: min(start.x, end.x),
-                    y: min(start.y, end.y),
-                    width: abs(end.x - start.x),
-                    height: abs(end.y - start.y)
-                )
-                if NSEvent.modifierFlags.contains(.shift) {
-                    draft = constrainedSquare(from: start, toward: end)
-                }
-                return Annotation(
-                    mosaicRegion: mosaicDrawMode,
-                    rect: draft,
-                    mosaicStyle: mosaicStyle
-                )
-            }
+            return updatedBrushDraft(
+                mode: mosaicDrawMode,
+                from: start,
+                to: end,
+                stroke: { Annotation(mosaicPoints: $0, mosaicStyle: mosaicStyle) },
+                region: { Annotation(mosaicRegion: $0, rect: $1, mosaicStyle: mosaicStyle) }
+            )
 
         case .marker:
-            switch markerDrawMode {
-            case .freehand:
-                if NSEvent.modifierFlags.contains(.shift) {
-                    return Annotation(markerPoints: [start, end], markerStyle: markerStyle)
-                }
-                var points = draftAnnotation?.points ?? [start]
-                if points.isEmpty { points = [start] }
-                if let last = points.last {
-                    let distance = hypot(end.x - last.x, end.y - last.y)
-                    if distance >= pencilSampleSpacing {
-                        points.append(end)
-                    }
-                } else {
-                    points.append(end)
-                }
-                return Annotation(markerPoints: points, markerStyle: markerStyle)
-
-            case .rectangle, .ellipse:
-                var draft = CGRect(
-                    x: min(start.x, end.x),
-                    y: min(start.y, end.y),
-                    width: abs(end.x - start.x),
-                    height: abs(end.y - start.y)
-                )
-                if NSEvent.modifierFlags.contains(.shift) {
-                    draft = constrainedSquare(from: start, toward: end)
-                }
-                return Annotation(
-                    markerRegion: markerDrawMode,
-                    rect: draft,
-                    markerStyle: markerStyle
-                )
-            }
+            return updatedBrushDraft(
+                mode: markerDrawMode,
+                from: start,
+                to: end,
+                stroke: { Annotation(markerPoints: $0, markerStyle: markerStyle) },
+                region: { Annotation(markerRegion: $0, rect: $1, markerStyle: markerStyle) }
+            )
 
         case .eraser:
-            switch eraserDrawMode {
-            case .freehand:
-                if NSEvent.modifierFlags.contains(.shift) {
-                    return Annotation(eraserPoints: [start, end], eraserStyle: eraserStyle)
-                }
-                var points = draftAnnotation?.points ?? [start]
-                if points.isEmpty { points = [start] }
-                if let last = points.last {
-                    let distance = hypot(end.x - last.x, end.y - last.y)
-                    if distance >= pencilSampleSpacing {
-                        points.append(end)
-                    }
-                } else {
-                    points.append(end)
-                }
-                return Annotation(eraserPoints: points, eraserStyle: eraserStyle)
-
-            case .rectangle, .ellipse:
-                var draft = CGRect(
-                    x: min(start.x, end.x),
-                    y: min(start.y, end.y),
-                    width: abs(end.x - start.x),
-                    height: abs(end.y - start.y)
-                )
-                if NSEvent.modifierFlags.contains(.shift) {
-                    draft = constrainedSquare(from: start, toward: end)
-                }
-                return Annotation(
-                    eraserRegion: eraserDrawMode,
-                    rect: draft,
-                    eraserStyle: eraserStyle
-                )
-            }
+            return updatedBrushDraft(
+                mode: eraserDrawMode,
+                from: start,
+                to: end,
+                stroke: { Annotation(eraserPoints: $0, eraserStyle: eraserStyle) },
+                region: { Annotation(eraserRegion: $0, rect: $1, eraserStyle: eraserStyle) }
+            )
 
         case .arrow:
             var style = annotationStyle
             style.isFilled = false
-            let tip: CGPoint
-            if NSEvent.modifierFlags.contains(.shift) {
-                tip = snappedArrowPoint(from: start, toward: end)
-            } else {
-                tip = end
-            }
+            let tip = NSEvent.modifierFlags.contains(.shift)
+                ? snappedArrowPoint(from: start, toward: end)
+                : end
             return Annotation(start: start, end: tip, style: style, caps: arrowCaps)
 
-        case .text:
-            // Text is click-to-place; drag-draw is unused.
-            return makeDraftAnnotation(startingAt: start)
-
-        case .step:
-            // Step is click-to-place; drag-draw is unused.
+        case .text, .step:
+            // Click-to-place; drag-draw is unused.
             return makeDraftAnnotation(startingAt: start)
 
         case .magnifier:
-            var source = CGRect(
-                x: min(start.x, end.x),
-                y: min(start.y, end.y),
-                width: abs(end.x - start.x),
-                height: abs(end.y - start.y)
-            )
-            if NSEvent.modifierFlags.contains(.shift) {
-                source = constrainedSquare(from: start, toward: end)
-            }
             // Source-only while dragging; concentric lens is created in `finalizedDraft`.
             return Annotation(
                 magnifierKind: magnifierKind,
-                source: source,
+                source: dragRect(from: start, to: end),
                 lens: .zero,
                 magnifierStyle: magnifierStyle
             )
 
         case .rectangle, .none:
-            var draft = CGRect(
-                x: min(start.x, end.x),
-                y: min(start.y, end.y),
-                width: abs(end.x - start.x),
-                height: abs(end.y - start.y)
-            )
-            // Shift → square / circle from the drag start corner.
-            if NSEvent.modifierFlags.contains(.shift) {
-                draft = constrainedSquare(from: start, toward: end)
-            }
-            return Annotation(kind: annotationKind, rect: draft, style: annotationStyle)
+            return Annotation(kind: annotationKind, rect: dragRect(from: start, to: end), style: annotationStyle)
         }
     }
 
@@ -393,27 +333,8 @@ extension SelectionOverlayController {
             guard points.count >= 2, let first = points.first, let last = points.last else { return false }
             return hypot(last.x - first.x, last.y - first.y) >= minAnnotation
                 || pathLength(points) >= minAnnotation
-        case .mosaic(let geometry, _):
-            switch geometry {
-            case .stroke(let points):
-                return !points.isEmpty
-            case .region(_, let rect):
-                return rect.width >= minAnnotation && rect.height >= minAnnotation
-            }
-        case .marker(let geometry, _):
-            switch geometry {
-            case .stroke(let points):
-                return !points.isEmpty
-            case .region(_, let rect):
-                return rect.width >= minAnnotation && rect.height >= minAnnotation
-            }
-        case .eraser(let geometry, _):
-            switch geometry {
-            case .stroke(let points):
-                return !points.isEmpty
-            case .region(_, let rect):
-                return rect.width >= minAnnotation && rect.height >= minAnnotation
-            }
+        case .mosaic(let geometry, _), .marker(let geometry, _), .eraser(let geometry, _):
+            return isBrushGeometryWorthKeeping(geometry)
         case .text, .step:
             return true
         case .magnifier(_, let source, _, _):
@@ -443,9 +364,8 @@ extension SelectionOverlayController {
         case .mosaic(let geometry, let style):
             switch geometry {
             case .stroke(let points):
-                let epsilon = max(style.brushWidth * 0.04, 0.6)
                 return Annotation(
-                    mosaicPoints: PolylineSimplifier.simplify(points, epsilon: epsilon),
+                    mosaicPoints: simplifiedBrushPoints(points, brushWidth: style.brushWidth),
                     mosaicStyle: style
                 )
             case .region(let mode, let rect):
@@ -454,9 +374,8 @@ extension SelectionOverlayController {
         case .marker(let geometry, let style):
             switch geometry {
             case .stroke(let points):
-                let epsilon = max(style.brushWidth * 0.04, 0.6)
                 return Annotation(
-                    markerPoints: PolylineSimplifier.simplify(points, epsilon: epsilon),
+                    markerPoints: simplifiedBrushPoints(points, brushWidth: style.brushWidth),
                     markerStyle: style
                 )
             case .region(let mode, let rect):
@@ -465,9 +384,8 @@ extension SelectionOverlayController {
         case .eraser(let geometry, let style):
             switch geometry {
             case .stroke(let points):
-                let epsilon = max(style.brushWidth * 0.04, 0.6)
                 return Annotation(
-                    eraserPoints: PolylineSimplifier.simplify(points, epsilon: epsilon),
+                    eraserPoints: simplifiedBrushPoints(points, brushWidth: style.brushWidth),
                     eraserStyle: style
                 )
             case .region(let mode, let rect):

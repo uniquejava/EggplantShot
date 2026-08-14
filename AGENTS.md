@@ -48,12 +48,12 @@ EggplantShot/
   Hotkey/HotkeyMonitor.swift + HotkeyShortcut.swift
   Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift + ClipboardPaster.swift
   Controllers/SnipController.swift
-  Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (draft / hit-test / style / text / geometry / history / toolbar)
-  Controllers/RefineToolbarController.swift + RefineToolbar+*.swift + RefineToolbarViews.swift
+  Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (mouse / draft / hit-test / style / text / geometry / history / toolbar)
+  Controllers/RefineToolbarController.swift + RefineToolbar+*.swift + RefineToolbarViews.swift + Tooltip / HoverChromeCard / PaletteSwatch / IntensitySlider
   Controllers/TextAnnotationEditor.swift
-  Controllers/SelectionOverlayPanel.swift
-  Controllers/PinBoardController.swift
-  Annotation/  # per-tool types + AnnotationDrawing(+Tool) + Document/Coding/Compositor + ContrastChrome
+  Controllers/SelectionOverlayPanel.swift + SelectionOverlayNSView.swift
+  Controllers/PinBoardController.swift + PinPanel.swift
+  Annotation/  # Annotation(+Tool/Geometry) + Drawing(+Tool) + Coding(+Tool) + Document/Compositor + ContrastChrome
   History/SnipRecord.swift + SnipHistoryStore.swift
   UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift
   Assets.xcassets/
@@ -78,7 +78,7 @@ EggplantShot/
 
 New annotate tools **must** follow these without being asked. Details: [`docs/snip-document-architecture.md`](docs/snip-document-architecture.md).
 
-1. Add an `AnnotationPayload` case + draw + hit-test together; history / store / confirm paths stay unchanged.
+1. Add an `AnnotationPayload` case + `Annotation+<tool>.swift` (inits/accessors) + `AnnotationCoding+<tool>.swift` (encode/decode) + draw + hit-test together; history / store / confirm paths stay unchanged. Also add cases in `Annotation+Geometry.swift` and the encode/decode switches in `AnnotationCoding.swift`.
 2. Mutate marks **only** via `AnnotationHistory` (`commit` / `beginGesture`–`endGesture`) — never edit `marks` / `selectedID` from gesture code directly.
 3. Store effects as **data** (strokes / regions / style), not destructive pixels on `baseImage`. Sample the freeze/base at draw / bake time (e.g. mosaic `CIGaussianBlur`).
 4. Do **not** bake into `baseImage` until Pin / Copy / Save; `,` / `.` always restore unannotated base + vector document.

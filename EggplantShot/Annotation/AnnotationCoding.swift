@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 
 /// Codable DTOs for snip-history disk schema (version 1).
+/// Per-tool encode/decode lives in `AnnotationCoding+{Tool}.swift`.
 enum AnnotationCoding {
     static let schemaVersion = 1
 
@@ -55,6 +56,45 @@ enum AnnotationCoding {
         var lensRect: RectDTO?
         /// Magnifier style (type == "magnifier").
         var magnifierStyle: MagnifierStyleDTO?
+
+        /// Defaults every tool-specific field to `nil` so encode sites stay short.
+        init(
+            id: String,
+            type: String,
+            kind: String? = nil,
+            rect: RectDTO? = nil,
+            points: [PointDTO]? = nil,
+            string: String? = nil,
+            style: StyleDTO? = nil,
+            textStyle: TextStyleDTO? = nil,
+            startCap: Int? = nil,
+            endCap: Int? = nil,
+            mosaicStyle: MosaicStyleDTO? = nil,
+            markerStyle: MarkerStyleDTO? = nil,
+            eraserStyle: EraserStyleDTO? = nil,
+            stepStyle: StepStyleDTO? = nil,
+            number: Int? = nil,
+            lensRect: RectDTO? = nil,
+            magnifierStyle: MagnifierStyleDTO? = nil
+        ) {
+            self.id = id
+            self.type = type
+            self.kind = kind
+            self.rect = rect
+            self.points = points
+            self.string = string
+            self.style = style
+            self.textStyle = textStyle
+            self.startCap = startCap
+            self.endCap = endCap
+            self.mosaicStyle = mosaicStyle
+            self.markerStyle = markerStyle
+            self.eraserStyle = eraserStyle
+            self.stepStyle = stepStyle
+            self.number = number
+            self.lensRect = lensRect
+            self.magnifierStyle = magnifierStyle
+        }
     }
 
     struct MagnifierStyleDTO: Codable {
@@ -180,254 +220,30 @@ enum AnnotationCoding {
     static func encode(_ annotation: Annotation) -> MarkDTO {
         switch annotation.payload {
         case .shape(let kind, let rect, let style):
-            return MarkDTO(
-                id: annotation.id.uuidString,
-                type: "shape",
-                kind: kindString(kind),
-                rect: RectDTO(rect),
-                points: nil,
-                string: nil,
-                style: encode(style),
-                textStyle: nil,
-                startCap: nil,
-                endCap: nil,
-                mosaicStyle: nil,
-                markerStyle: nil,
-                eraserStyle: nil,
-                stepStyle: nil,
-                number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-            )
+            return encodeShape(id: annotation.id, kind: kind, rect: rect, style: style)
         case .arrow(let start, let end, let style, let caps):
-            return MarkDTO(
-                id: annotation.id.uuidString,
-                type: "arrow",
-                kind: nil,
-                rect: RectDTO(annotation.boundingRect),
-                points: [PointDTO(start), PointDTO(end)],
-                string: nil,
-                style: encode(style),
-                textStyle: nil,
-                startCap: caps.start.rawValue,
-                endCap: caps.end.rawValue,
-                mosaicStyle: nil,
-                markerStyle: nil,
-                eraserStyle: nil,
-                stepStyle: nil,
-                number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
+            return encodeArrow(
+                id: annotation.id,
+                start: start,
+                end: end,
+                style: style,
+                caps: caps,
+                hull: annotation.boundingRect
             )
         case .pencil(let points, let style):
-            return MarkDTO(
-                id: annotation.id.uuidString,
-                type: "pencil",
-                kind: nil,
-                rect: RectDTO(annotation.boundingRect),
-                points: points.map(PointDTO.init),
-                string: nil,
-                style: encode(style),
-                textStyle: nil,
-                startCap: nil,
-                endCap: nil,
-                mosaicStyle: nil,
-                markerStyle: nil,
-                eraserStyle: nil,
-                stepStyle: nil,
-                number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-            )
+            return encodePencil(id: annotation.id, points: points, style: style, hull: annotation.boundingRect)
         case .marker(let geometry, let style):
-            switch geometry {
-            case .stroke(let points):
-                return MarkDTO(
-                    id: annotation.id.uuidString,
-                    type: "marker",
-                    kind: nil,
-                    rect: RectDTO(annotation.boundingRect),
-                    points: points.map(PointDTO.init),
-                    string: nil,
-                    style: nil,
-                    textStyle: nil,
-                    startCap: nil,
-                    endCap: nil,
-                    mosaicStyle: nil,
-                    markerStyle: encode(style),
-                    eraserStyle: nil,
-                    stepStyle: nil,
-                    number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-                )
-            case .region(let mode, let rect):
-                return MarkDTO(
-                    id: annotation.id.uuidString,
-                    type: "marker",
-                    kind: mode == .ellipse ? "ellipse" : "rectangle",
-                    rect: RectDTO(rect),
-                    points: nil,
-                    string: nil,
-                    style: nil,
-                    textStyle: nil,
-                    startCap: nil,
-                    endCap: nil,
-                    mosaicStyle: nil,
-                    markerStyle: encode(style),
-                    eraserStyle: nil,
-                    stepStyle: nil,
-                    number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-                )
-            }
+            return encodeMarker(id: annotation.id, geometry: geometry, style: style, hull: annotation.boundingRect)
         case .mosaic(let geometry, let style):
-            switch geometry {
-            case .stroke(let points):
-                return MarkDTO(
-                    id: annotation.id.uuidString,
-                    type: "mosaic",
-                    kind: nil,
-                    rect: RectDTO(annotation.boundingRect),
-                    points: points.map(PointDTO.init),
-                    string: nil,
-                    style: nil,
-                    textStyle: nil,
-                    startCap: nil,
-                    endCap: nil,
-                    mosaicStyle: encode(style),
-                    markerStyle: nil,
-                    eraserStyle: nil,
-                    stepStyle: nil,
-                    number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-                )
-            case .region(let mode, let rect):
-                return MarkDTO(
-                    id: annotation.id.uuidString,
-                    type: "mosaic",
-                    kind: mode == .ellipse ? "ellipse" : "rectangle",
-                    rect: RectDTO(rect),
-                    points: nil,
-                    string: nil,
-                    style: nil,
-                    textStyle: nil,
-                    startCap: nil,
-                    endCap: nil,
-                    mosaicStyle: encode(style),
-                    markerStyle: nil,
-                    eraserStyle: nil,
-                    stepStyle: nil,
-                    number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-                )
-            }
+            return encodeMosaic(id: annotation.id, geometry: geometry, style: style, hull: annotation.boundingRect)
         case .eraser(let geometry, let style):
-            switch geometry {
-            case .stroke(let points):
-                return MarkDTO(
-                    id: annotation.id.uuidString,
-                    type: "eraser",
-                    kind: nil,
-                    rect: RectDTO(annotation.boundingRect),
-                    points: points.map(PointDTO.init),
-                    string: nil,
-                    style: nil,
-                    textStyle: nil,
-                    startCap: nil,
-                    endCap: nil,
-                    mosaicStyle: nil,
-                    markerStyle: nil,
-                    eraserStyle: encode(style),
-                    stepStyle: nil,
-                    number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-                )
-            case .region(let mode, let rect):
-                return MarkDTO(
-                    id: annotation.id.uuidString,
-                    type: "eraser",
-                    kind: mode == .ellipse ? "ellipse" : "rectangle",
-                    rect: RectDTO(rect),
-                    points: nil,
-                    string: nil,
-                    style: nil,
-                    textStyle: nil,
-                    startCap: nil,
-                    endCap: nil,
-                    mosaicStyle: nil,
-                    markerStyle: nil,
-                    eraserStyle: encode(style),
-                    stepStyle: nil,
-                    number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-                )
-            }
+            return encodeEraser(id: annotation.id, geometry: geometry, style: style, hull: annotation.boundingRect)
         case .text(let string, let rect, let style):
-            return MarkDTO(
-                id: annotation.id.uuidString,
-                type: "text",
-                kind: nil,
-                rect: RectDTO(rect),
-                points: nil,
-                string: string,
-                style: nil,
-                textStyle: encode(style),
-                startCap: nil,
-                endCap: nil,
-                mosaicStyle: nil,
-                markerStyle: nil,
-                eraserStyle: nil,
-                stepStyle: nil,
-                number: nil,
-                lensRect: nil,
-                magnifierStyle: nil
-            )
+            return encodeText(id: annotation.id, string: string, rect: rect, style: style)
         case .step(let number, let center, let style):
-            return MarkDTO(
-                id: annotation.id.uuidString,
-                type: "step",
-                kind: nil,
-                rect: RectDTO(style.bounds(around: center)),
-                points: [PointDTO(center)],
-                string: nil,
-                style: nil,
-                textStyle: nil,
-                startCap: nil,
-                endCap: nil,
-                mosaicStyle: nil,
-                markerStyle: nil,
-                eraserStyle: nil,
-                stepStyle: encode(style),
-                number: number,
-                lensRect: nil,
-                magnifierStyle: nil
-            )
+            return encodeStep(id: annotation.id, number: number, center: center, style: style)
         case .magnifier(let kind, let source, let lens, let style):
-            return MarkDTO(
-                id: annotation.id.uuidString,
-                type: "magnifier",
-                kind: kindString(kind),
-                rect: RectDTO(source),
-                points: nil,
-                string: nil,
-                style: nil,
-                textStyle: nil,
-                startCap: nil,
-                endCap: nil,
-                mosaicStyle: nil,
-                markerStyle: nil,
-                eraserStyle: nil,
-                stepStyle: nil,
-                number: nil,
-                lensRect: RectDTO(lens),
-                magnifierStyle: encode(style)
-            )
+            return encodeMagnifier(id: annotation.id, kind: kind, source: source, lens: lens, style: style)
         }
     }
 
@@ -437,201 +253,19 @@ enum AnnotationCoding {
             return nil
         }
         switch dto.type {
-        case "shape":
-            guard let rect = dto.rect?.cgRect, let styleDTO = dto.style else {
-                NSLog("SnipHistory: skipping shape mark without rect/style")
-                return nil
-            }
-            let kind = kindFromString(dto.kind) ?? .rectangle
-            return Annotation(
-                id: id,
-                payload: .shape(kind, rect: rect, style: decode(styleDTO))
-            )
-        case "arrow":
-            guard let points = dto.points, points.count >= 2, let styleDTO = dto.style else {
-                NSLog("SnipHistory: skipping arrow mark without points/style")
-                return nil
-            }
-            let caps = ArrowCaps(
-                start: ArrowCapStyle(rawValue: dto.startCap ?? 0) ?? .none,
-                end: ArrowCapStyle(rawValue: dto.endCap ?? ArrowCapStyle.openArrow.rawValue) ?? .openArrow
-            )
-            return Annotation(
-                id: id,
-                payload: .arrow(
-                    start: points[0].cgPoint,
-                    end: points[1].cgPoint,
-                    style: decode(styleDTO),
-                    caps: caps
-                )
-            )
-        case "pencil":
-            guard let points = dto.points, points.count >= 2, let styleDTO = dto.style else {
-                NSLog("SnipHistory: skipping pencil mark without points/style")
-                return nil
-            }
-            return Annotation(
-                id: id,
-                payload: .pencil(points: points.map(\.cgPoint), style: decode(styleDTO))
-            )
-        case "marker":
-            guard let markerDTO = dto.markerStyle else {
-                NSLog("SnipHistory: skipping marker mark without markerStyle")
-                return nil
-            }
-            let style = decode(markerDTO)
-            if let points = dto.points, !points.isEmpty {
-                return Annotation(
-                    id: id,
-                    payload: .marker(.stroke(points: points.map(\.cgPoint)), style: style)
-                )
-            }
-            if let rect = dto.rect?.cgRect {
-                let mode: MosaicDrawMode = (dto.kind == "ellipse") ? .ellipse : .rectangle
-                return Annotation(
-                    id: id,
-                    payload: .marker(.region(mode, rect: rect), style: style)
-                )
-            }
-            NSLog("SnipHistory: skipping marker mark without points or rect")
-            return nil
-        case "mosaic":
-            guard let mosaicDTO = dto.mosaicStyle else {
-                NSLog("SnipHistory: skipping mosaic mark without mosaicStyle")
-                return nil
-            }
-            let style = decode(mosaicDTO)
-            if let points = dto.points, !points.isEmpty {
-                return Annotation(
-                    id: id,
-                    payload: .mosaic(.stroke(points: points.map(\.cgPoint)), style: style)
-                )
-            }
-            if let rect = dto.rect?.cgRect {
-                let mode: MosaicDrawMode = (dto.kind == "ellipse") ? .ellipse : .rectangle
-                return Annotation(
-                    id: id,
-                    payload: .mosaic(.region(mode, rect: rect), style: style)
-                )
-            }
-            NSLog("SnipHistory: skipping mosaic mark without points or rect")
-            return nil
-        case "eraser":
-            guard let eraserDTO = dto.eraserStyle else {
-                NSLog("SnipHistory: skipping eraser mark without eraserStyle")
-                return nil
-            }
-            let style = decode(eraserDTO)
-            if let points = dto.points, !points.isEmpty {
-                return Annotation(
-                    id: id,
-                    payload: .eraser(.stroke(points: points.map(\.cgPoint)), style: style)
-                )
-            }
-            if let rect = dto.rect?.cgRect {
-                let mode: MosaicDrawMode = (dto.kind == "ellipse") ? .ellipse : .rectangle
-                return Annotation(
-                    id: id,
-                    payload: .eraser(.region(mode, rect: rect), style: style)
-                )
-            }
-            NSLog("SnipHistory: skipping eraser mark without points or rect")
-            return nil
-        case "text":
-            guard let rect = dto.rect?.cgRect, let textDTO = dto.textStyle else {
-                NSLog("SnipHistory: skipping text mark without rect/textStyle")
-                return nil
-            }
-            return Annotation(
-                id: id,
-                payload: .text(string: dto.string ?? "", rect: rect, style: decode(textDTO))
-            )
-        case "step":
-            guard let stepDTO = dto.stepStyle else {
-                NSLog("SnipHistory: skipping step mark without stepStyle")
-                return nil
-            }
-            let center: CGPoint
-            if let points = dto.points, let first = points.first {
-                center = first.cgPoint
-            } else if let rect = dto.rect?.cgRect {
-                center = CGPoint(x: rect.midX, y: rect.midY)
-            } else {
-                NSLog("SnipHistory: skipping step mark without center")
-                return nil
-            }
-            return Annotation(
-                id: id,
-                number: dto.number ?? 1,
-                center: center,
-                stepStyle: decode(stepDTO)
-            )
-        case "magnifier":
-            guard let source = dto.rect?.cgRect,
-                  let lens = dto.lensRect?.cgRect,
-                  let magDTO = dto.magnifierStyle else {
-                NSLog("SnipHistory: skipping magnifier mark without source/lens/style")
-                return nil
-            }
-            var style = decode(magDTO)
-            // Prefer stored scale; derive from geometry only for legacy records without scale.
-            if magDTO.scale == nil {
-                style.scale = Annotation.magnifierScale(source: source, lens: lens)
-            }
-            return Annotation(
-                id: id,
-                magnifierKind: kindFromString(dto.kind) ?? .rectangle,
-                source: source,
-                lens: lens,
-                magnifierStyle: style
-            )
+        case "shape": return decodeShape(id: id, dto: dto)
+        case "arrow": return decodeArrow(id: id, dto: dto)
+        case "pencil": return decodePencil(id: id, dto: dto)
+        case "marker": return decodeMarker(id: id, dto: dto)
+        case "mosaic": return decodeMosaic(id: id, dto: dto)
+        case "eraser": return decodeEraser(id: id, dto: dto)
+        case "text": return decodeText(id: id, dto: dto)
+        case "step": return decodeStep(id: id, dto: dto)
+        case "magnifier": return decodeMagnifier(id: id, dto: dto)
         default:
             NSLog("SnipHistory: skipping unknown mark type '%@'", dto.type)
             return nil
         }
-    }
-
-    static func encode(_ style: MosaicStyle) -> MosaicStyleDTO {
-        MosaicStyleDTO(
-            brushWidth: Double(style.brushWidth),
-            intensity: Double(style.intensity),
-            brushKind: nil
-        )
-    }
-
-    static func decode(_ dto: MosaicStyleDTO) -> MosaicStyle {
-        var style = MosaicStyle(
-            brushWidth: CGFloat(dto.brushWidth),
-            intensity: CGFloat(dto.intensity)
-        )
-        style.clamp()
-        return style
-    }
-
-    static func encode(_ style: MarkerStyle) -> MarkerStyleDTO {
-        MarkerStyleDTO(
-            brushWidth: Double(style.brushWidth),
-            color: encode(style.color)
-        )
-    }
-
-    static func decode(_ dto: MarkerStyleDTO) -> MarkerStyle {
-        var style = MarkerStyle(
-            brushWidth: CGFloat(dto.brushWidth),
-            color: decode(dto.color)
-        )
-        style.clamp()
-        return style
-    }
-
-    static func encode(_ style: EraserStyle) -> EraserStyleDTO {
-        EraserStyleDTO(brushWidth: Double(style.brushWidth))
-    }
-
-    static func decode(_ dto: EraserStyleDTO) -> EraserStyle {
-        var style = EraserStyle(brushWidth: CGFloat(dto.brushWidth))
-        style.clamp()
-        return style
     }
 
     static func encode(_ style: AnnotationStyle) -> StyleDTO {
@@ -650,64 +284,6 @@ enum AnnotationCoding {
             isFilled: dto.isFilled,
             lineStyle: StrokeLineStyle(rawValue: dto.lineStyle) ?? .solid
         )
-    }
-
-    static func encode(_ style: TextStyle) -> TextStyleDTO {
-        TextStyleDTO(
-            fontSize: Double(style.fontSize),
-            isBold: style.isBold,
-            isItalic: style.isItalic,
-            hasBackground: style.hasBackground,
-            color: encode(style.color)
-        )
-    }
-
-    static func decode(_ dto: TextStyleDTO) -> TextStyle {
-        TextStyle(
-            color: decode(dto.color),
-            fontSize: CGFloat(dto.fontSize),
-            isBold: dto.isBold,
-            isItalic: dto.isItalic,
-            hasBackground: dto.hasBackground
-        )
-    }
-
-    static func encode(_ style: StepStyle) -> StepStyleDTO {
-        StepStyleDTO(
-            kind: style.kind.rawValue,
-            size: Double(style.size),
-            color: encode(style.color)
-        )
-    }
-
-    static func decode(_ dto: StepStyleDTO) -> StepStyle {
-        var style = StepStyle(
-            kind: StepChromeKind(rawValue: dto.kind) ?? .filled,
-            size: CGFloat(dto.size),
-            color: decode(dto.color)
-        )
-        style.clamp()
-        return style
-    }
-
-    static func encode(_ style: MagnifierStyle) -> MagnifierStyleDTO {
-        MagnifierStyleDTO(
-            strokeWidth: Double(style.strokeWidth),
-            color: encode(style.color),
-            includeAnnotations: style.includeAnnotations,
-            scale: Double(style.scale)
-        )
-    }
-
-    static func decode(_ dto: MagnifierStyleDTO) -> MagnifierStyle {
-        var style = MagnifierStyle(
-            strokeWidth: CGFloat(dto.strokeWidth),
-            color: decode(dto.color),
-            includeAnnotations: dto.includeAnnotations,
-            scale: dto.scale.map { MagnifierStyle.clampedScale(CGFloat($0)) } ?? MagnifierStyle.defaultScale
-        )
-        style.clamp()
-        return style
     }
 
     static func encode(_ color: NSColor) -> ColorDTO {
@@ -773,20 +349,40 @@ enum AnnotationCoding {
         return image
     }
 
-    // MARK: - Private
+    // MARK: - Shared
 
-    private static func kindString(_ kind: ShapeKind) -> String {
+    static func kindString(_ kind: ShapeKind) -> String {
         switch kind {
         case .rectangle: return "rectangle"
         case .ellipse: return "ellipse"
         }
     }
 
-    private static func kindFromString(_ raw: String?) -> ShapeKind? {
+    static func kindFromString(_ raw: String?) -> ShapeKind? {
         switch raw {
         case "rectangle": return .rectangle
         case "ellipse": return .ellipse
         default: return nil
+        }
+    }
+
+    static func decodeBrushGeometry(points: [PointDTO]?, kind: String?, rect: RectDTO?) -> MosaicGeometry? {
+        if let points, !points.isEmpty {
+            return .stroke(points: points.map(\.cgPoint))
+        }
+        if let rect = rect?.cgRect {
+            let mode: MosaicDrawMode = (kind == "ellipse") ? .ellipse : .rectangle
+            return .region(mode, rect: rect)
+        }
+        return nil
+    }
+
+    static func encodeBrushGeometry(_ geometry: MosaicGeometry, hull: CGRect) -> (kind: String?, rect: RectDTO, points: [PointDTO]?) {
+        switch geometry {
+        case .stroke(let points):
+            return (nil, RectDTO(hull), points.map(PointDTO.init))
+        case .region(let mode, let rect):
+            return (mode == .ellipse ? "ellipse" : "rectangle", RectDTO(rect), nil)
         }
     }
 
