@@ -36,9 +36,9 @@ extension SelectionOverlayController {
 
         let commandHeld = NSEvent.modifierFlags.contains(.command)
 
-        // Paint tools (pencil / marker / mosaic / eraser): never steal move hits from existing
-        // marks — paint/erase over shapes and strokes. Hold ⌘ to move (handles still work above).
-        if annotateTool.drawsThroughMarks, !commandHeld {
+        // Paint tools (pencil / marker / mosaic / eraser): always draw-through. Move via **V**.
+        // Selected handles still work (checked above).
+        if annotateTool.drawsThroughMarks {
             return .draw
         }
 
@@ -54,6 +54,8 @@ extension SelectionOverlayController {
             return .draw
         }
 
+        let isSelectTool = annotateTool == .select
+
         for ann in annotations.reversed() {
             if ann.id == editingTextID { continue }
             if ann.isText {
@@ -64,7 +66,7 @@ extension SelectionOverlayController {
                 case .border:
                     return .border(id: ann.id)
                 case .interior:
-                    // Text tool: interior is edit. Other tools: whole body still moves.
+                    // Text tool: interior is edit. Select / other tools: whole body moves.
                     if annotateTool == .text {
                         return .interior(id: ann.id)
                     }
@@ -86,10 +88,14 @@ extension SelectionOverlayController {
                 }
                 continue
             }
-            // Under object tools, paint-like marks still draw-through (keep reticle over ink /
-            // blur / highlight / erase). Hold ⌘ for temporary move.
-            if ann.isPaintLikeMark, !commandHeld {
+            // Under object tools (not select), paint-like marks always draw-through — move via **V**.
+            if !isSelectTool, ann.isPaintLikeMark {
                 continue
+            }
+            // Move (V): whole shape body is grabable (not just the stroke ring).
+            // Shape tool keeps border-only so interior can still nest-draw.
+            if isSelectTool, ann.isShape, isInsideAnnotationShape(ann, at: point) {
+                return .border(id: ann.id)
             }
             if isOnAnnotationStroke(ann, at: point) {
                 return .border(id: ann.id)
@@ -97,6 +103,7 @@ extension SelectionOverlayController {
         }
 
         // Any point on the overlay is a draw target while a tool is active.
+        // Select tool: `.draw` means empty space (deselect; no create) — see mouseDown.
         return .draw
     }
 
@@ -329,6 +336,18 @@ extension SelectionOverlayController {
                 tolerance: tolerance
             )
         }
+    }
+
+    /// Full shape body (rect / oval interior + border). Used by Move (V) so hollow frames
+    /// are easy to grab without hunting the stroke ring.
+    func isInsideAnnotationShape(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
+        guard case .shape(let kind, let localRect, _) = annotation.payload else { return false }
+        return magnifierShapeContains(
+            kind: kind,
+            globalRect: toGlobal(localRect),
+            point: globalPoint,
+            tolerance: annotationBorderHitSlop
+        )
     }
 
     func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {

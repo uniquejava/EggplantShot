@@ -2,6 +2,12 @@ import AppKit
 
 extension RefineToolbarController {
     func buildMainRow(primaryAction: SelectionOverlayController.ConfirmAction) -> NSView {
+        selectButton = iconButton(
+            systemName: "cursorarrow",
+            tooltip: "Move (V)",
+            enabled: true,
+            action: #selector(selectTapped)
+        )
         shapeButton = iconButton(
             systemName: "rectangle",
             tooltip: "Shape (A)",
@@ -58,6 +64,7 @@ extension RefineToolbarController {
         )
 
         let annotateViews: [NSView] = [
+            selectButton,
             shapeButton,
             arrowButton,
             pencilButton,
@@ -119,6 +126,10 @@ extension RefineToolbarController {
         stack.addArrangedSubview(divider())
         for v in [cancel, pin, save, copy, more] { stack.addArrangedSubview(v) }
         return stack
+    }
+
+    @objc func selectTapped() {
+        selectTool(tool == .select ? .none : .select)
     }
 
     @objc func shapeTapped() {

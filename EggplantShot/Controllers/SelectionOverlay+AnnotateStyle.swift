@@ -10,12 +10,35 @@ extension SelectionOverlayController {
             // AppKit cursor rects (`.selectingPlus`) own the white ＋.
             return
         case .refining:
+            if spaceHeldForCropMove || isActiveCropMoveDrag {
+                updateSpaceCropMoveCursor(at: point)
+                return
+            }
             if annotateTool != .none {
                 updateAnnotateCursor(at: point)
             } else {
                 updateRefineCursor(at: point)
             }
         }
+    }
+
+    /// True while dragging the blue crop (Space pan may have been released mid-drag).
+    var isActiveCropMoveDrag: Bool {
+        if case .move = dragKind { return true }
+        return false
+    }
+
+    /// Hold Space: open hand; dragging crop: closed hand.
+    func updateSpaceCropMoveCursor(at point: CGPoint) {
+        if isActiveCropMoveDrag {
+            NSCursor.closedHand.set()
+            return
+        }
+        if let toolbar, toolbar.containsGlobalPoint(point) {
+            NSCursor.arrow.set()
+            return
+        }
+        NSCursor.openHand.set()
     }
 
     func setOverlayCursorMode(_ mode: SelectionOverlayNSView.CursorMode) {
@@ -31,7 +54,7 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// Selection-only refine: four-arrow move; resize arrows on border / outside octants.
+    /// Selection-only refine: resize on border / handles / outside octants (no interior crop move).
     func updateRefineCursor(at point: CGPoint) {
         if let toolbar, toolbar.containsGlobalPoint(point) {
             NSCursor.arrow.set()
@@ -39,8 +62,6 @@ extension SelectionOverlayController {
         }
         if let handle = refineResizeHandle(at: point, allowOutsideExpand: true) {
             resizeCursor(for: handle).set()
-        } else if currentRect.contains(point) {
-            AnnotationCursors.move.set()
         } else {
             NSCursor.arrow.set()
         }
@@ -69,6 +90,8 @@ extension SelectionOverlayController {
             // Border / handles only — outside octants keep the annotate cursor.
             if let handle = refineResizeHandle(at: point, allowOutsideExpand: false) {
                 resizeCursor(for: handle).set()
+            } else if annotateTool == .select {
+                NSCursor.arrow.set()
             } else if annotateTool == .pencil {
                 AnnotationCursors.pencilCrosshair(color: annotationStyle.strokeColor).set()
             } else if annotateTool == .mosaic {
@@ -234,7 +257,7 @@ extension SelectionOverlayController {
         case .marker: return .marker
         case .step: return .step
         case .magnifier: return .magnifier
-        case .none, .mosaic, .eraser: return nil
+        case .none, .select, .mosaic, .eraser: return nil
         }
     }
 

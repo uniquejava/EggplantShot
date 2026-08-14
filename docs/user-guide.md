@@ -55,24 +55,21 @@ Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recogn
 - Marks work on the **full freeze**, not only inside the blue rect. Pin/Copy/Save still crop to the selection (outside ink is clipped from the baked image).
 - **Recognize Text** runs OCR on the selection, copies text to the clipboard, plays a short success sound, and closes the capture (no result panel).
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
-- Refine hotkeys (after selection is locked; letter keys type while editing text): **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
-  - ASDF mnemonics: **A** like ⌘A — box-select with a rectangle; **S** like an S-curve arrow; **D** for Draw; **F** like a brush for highlight. **I** = Insert (text at the cursor).
+- Refine hotkeys (after selection is locked; letter keys type while editing text): **V** move · **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
+  - ASDF mnemonics: **A** like ⌘A — box-select with a rectangle; **S** like an S-curve arrow; **D** for Draw; **F** like a brush for highlight. **I** = Insert (text at the cursor). **V** = move / select marks.
 - **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → disarm tool → deselect mark → with marks, first Esc tips “Press Esc again to discard”, second Esc cancels (toolbar **✕** still discards anytime).
+
+### Move (V)
+
+Press **V** (or the cursor toolbar icon) to enter move mode: click and drag any mark (including **inside** a rectangle / oval), resize with handles. Empty click clears the selection. Switch back with **V** again or another tool. (Toggling **V** off does **not** enable dragging the blue crop.)
+
+**Hold Space** and drag to move the **blue crop** (temporary hand cursor). Release Space to return to the current tool. Adjust crop size with handles or by expanding from outside.
 
 ### Paint tools — move vs draw
 
-With **pencil**, **marker**, **mosaic**, or **eraser** armed, hovering **any** existing mark (shapes, arrows, text, …) **keeps the draw cursor**, so you can paint or erase over ink without grabbing it.
+With **pencil**, **marker**, **mosaic**, or **eraser** armed, hovering **any** existing mark **keeps the draw cursor**. To rearrange marks, press **V**, drag, then switch back (e.g. **D**) to keep drawing. Selected region marks still expose resize handles while a paint tool is armed.
 
-To **move** a mark without switching tools:
-
-1. Hold **⌘**
-2. Pointer over the mark → four-arrow cursor
-3. Drag to reposition
-4. Release **⌘** to draw again
-
-(Selected region marks still expose resize handles; body move needs **⌘**.)
-
-Under object tools (shape / arrow / text / …), paint-like marks (pencil / marker / mosaic / eraser) still draw-through the same way; other marks stay hit-to-move.
+Under object tools (shape / arrow / text / …), paint-like marks still draw-through; other marks stay hit-to-move.
 
 **Step** is an exception among object tools: it stamps through shapes / arrows / etc. so you can place a number on a border. Hover an existing step badge to move it; hold **⌘** to move other marks.
 
@@ -80,10 +77,10 @@ Under object tools (shape / arrow / text / …), paint-like marks (pencil / mark
 
 | Context | Modifier | Effect |
 |---------|----------|--------|
+| Refine (any tool) | **Space** (hold) | Drag blue crop |
 | Shape / mosaic region | **Shift** | Square / circle |
 | Arrow / pencil / freehand mosaic | **Shift** | Straight line (arrow also 45° snap) |
-| Paint tools over any mark | **⌘** | Temporary move |
-| Object tools over paint-like marks | **⌘** | Temporary move |
+| Step tool over non-step marks | **⌘** | Temporary move |
 
 ## History while capturing
 

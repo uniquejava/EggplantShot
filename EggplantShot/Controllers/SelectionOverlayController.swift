@@ -129,6 +129,9 @@ final class SelectionOverlayController {
     /// Extra hit outside the text hairline so the border is easy to grab.
     let textBorderOutwardSlop: CGFloat = 2
 
+    /// Hold **Space** to temporarily drag-move the blue crop (open hand → closed hand while dragging).
+    var spaceHeldForCropMove = false
+
     var annotations: [Annotation] { annotationHistory.document.marks }
     var selectedAnnotationID: UUID? { annotationHistory.document.selectedID }
 

@@ -99,6 +99,15 @@ extension SelectionOverlayController {
                 }
                 return event
             }
+            // Hold Space: temporary crop move (not while typing in a text mark).
+            if self.phase == .refining,
+               event.keyCode == 49,
+               event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
+                if !event.isARepeat {
+                    self.setSpaceHeldForCropMove(true)
+                }
+                return nil
+            }
             // `,` / `.` snip-history browse (any phase while overlay is up).
             if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
                 if event.keyCode == 43 || event.charactersIgnoringModifiers == "," {
@@ -142,6 +151,7 @@ extension SelectionOverlayController {
                    chars.count == 1,
                    let ch = chars.first {
                     switch ch {
+                    case "v": self.toggleRefineTool(.select); return nil
                     case "a": self.toggleRefineTool(.rectangle); return nil
                     case "s": self.toggleRefineTool(.arrow); return nil
                     case "d": self.toggleRefineTool(.pencil); return nil
@@ -182,12 +192,24 @@ extension SelectionOverlayController {
             if event.keyCode == 53 {
                 self?.suppressEscapeUntilKeyUp = false
             }
+            if event.keyCode == 49 {
+                self?.setSpaceHeldForCropMove(false)
+            }
             return event
         }) {
             eventMonitors.append(mon)
         }
 
-        // ⌘ up/down: refresh move-vs-draw cursor (paint tools over any mark; object tools over paint marks).
+        // Space may be released while another app is key — keep crop-pan state in sync.
+        if let mon = NSEvent.addGlobalMonitorForEvents(matching: .keyUp, handler: { [weak self] event in
+            if event.keyCode == 49 {
+                self?.setSpaceHeldForCropMove(false)
+            }
+        }) {
+            eventMonitors.append(mon)
+        }
+
+        // ⌘ up/down: refresh move-vs-draw cursor for step tool (⌘ moves foreign marks).
         let flagsMask: NSEvent.EventTypeMask = .flagsChanged
         if let mon = NSEvent.addLocalMonitorForEvents(matching: flagsMask, handler: { [weak self] event in
             self?.handleAnnotateModifierFlagsChanged()
@@ -360,14 +382,24 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// ⌘: temporary move while an annotate tool is armed (cursor updates on key alone).
-    /// Paint tools (pencil / marker / mosaic / eraser): move any mark. Object tools: move paint-like marks.
+    /// Hold **Space** → temporary blue-crop drag (cursor updates on key alone).
+    func setSpaceHeldForCropMove(_ held: Bool) {
+        guard spaceHeldForCropMove != held else { return }
+        spaceHeldForCropMove = held
+        // Keep closed-hand while an in-flight crop drag finishes after Space release.
+        if case .move = dragKind { return }
+        guard phase == .refining, dragKind == nil else { return }
+        updateOverlayCursor(at: NSEvent.mouseLocation)
+    }
+
+    /// ⌘ while step tool is armed: temporary move of foreign marks (cursor updates on key alone).
     func handleAnnotateModifierFlagsChanged() {
-        guard phase == .refining, annotateTool != .none, dragKind == nil else { return }
+        guard phase == .refining, annotateTool == .step, dragKind == nil else { return }
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     func removeMonitors() {
+        spaceHeldForCropMove = false
         for m in eventMonitors {
             NSEvent.removeMonitor(m)
         }
@@ -474,6 +506,21 @@ extension SelectionOverlayController {
     }
 
     func handleRefineMouseDown(at point: CGPoint) {
+        // Hold Space: drag the blue crop (temporary; ignores annotate hits).
+        if spaceHeldForCropMove {
+            if editingTextID != nil {
+                endTextEditing(commit: true)
+            }
+            annotationHistory.select(nil)
+            textClickCandidate = nil
+            if currentRect.contains(point) {
+                dragKind = .move(startRect: currentRect, startPoint: point)
+                NSCursor.closedHand.set()
+                updateHighlight(showHandles: true)
+            }
+            return
+        }
+
         // Finish any open text editor before starting a new gesture — except live-move on its border.
         if let editingID = editingTextID {
             switch annotationPointerTarget(at: point) {
@@ -553,6 +600,11 @@ extension SelectionOverlayController {
             case .draw:
                 // Border strip / handles still resize the crop; outside is for annotate (no octant expand).
                 if beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: false) { return }
+                if annotateTool == .select {
+                    annotationHistory.select(nil)
+                    updateHighlight(showHandles: true)
+                    return
+                }
                 if annotateTool == .text || annotateTool == .step {
                     // Click-to-place resolved on mouse-up (ignore tiny drag).
                     textClickCandidate = (nil, point, false)
@@ -586,14 +638,12 @@ extension SelectionOverlayController {
             return
         }
 
-        // Selection refine (no annotate tool): interior moves; border resize; outside expands to point.
+        // Selection refine (no annotate tool): border / handles resize; outside expands.
+        // Interior does not move the crop — rare, not undoable, and easy to hit by accident
+        // after toggling Move (V) off.
         annotationHistory.select(nil)
         if beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: true) {
             return
-        }
-        if currentRect.contains(point) {
-            dragKind = .move(startRect: currentRect, startPoint: point)
-            AnnotationCursors.move.set()
         }
     }
 

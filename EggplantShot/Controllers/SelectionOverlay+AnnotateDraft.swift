@@ -188,7 +188,7 @@ extension SelectionOverlayController {
                 lens: .zero,
                 magnifierStyle: magnifierStyle
             )
-        case .rectangle, .none:
+        case .rectangle, .select, .none:
             return Annotation(
                 kind: annotationKind,
                 rect: CGRect(origin: local, size: .zero),
@@ -318,7 +318,7 @@ extension SelectionOverlayController {
                 magnifierStyle: magnifierStyle
             )
 
-        case .rectangle, .none:
+        case .rectangle, .select, .none:
             return Annotation(kind: annotationKind, rect: dragRect(from: start, to: end), style: annotationStyle)
         }
     }

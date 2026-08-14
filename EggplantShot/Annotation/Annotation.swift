@@ -99,7 +99,7 @@ struct Annotation: Equatable {
         return false
     }
 
-    /// Pencil / marker / mosaic / eraser — draw-through under object tools unless ⌘.
+    /// Pencil / marker / mosaic / eraser — draw-through under object tools (move via **V**).
     var isPaintLikeMark: Bool {
         isPencil || isMarker || isMosaic || isEraser
     }

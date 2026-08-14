@@ -54,6 +54,7 @@ final class RefineToolbarController: NSObject {
 
     let rootStack = NSStackView()
     var shapeButton: NSButton!
+    var selectButton: NSButton!
     var arrowButton: NSButton!
     var pencilButton: NSButton!
     var markerButton: NSButton!

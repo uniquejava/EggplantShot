@@ -76,6 +76,7 @@ extension RefineToolbarController {
     }
 
     func refreshSelectionChrome() {
+        tintSelected(selectButton, selected: tool == .select)
         tintSelected(shapeButton, selected: tool == .rectangle)
         tintSelected(arrowButton, selected: tool == .arrow)
         tintSelected(pencilButton, selected: tool == .pencil)
@@ -91,13 +92,15 @@ extension RefineToolbarController {
         stepColorPreview.layer?.backgroundColor = stepStyle.color.cgColor
         magnifierColorPreview.layer?.backgroundColor = magnifierStyle.color.cgColor
 
+        let isSelect = (tool == .select)
         let isText = (tool == .text)
         let isMosaic = (tool == .mosaic)
         let isMarker = (tool == .marker)
         let isStep = (tool == .step)
         let isMagnifier = (tool == .magnifier)
         let isEraser = (tool == .eraser)
-        strokeOptionsRow.isHidden = isText || isMosaic || isMarker || isStep || isMagnifier || isEraser
+        strokeOptionsRow.isHidden = isSelect || isText || isMosaic || isMarker || isStep || isMagnifier
+            || isEraser
         textOptionsRow.isHidden = !isText
         mosaicOptionsRow.isHidden = !isMosaic
         markerOptionsRow.isHidden = !isMarker
@@ -110,8 +113,8 @@ extension RefineToolbarController {
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
-        afterKindDivider.isHidden = isArrow || isText || isMosaic || isMarker || isStep || isMagnifier
-            || isEraser
+        afterKindDivider.isHidden = isSelect || isArrow || isText || isMosaic || isMarker || isStep
+            || isMagnifier || isEraser
         for view in arrowOnlyViews {
             view.isHidden = !isArrow
         }
