@@ -106,7 +106,6 @@ extension RefineToolbarController {
         button.isBordered = false
         button.setButtonType(.momentaryChange)
         button.imagePosition = .imageOnly
-        button.toolTip = tooltip
         button.isEnabled = enabled
         button.target = action == nil ? nil : self
         button.action = action
@@ -119,7 +118,17 @@ extension RefineToolbarController {
         button.contentTintColor = enabled
             ? NSColor(calibratedWhite: 0.22, alpha: 1)
             : NSColor(calibratedWhite: 0.55, alpha: 1)
+        self.tooltip.register(button, text: tooltip)
         return button
+    }
+
+    /// Mosaic / marker / eraser brush presets (14 / 18 / 24).
+    static func brushSizeTooltip(index: Int) -> String {
+        switch index {
+        case 0: return "Small brush"
+        case 1: return "Medium brush"
+        default: return "Large brush"
+        }
     }
 
     /// Lucide [`type`](https://lucide.dev/icons/type) (ISC) — capital T with top/bottom bars.

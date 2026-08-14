@@ -11,7 +11,6 @@ extension RefineToolbarController {
         button.isBordered = false
         button.setButtonType(.momentaryChange)
         button.imagePosition = .imageOnly
-        button.toolTip = tooltip
         button.target = self
         button.action = action
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -25,6 +24,7 @@ extension RefineToolbarController {
             button.widthAnchor.constraint(equalToConstant: 32),
             button.heightAnchor.constraint(equalToConstant: 22),
         ])
+        self.tooltip.register(button, text: tooltip)
         return button
     }
 

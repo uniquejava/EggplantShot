@@ -18,7 +18,6 @@ extension RefineToolbarController {
             button.isBordered = false
             button.setButtonType(.momentaryChange)
             button.imagePosition = .imageOnly
-            button.toolTip = "Brush \(Int(width))"
             button.target = self
             button.action = #selector(eraserBrushTapped(_:))
             button.tag = Int(width)
@@ -29,6 +28,7 @@ extension RefineToolbarController {
             ])
             let preview = EraserStyle.brushPreviewDiameters[index]
             button.image = strokeDotImage(diameter: preview, selected: false)
+            tooltip.register(button, text: Self.brushSizeTooltip(index: index))
             return button
         }
         for button in eraserBrushButtons {
@@ -38,13 +38,13 @@ extension RefineToolbarController {
 
         eraserRectButton = iconButton(
             image: mosaicBrushKindIcon(kind: .rectangle),
-            tooltip: "Rectangle region",
+            tooltip: "Rectangular area",
             enabled: true,
             action: #selector(eraserRectTapped)
         )
         eraserOvalButton = iconButton(
             image: mosaicBrushKindIcon(kind: .ellipse),
-            tooltip: "Oval region",
+            tooltip: "Elliptical area",
             enabled: true,
             action: #selector(eraserOvalTapped)
         )

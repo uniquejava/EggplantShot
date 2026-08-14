@@ -18,7 +18,6 @@ extension RefineToolbarController {
             button.isBordered = false
             button.setButtonType(.momentaryChange)
             button.imagePosition = .imageOnly
-            button.toolTip = stepKindTooltip(kind)
             button.target = self
             button.action = #selector(stepKindTapped(_:))
             button.tag = kind.rawValue
@@ -28,6 +27,7 @@ extension RefineToolbarController {
                 button.heightAnchor.constraint(equalToConstant: 24),
             ])
             button.image = stepChromeIcon(kind: kind, selected: false)
+            tooltip.register(button, text: stepKindTooltip(kind))
             return button
         }
         for button in stepKindButtons {
@@ -39,7 +39,6 @@ extension RefineToolbarController {
         stepSizeButton.bezelStyle = .inline
         stepSizeButton.isBordered = false
         stepSizeButton.setButtonType(.momentaryChange)
-        stepSizeButton.toolTip = "Size"
         stepSizeButton.target = self
         stepSizeButton.action = #selector(stepSizeTapped(_:))
         stepSizeButton.translatesAutoresizingMaskIntoConstraints = false
@@ -48,6 +47,7 @@ extension RefineToolbarController {
         stepSizeButton.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1).cgColor
         stepSizeButton.layer?.borderWidth = 1
         stepSizeButton.layer?.borderColor = NSColor(calibratedWhite: 0.78, alpha: 1).cgColor
+        tooltip.register(stepSizeButton, text: "Size")
         stepSizeButton.font = NSFont.systemFont(ofSize: 11)
         NSLayoutConstraint.activate([
             stepSizeButton.widthAnchor.constraint(equalToConstant: 44),

@@ -35,6 +35,8 @@ final class RefineToolbarController: NSObject {
 
     let panel: NSPanel
     let onEvent: (Event) -> Void
+    /// Custom tooltips — native `toolTip` fails on this non-activating panel.
+    let tooltip = RefineToolbarTooltip()
     var style: AnnotationStyle
     var textStyle: TextStyle
     var mosaicStyle: MosaicStyle
@@ -234,7 +236,7 @@ final class RefineToolbarController: NSObject {
     func buildMainRow(primaryAction: SelectionOverlayController.ConfirmAction) -> NSView {
         shapeButton = iconButton(
             systemName: "rectangle",
-            tooltip: "Rectangle",
+            tooltip: "Shape",
             enabled: true,
             action: #selector(shapeTapped)
         )
@@ -313,7 +315,7 @@ final class RefineToolbarController: NSObject {
         let editViews: [NSView] = [
             iconButton(
                 systemName: "doc.text.viewfinder",
-                tooltip: "Recognize Text",
+                tooltip: "OCR",
                 enabled: true,
                 action: #selector(ocrTapped)
             ),
@@ -365,7 +367,6 @@ final class RefineToolbarController: NSObject {
             button.isBordered = false
             button.setButtonType(.momentaryChange)
             button.imagePosition = .imageOnly
-            button.toolTip = "Stroke"
             button.target = self
             button.action = #selector(strokeTapped(_:))
             button.tag = option.rawValue
@@ -375,6 +376,7 @@ final class RefineToolbarController: NSObject {
                 button.heightAnchor.constraint(equalToConstant: 22),
             ])
             button.image = strokeDotImage(diameter: option.previewDiameter, selected: false)
+            tooltip.register(button, text: option.toolTip)
             return button
         }
         for b in strokeButtons { stack.addArrangedSubview(b) }
@@ -384,7 +386,6 @@ final class RefineToolbarController: NSObject {
         fillButton.isBordered = false
         fillButton.setButtonType(.momentaryChange)
         fillButton.imagePosition = .imageOnly
-        fillButton.toolTip = "Fill"
         fillButton.target = self
         fillButton.action = #selector(fillTapped)
         fillButton.translatesAutoresizingMaskIntoConstraints = false
@@ -393,6 +394,7 @@ final class RefineToolbarController: NSObject {
             fillButton.heightAnchor.constraint(equalToConstant: 22),
         ])
         fillButton.image = fillSwatchImage(selected: false)
+        tooltip.register(fillButton, text: "Fill")
         stack.addArrangedSubview(fillButton)
 
         let afterFillDivider = miniDivider()
@@ -407,7 +409,7 @@ final class RefineToolbarController: NSObject {
         )
         ovalKindButton = iconButton(
             systemName: "oval",
-            tooltip: "Ellipse / Circle",
+            tooltip: "Ellipse",
             enabled: true,
             action: #selector(ovalKindTapped)
         )
@@ -425,7 +427,7 @@ final class RefineToolbarController: NSObject {
         let beforeArrowDivider = miniDivider()
         stack.addArrangedSubview(beforeArrowDivider)
         arrowStartCapButton = makeCapDropdownButton(
-            tooltip: "Start style",
+            tooltip: "Start cap",
             action: #selector(arrowStartCapTapped(_:))
         )
         stack.addArrangedSubview(arrowStartCapButton)
@@ -436,7 +438,6 @@ final class RefineToolbarController: NSObject {
         lineStyleButton.isBordered = false
         lineStyleButton.setButtonType(.momentaryChange)
         lineStyleButton.imagePosition = .imageOnly
-        lineStyleButton.toolTip = "Line style"
         lineStyleButton.target = self
         lineStyleButton.action = #selector(lineStyleTapped(_:))
         lineStyleButton.translatesAutoresizingMaskIntoConstraints = false
@@ -449,11 +450,12 @@ final class RefineToolbarController: NSObject {
             lineStyleButton.widthAnchor.constraint(equalToConstant: 56),
             lineStyleButton.heightAnchor.constraint(equalToConstant: 22),
         ])
+        tooltip.register(lineStyleButton, text: "Line style")
         stack.addArrangedSubview(lineStyleButton)
 
         // Arrow end-cap dropdown (Snipaste right picker).
         arrowEndCapButton = makeCapDropdownButton(
-            tooltip: "End style",
+            tooltip: "End cap",
             action: #selector(arrowEndCapTapped(_:))
         )
         stack.addArrangedSubview(arrowEndCapButton)
@@ -464,7 +466,6 @@ final class RefineToolbarController: NSObject {
         switchBtn.isBordered = false
         switchBtn.setButtonType(.momentaryChange)
         switchBtn.imagePosition = .imageOnly
-        switchBtn.toolTip = "Toggle arrowheads"
         switchBtn.target = self
         switchBtn.action = #selector(arrowDoubleTapped)
         switchBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -473,6 +474,7 @@ final class RefineToolbarController: NSObject {
             switchBtn.widthAnchor.constraint(equalToConstant: 24),
             switchBtn.heightAnchor.constraint(equalToConstant: 24),
         ])
+        tooltip.register(switchBtn, text: "Switch arrowheads")
         arrowDoubleButton = switchBtn
         stack.addArrangedSubview(arrowDoubleButton)
 
@@ -535,7 +537,9 @@ final class RefineToolbarController: NSObject {
     }
 
     func makeChromeCard() -> HoverChromeCard {
-        HoverChromeCard()
+        let card = HoverChromeCard()
+        card.tooltip = tooltip
+        return card
     }
 
     func embed(_ child: NSView, in card: HoverChromeCard) {
@@ -676,7 +680,7 @@ final class RefineToolbarController: NSObject {
         tintSelected(ovalKindButton, selected: kind == .ellipse)
 
         lineStyleButton.image = lineStylePreviewImage(style.lineStyle)
-        lineStyleButton.toolTip = isArrow ? "Line style" : "Border style"
+        tooltip.register(lineStyleButton, text: isArrow ? "Line style" : "Border style")
         let lineEnabled = treatAsStroke
         lineStyleButton.isEnabled = lineEnabled
         lineStyleButton.alphaValue = lineEnabled ? 1 : 0.45
@@ -952,6 +956,7 @@ final class RefineToolbarController: NSObject {
     }
 
     func close() {
+        tooltip.hide()
         panel.orderOut(nil)
         panel.close()
     }
@@ -961,6 +966,7 @@ final class RefineToolbarController: NSObject {
     }
 
     func reposition(around selection: CGRect) {
+        tooltip.hide()
         let size = panel.frame.size
         let gap: CGFloat = 4
         let screen = NSScreen.screens.first(where: { $0.frame.intersects(selection) })

@@ -18,7 +18,6 @@ extension RefineToolbarController {
             button.isBordered = false
             button.setButtonType(.momentaryChange)
             button.imagePosition = .imageOnly
-            button.toolTip = "Stroke"
             button.target = self
             button.action = #selector(magnifierStrokeTapped(_:))
             button.tag = option.rawValue
@@ -28,6 +27,7 @@ extension RefineToolbarController {
                 button.heightAnchor.constraint(equalToConstant: 22),
             ])
             button.image = strokeDotImage(diameter: option.previewDiameter, selected: false)
+            tooltip.register(button, text: option.toolTip)
             return button
         }
         for button in magnifierStrokeButtons {
@@ -43,7 +43,7 @@ extension RefineToolbarController {
         )
         magnifierOvalButton = iconButton(
             systemName: "oval",
-            tooltip: "Ellipse / Circle",
+            tooltip: "Ellipse",
             enabled: true,
             action: #selector(magnifierOvalTapped)
         )
@@ -53,7 +53,7 @@ extension RefineToolbarController {
 
         magnifierIncludeButton = iconButton(
             systemName: "rectangle.on.rectangle",
-            tooltip: "Include annotations in magnifier",
+            tooltip: "Include annotations",
             enabled: true,
             action: #selector(magnifierIncludeTapped)
         )

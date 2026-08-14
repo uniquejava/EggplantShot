@@ -84,6 +84,14 @@ enum StrokeWidthOption: Int, CaseIterable {
         }
     }
 
+    var toolTip: String {
+        switch self {
+        case .thin: return "Thin"
+        case .medium: return "Medium"
+        case .thick: return "Thick"
+        }
+    }
+
     static func matching(_ width: CGFloat) -> StrokeWidthOption {
         allCases.min(by: { abs($0.points - width) < abs($1.points - width) }) ?? .medium
     }

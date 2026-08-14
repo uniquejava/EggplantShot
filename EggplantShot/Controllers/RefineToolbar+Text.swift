@@ -34,7 +34,6 @@ extension RefineToolbarController {
         textSizeButton.bezelStyle = .inline
         textSizeButton.isBordered = false
         textSizeButton.setButtonType(.momentaryChange)
-        textSizeButton.toolTip = "Font size"
         textSizeButton.target = self
         textSizeButton.action = #selector(textSizeTapped(_:))
         textSizeButton.translatesAutoresizingMaskIntoConstraints = false
@@ -48,6 +47,7 @@ extension RefineToolbarController {
             textSizeButton.widthAnchor.constraint(equalToConstant: 44),
             textSizeButton.heightAnchor.constraint(equalToConstant: 22),
         ])
+        tooltip.register(textSizeButton, text: "Font size")
         stack.addArrangedSubview(textSizeButton)
         stack.addArrangedSubview(miniDivider())
 
@@ -99,7 +99,6 @@ extension RefineToolbarController {
         button.isBordered = false
         button.setButtonType(.momentaryChange)
         button.title = title
-        button.toolTip = tooltip
         button.target = self
         button.action = action
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -107,6 +106,7 @@ extension RefineToolbarController {
             button.widthAnchor.constraint(equalToConstant: 22),
             button.heightAnchor.constraint(equalToConstant: 22),
         ])
+        self.tooltip.register(button, text: tooltip)
         return button
     }
 
