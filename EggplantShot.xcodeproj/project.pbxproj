@@ -106,6 +106,7 @@
 		B1F0000000000000000000001A /* SelectionOverlayNSView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F0000000000000000000001A /* SelectionOverlayNSView.swift */; };
 		B1L00000000000000000000001 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1L00000000000000000000001 /* AppLanguage.swift */; };
 		B1L00000000000000000000002 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = C1L00000000000000000000002 /* Localizable.strings */; };
+		B1S00000000000000000000001 /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1S00000000000000000000001 /* LaunchAtLogin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -212,6 +213,7 @@
 		C1L00000000000000000000001 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		C1L00000000000000000000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		C1L00000000000000000000004 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		C1S00000000000000000000001 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -242,6 +244,7 @@
 				A50000000000000000000006 /* Controllers */,
 				A50000000000000000000008 /* Annotation */,
 				A50000000000000000000009 /* History */,
+				A5000000000000000000000C /* Services */,
 				A50000000000000000000007 /* UI */,
 				A5000000000000000000000B /* L10n */,
 				A5000000000000000000000A /* Resources */,
@@ -251,6 +254,14 @@
 				C1000000000000000000000D /* EggplantShot.entitlements */,
 			);
 			path = EggplantShot;
+			sourceTree = "<group>";
+		};
+		A5000000000000000000000C /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				C1S00000000000000000000001 /* LaunchAtLogin.swift */,
+			);
+			path = Services;
 			sourceTree = "<group>";
 		};
 		A5000000000000000000000B /* L10n */ = {
@@ -581,6 +592,7 @@
 				B1000000000000000000000A /* SettingsView.swift in Sources */,
 				B10000000000000000000012 /* AboutView.swift in Sources */,
 				B1L00000000000000000000001 /* AppLanguage.swift in Sources */,
+				B1S00000000000000000000001 /* LaunchAtLogin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

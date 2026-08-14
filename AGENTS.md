@@ -18,7 +18,7 @@ Inspiration: Snipaste menu + pin workflow.
 | UI | SwiftUI `MenuBarExtra` + AppKit overlays / pin panels |
 | Hotkey | `CGEvent` tap (multi-binding) |
 | Capture | ScreenCaptureKit (`SCScreenshotManager`) + crop |
-| Login item | not yet |
+| Login item | `SMAppService.mainApp` |
 
 Bundle ID: `click.yinsb.EggplantShot`  
 Team: `DEVELOPMENT_TEAM = M5J7K9HVYB`  
@@ -47,6 +47,7 @@ EggplantShot/
   EggplantShotApp.swift
   Hotkey/HotkeyMonitor.swift + HotkeyShortcut.swift
   Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift + ClipboardPaster.swift
+  Services/LaunchAtLogin.swift
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (mouse / draft / hit-test / style / text / geometry / history / toolbar)
   Controllers/RefineToolbarController.swift + RefineToolbar+*.swift + RefineToolbarViews.swift + Tooltip / HoverChromeCard / PaletteSwatch / IntensitySlider
@@ -86,7 +87,7 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 ## Next (not done yet)
 
-→ Annotate tools in: shape + arrow + pencil + marker + mosaic + text + step + magnifier + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload`. See [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows).
+→ Annotate tools in: shape + arrow + pencil + marker + mosaic + text + step + magnifier + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload`. Login item via Preferences → General. See [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows).
 
 → Mosaic blur samples freeze/base only (not prior marks). Smearing over pencil/ink on a dark freeze paints opaque freeze pixels on top of the ink (looks “all black”). Need a cheap way to sample freeze **+ prior marks** without full-screen recomposite every tip — see deferred note under Mosaic in `docs/selection-refine.md`.
 

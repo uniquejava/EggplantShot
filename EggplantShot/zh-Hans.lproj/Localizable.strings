@@ -35,6 +35,9 @@
 "Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work." = "点击快捷键框后按下新组合。F 键可单独使用；其他键需配合 ⌘/⌥/⌃/⇧。按 Esc 或点别处结束。禁用后，菜单操作仍可用。";
 "Type shortcut" = "按下快捷键";
 "Hide/Show images" = "隐藏/显示贴图";
+"Startup" = "启动";
+"Launch EggplantShot at login" = "登录时打开 EggplantShot";
+"EggplantShot stays in the menu bar after login. Quitting the app does not turn this off." = "勾选后登录会自动启动并留在菜单栏。退出应用不会取消开机启动。";
 "App language" = "应用语言";
 "Language changes take effect after EggplantShot restarts." = "更改语言后需重启 EggplantShot 才会生效。";
 

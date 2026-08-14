@@ -35,33 +35,70 @@ struct SettingsView: View {
 
 private struct GeneralSettingsPane: View {
     @State private var selectedLanguage = AppLanguage.preference
+    @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
+    @State private var launchAtLoginError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(L10n.tr("App language"))
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.tr("Startup"))
+                    .font(.headline)
 
-            Picker("", selection: $selectedLanguage) {
-                ForEach(AppLanguagePreference.allCases) { preference in
-                    Text(preference.menuTitle).tag(preference)
+                Toggle(L10n.tr("Launch EggplantShot at login"), isOn: Binding(
+                    get: { launchAtLoginEnabled },
+                    set: { newValue in
+                        do {
+                            launchAtLoginEnabled = try LaunchAtLogin.setEnabled(newValue)
+                            launchAtLoginError = nil
+                        } catch {
+                            launchAtLoginError = error.localizedDescription
+                            launchAtLoginEnabled = LaunchAtLogin.isEnabled
+                        }
+                    }
+                ))
+                .toggleStyle(.checkbox)
+
+                Text(L10n.tr("EggplantShot stays in the menu bar after login. Quitting the app does not turn this off."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let launchAtLoginError {
+                    Text(launchAtLoginError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.radioGroup)
-            .onChange(of: selectedLanguage) { _, newValue in
-                AppLanguage.setPreferenceAndRelaunch(newValue)
-            }
 
-            Text(L10n.tr("Language changes take effect after EggplantShot restarts."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.tr("App language"))
+                    .font(.headline)
+
+                Picker("", selection: $selectedLanguage) {
+                    ForEach(AppLanguagePreference.allCases) { preference in
+                        Text(preference.menuTitle).tag(preference)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.radioGroup)
+                .onChange(of: selectedLanguage) { _, newValue in
+                    AppLanguage.setPreferenceAndRelaunch(newValue)
+                }
+
+                Text(L10n.tr("Language changes take effect after EggplantShot restarts."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer(minLength: 0)
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onAppear {
+            launchAtLoginEnabled = LaunchAtLogin.isEnabled
+        }
     }
 }
 

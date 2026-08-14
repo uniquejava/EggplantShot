@@ -126,7 +126,9 @@ final class AppState: ObservableObject {
             refreshPermissions()
         }
 
-        if !accessibilityTrusted || !screenAccessGranted {
+        // Login Items → stay quiet (menu bar + hotkeys only; no permission alerts).
+        if !LaunchAtLogin.wasLaunchedAtLogin,
+           !accessibilityTrusted || !screenAccessGranted {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.promptPermissionsIfNeeded()
             }

@@ -35,6 +35,9 @@
 "Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work." = "Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work.";
 "Type shortcut" = "Type shortcut";
 "Hide/Show images" = "Hide/Show images";
+"Startup" = "Startup";
+"Launch EggplantShot at login" = "Launch EggplantShot at login";
+"EggplantShot stays in the menu bar after login. Quitting the app does not turn this off." = "EggplantShot stays in the menu bar after login. Quitting the app does not turn this off.";
 "App language" = "App language";
 "Language changes take effect after EggplantShot restarts." = "Language changes take effect after EggplantShot restarts.";
 

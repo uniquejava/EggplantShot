@@ -60,7 +60,7 @@ enum AppAboutInfo {
     static let techStack = """
     SwiftUI + AppKit · CGEvent hotkey tap
     ScreenCaptureKit capture · pin overlays
-    macOS 15+
+    SMAppService login item · macOS 15+
     """
 
     static var appName: String {
