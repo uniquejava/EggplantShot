@@ -18,7 +18,7 @@ struct MagnifierStyle: Equatable {
     static let scaleRange: ClosedRange<CGFloat> = 1...6
 
     static let `default` = MagnifierStyle(
-        strokeWidth: StrokeWidthOption.medium.points,
+        strokeWidth: StrokeWidthOption.thin.points,
         color: PaletteColor.red.color,
         includeAnnotations: false,
         scale: defaultScale

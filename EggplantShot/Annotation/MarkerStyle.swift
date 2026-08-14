@@ -13,7 +13,7 @@ struct MarkerStyle: Equatable {
     static let whiteWashAlpha: CGFloat = 0.35
 
     static let `default` = MarkerStyle(
-        brushWidth: 18,
+        brushWidth: brushPresets[0],
         color: PaletteColor.yellow.color
     )
 
@@ -22,7 +22,7 @@ struct MarkerStyle: Equatable {
     }
 
     static func nearestBrushPreset(_ width: CGFloat) -> CGFloat {
-        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? 18
+        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? brushPresets[0]
     }
 
     /// Relative luminance in generic RGB (0…1).

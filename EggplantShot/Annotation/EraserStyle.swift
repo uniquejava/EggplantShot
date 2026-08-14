@@ -8,14 +8,14 @@ struct EraserStyle: Equatable {
     static let brushPresets: [CGFloat] = MosaicStyle.brushPresets
     static let brushPreviewDiameters: [CGFloat] = MosaicStyle.brushPreviewDiameters
 
-    static let `default` = EraserStyle(brushWidth: 18)
+    static let `default` = EraserStyle(brushWidth: brushPresets[0])
 
     mutating func clamp() {
         brushWidth = Self.nearestBrushPreset(brushWidth)
     }
 
     static func nearestBrushPreset(_ width: CGFloat) -> CGFloat {
-        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? 18
+        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? brushPresets[0]
     }
 }
 

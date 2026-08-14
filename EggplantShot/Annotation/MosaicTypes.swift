@@ -70,7 +70,7 @@ struct MosaicStyle: Equatable {
     static let brushPreviewDiameters: [CGFloat] = [4, 6.5, 9]
 
     static let `default` = MosaicStyle(
-        brushWidth: 18,
+        brushWidth: brushPresets[0],
         intensity: 10
     )
 
@@ -80,7 +80,7 @@ struct MosaicStyle: Equatable {
     }
 
     static func nearestBrushPreset(_ width: CGFloat) -> CGFloat {
-        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? 18
+        brushPresets.min(by: { abs($0 - width) < abs($1 - width) }) ?? brushPresets[0]
     }
 
     static func clampedIntensity(_ value: CGFloat) -> CGFloat {

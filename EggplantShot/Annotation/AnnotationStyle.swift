@@ -12,7 +12,7 @@ struct AnnotationStyle: Equatable {
     var lineStyle: StrokeLineStyle
 
     static let `default` = AnnotationStyle(
-        strokeWidth: StrokeWidthOption.medium.points,
+        strokeWidth: StrokeWidthOption.thin.points,
         strokeColor: PaletteColor.cyan.color,
         isFilled: false,
         lineStyle: .solid
