@@ -34,11 +34,11 @@ enum StrokeLineStyle: Int, CaseIterable {
 
     var toolTip: String {
         switch self {
-        case .solid: return "Solid"
-        case .longDash: return "Long dash"
-        case .shortDash: return "Short dash"
-        case .longShort: return "Dash-dot"
-        case .longShortShort: return "Dash-dot-dot"
+        case .solid: return L10n.tr("Solid")
+        case .longDash: return L10n.tr("Long dash")
+        case .shortDash: return L10n.tr("Short dash")
+        case .longShort: return L10n.tr("Dash-dot")
+        case .longShortShort: return L10n.tr("Dash-dot-dot")
         }
     }
 
@@ -86,9 +86,9 @@ enum StrokeWidthOption: Int, CaseIterable {
 
     var toolTip: String {
         switch self {
-        case .thin: return "Thin"
-        case .medium: return "Medium"
-        case .thick: return "Thick"
+        case .thin: return L10n.tr("Thin")
+        case .medium: return L10n.tr("Medium")
+        case .thick: return L10n.tr("Thick")
         }
     }
 

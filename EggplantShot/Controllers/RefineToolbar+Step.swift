@@ -47,7 +47,7 @@ extension RefineToolbarController {
         stepSizeButton.layer?.backgroundColor = NSColor(calibratedWhite: 0.96, alpha: 1).cgColor
         stepSizeButton.layer?.borderWidth = 1
         stepSizeButton.layer?.borderColor = NSColor(calibratedWhite: 0.78, alpha: 1).cgColor
-        tooltip.register(stepSizeButton, text: "Size")
+        tooltip.register(stepSizeButton, text: L10n.tr("Size"))
         stepSizeButton.font = NSFont.systemFont(ofSize: 11)
         NSLayoutConstraint.activate([
             stepSizeButton.widthAnchor.constraint(equalToConstant: 44),
@@ -134,9 +134,9 @@ extension RefineToolbarController {
 
     func stepKindTooltip(_ kind: StepChromeKind) -> String {
         switch kind {
-        case .filled: return "Filled"
-        case .outline: return "Outline"
-        case .plain: return "Number only"
+        case .filled: return L10n.tr("Filled")
+        case .outline: return L10n.tr("Outline")
+        case .plain: return L10n.tr("Number only")
         }
     }
 

@@ -4,61 +4,61 @@ extension RefineToolbarController {
     func buildMainRow(primaryAction: SelectionOverlayController.ConfirmAction) -> NSView {
         selectButton = iconButton(
             systemName: "cursorarrow",
-            tooltip: "Move (V)",
+            tooltip: L10n.tr("Move (V)"),
             enabled: false,
             action: #selector(selectTapped)
         )
         shapeButton = iconButton(
             systemName: "rectangle",
-            tooltip: "Shape (A)",
+            tooltip: L10n.tr("Shape (A)"),
             enabled: true,
             action: #selector(shapeTapped)
         )
         arrowButton = iconButton(
             systemName: "arrow.up.right",
-            tooltip: "Arrow (S)",
+            tooltip: L10n.tr("Arrow (S)"),
             enabled: true,
             action: #selector(arrowTapped)
         )
         pencilButton = iconButton(
             image: pencilToolIcon(),
-            tooltip: "Pen (D)",
+            tooltip: L10n.tr("Pen (D)"),
             enabled: true,
             action: #selector(pencilTapped)
         )
         mosaicButton = iconButton(
             image: mosaicToolIcon(),
-            tooltip: "Mosaic (M)",
+            tooltip: L10n.tr("Mosaic (M)"),
             enabled: true,
             action: #selector(mosaicTapped)
         )
         markerButton = iconButton(
             systemName: "paintbrush.pointed",
-            tooltip: "Marker (F)",
+            tooltip: L10n.tr("Marker (F)"),
             enabled: true,
             action: #selector(markerTapped)
         )
         textButton = iconButton(
             image: textToolIcon(),
-            tooltip: "Text (I)",
+            tooltip: L10n.tr("Text (I)"),
             enabled: true,
             action: #selector(textTapped)
         )
         stepButton = iconButton(
             image: stepToolIcon(),
-            tooltip: "Number (N)",
+            tooltip: L10n.tr("Number (N)"),
             enabled: true,
             action: #selector(stepTapped)
         )
         magnifierButton = iconButton(
             systemName: "magnifyingglass",
-            tooltip: "Magnifier",
+            tooltip: L10n.tr("Magnifier"),
             enabled: true,
             action: #selector(magnifierTapped)
         )
         eraserButton = iconButton(
             systemName: "eraser",
-            tooltip: "Eraser (E)",
+            tooltip: L10n.tr("Eraser (E)"),
             enabled: true,
             action: #selector(eraserTapped)
         )
@@ -77,20 +77,20 @@ extension RefineToolbarController {
         ]
         undoButton = iconButton(
             systemName: "arrow.uturn.backward",
-            tooltip: "Undo (⌘Z)",
+            tooltip: L10n.tr("Undo (⌘Z)"),
             enabled: false,
             action: #selector(undoTapped)
         )
         redoButton = iconButton(
             systemName: "arrow.uturn.forward",
-            tooltip: "Redo (⇧⌘Z)",
+            tooltip: L10n.tr("Redo (⇧⌘Z)"),
             enabled: false,
             action: #selector(redoTapped)
         )
         let editViews: [NSView] = [
             iconButton(
                 systemName: "doc.text.viewfinder",
-                tooltip: "OCR (O)",
+                tooltip: L10n.tr("OCR (O)"),
                 enabled: true,
                 action: #selector(ocrTapped)
             ),
@@ -98,11 +98,11 @@ extension RefineToolbarController {
             redoButton,
         ]
 
-        let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
-        let pin = iconButton(systemName: "pin.fill", tooltip: "Pin (P)", enabled: true, action: #selector(pinTapped))
-        let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save (⌘S)", enabled: true, action: #selector(saveTapped))
-        let copy = iconButton(systemName: "doc.on.doc", tooltip: "Copy (⌘C)", enabled: true, action: #selector(copyTapped))
-        let more = iconButton(systemName: "ellipsis", tooltip: "More", enabled: false, action: nil)
+        let cancel = iconButton(systemName: "xmark", tooltip: L10n.tr("Cancel"), enabled: true, action: #selector(cancelTapped))
+        let pin = iconButton(systemName: "pin.fill", tooltip: L10n.tr("Pin (P)"), enabled: true, action: #selector(pinTapped))
+        let save = iconButton(systemName: "square.and.arrow.down", tooltip: L10n.tr("Save (⌘S)"), enabled: true, action: #selector(saveTapped))
+        let copy = iconButton(systemName: "doc.on.doc", tooltip: L10n.tr("Copy (⌘C)"), enabled: true, action: #selector(copyTapped))
+        let more = iconButton(systemName: "ellipsis", tooltip: L10n.tr("More"), enabled: false, action: nil)
 
         let primary: NSButton
         switch primaryAction {

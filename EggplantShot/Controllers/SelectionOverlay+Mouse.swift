@@ -291,7 +291,7 @@ extension SelectionOverlayController {
         escapeHintPanel?.orderOut(nil)
         escapeHintPanel?.close()
 
-        let label = NSTextField(labelWithString: "Press Esc again to discard")
+        let label = NSTextField(labelWithString: L10n.tr("Press Esc again to discard"))
         label.font = .systemFont(ofSize: 12, weight: .medium)
         label.textColor = NSColor(calibratedWhite: 0.12, alpha: 1)
         label.drawsBackground = false

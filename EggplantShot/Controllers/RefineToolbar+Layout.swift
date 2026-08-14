@@ -149,7 +149,7 @@ extension RefineToolbarController {
         tintSelected(ovalKindButton, selected: kind == .ellipse)
 
         lineStyleButton.image = lineStylePreviewImage(style.lineStyle)
-        tooltip.register(lineStyleButton, text: isArrow ? "Line style" : "Border style")
+        tooltip.register(lineStyleButton, text: isArrow ? L10n.tr("Line style") : L10n.tr("Border style"))
         let lineEnabled = treatAsStroke
         lineStyleButton.isEnabled = lineEnabled
         lineStyleButton.alphaValue = lineEnabled ? 1 : 0.45

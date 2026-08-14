@@ -6,25 +6,62 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
+            GeneralSettingsPane()
+                .tabItem {
+                    Label(L10n.tr("General"), systemImage: "gearshape")
+                }
+
             PermissionsSettingsPane(appState: appState)
                 .tabItem {
-                    Label("Permissions", systemImage: "lock.shield")
+                    Label(L10n.tr("Permissions"), systemImage: "lock.shield")
                 }
 
             HotkeysSettingsPane(appState: appState)
                 .tabItem {
-                    Label("Hotkeys", systemImage: "keyboard")
+                    Label(L10n.tr("Hotkeys"), systemImage: "keyboard")
                 }
 
             AboutView()
                 .tabItem {
-                    Label("About", systemImage: "info.circle")
+                    Label(L10n.tr("About"), systemImage: "info.circle")
                 }
         }
-        .frame(width: 460, height: 380)
+        .frame(width: 460, height: 400)
         .onAppear {
             appState.refreshPermissions()
         }
+    }
+}
+
+private struct GeneralSettingsPane: View {
+    @State private var selectedLanguage = AppLanguage.preference
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(L10n.tr("App language"))
+                .font(.headline)
+
+            Picker("", selection: $selectedLanguage) {
+                ForEach(AppLanguagePreference.allCases) { preference in
+                    Text(preference.menuTitle).tag(preference)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.radioGroup)
+            .onChange(of: selectedLanguage) { _, newValue in
+                AppLanguage.setPreferenceAndRelaunch(newValue)
+            }
+
+            Text(L10n.tr("Language changes take effect after EggplantShot restarts."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
@@ -34,17 +71,17 @@ private struct PermissionsSettingsPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             permissionRow(
-                title: "Accessibility",
+                title: L10n.tr("Accessibility"),
                 ok: appState.accessibilityTrusted,
-                detail: "Needed for global hotkeys."
+                detail: L10n.tr("Needed for global hotkeys.")
             ) {
                 appState.requestAccessibility()
             }
 
             permissionRow(
-                title: "Screen Recording",
+                title: L10n.tr("Screen Recording"),
                 ok: appState.screenAccessGranted,
-                detail: "Needed to capture the screen. Use Request… — do not add the binary with +."
+                detail: L10n.tr("Needed to capture the screen. Use Request… — do not add the binary with +.")
             ) {
                 appState.requestScreenAccess()
             }
@@ -73,10 +110,10 @@ private struct PermissionsSettingsPane: View {
                 Text(title)
                     .font(.headline)
                 Spacer()
-                Text(ok ? "Granted" : "Required")
+                Text(ok ? L10n.tr("Granted") : L10n.tr("Required"))
                     .foregroundStyle(.secondary)
                 if !ok {
-                    Button("Request...") { request() }
+                    Button(L10n.tr("Request...")) { request() }
                 }
             }
             Text(detail)
@@ -104,20 +141,20 @@ private struct HotkeysSettingsPane: View {
 
             HStack {
                 Spacer()
-                Button("Reset to Defaults") {
+                Button(L10n.tr("Reset to Defaults")) {
                     appState.resetHotkeysToDefaults()
                 }
             }
 
             Divider()
 
-            Toggle("Disable hotkeys", isOn: Binding(
+            Toggle(L10n.tr("Disable hotkeys"), isOn: Binding(
                 get: { settings.hotkeysDisabled },
                 set: { appState.setHotkeysDisabled($0) }
             ))
             .toggleStyle(.checkbox)
 
-            Text("Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work.")
+            Text(L10n.tr("Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -257,7 +294,7 @@ final class HotkeyRecorderView: NSView {
             : NSColor.controlBackgroundColor.cgColor
 
         if isRecording {
-            label.stringValue = "Type shortcut"
+            label.stringValue = L10n.tr("Type shortcut")
             label.textColor = .secondaryLabelColor
         } else {
             label.stringValue = binding.displayName

@@ -42,7 +42,7 @@ extension RefineToolbarController {
             fillButton.heightAnchor.constraint(equalToConstant: 22),
         ])
         fillButton.image = fillSwatchImage(selected: false)
-        tooltip.register(fillButton, text: "Fill")
+        tooltip.register(fillButton, text: L10n.tr("Fill"))
         stack.addArrangedSubview(fillButton)
 
         let afterFillDivider = miniDivider()
@@ -51,13 +51,13 @@ extension RefineToolbarController {
         // Switch group 2: rectangle ↔ ellipse / circle.
         rectKindButton = iconButton(
             systemName: "rectangle",
-            tooltip: "Rectangle",
+            tooltip: L10n.tr("Rectangle"),
             enabled: true,
             action: #selector(rectKindTapped)
         )
         ovalKindButton = iconButton(
             systemName: "oval",
-            tooltip: "Ellipse",
+            tooltip: L10n.tr("Ellipse"),
             enabled: true,
             action: #selector(ovalKindTapped)
         )
@@ -75,7 +75,7 @@ extension RefineToolbarController {
         let beforeArrowDivider = miniDivider()
         stack.addArrangedSubview(beforeArrowDivider)
         arrowStartCapButton = makeCapDropdownButton(
-            tooltip: "Start cap",
+            tooltip: L10n.tr("Start cap"),
             action: #selector(arrowStartCapTapped(_:))
         )
         stack.addArrangedSubview(arrowStartCapButton)
@@ -98,12 +98,12 @@ extension RefineToolbarController {
             lineStyleButton.widthAnchor.constraint(equalToConstant: 56),
             lineStyleButton.heightAnchor.constraint(equalToConstant: 22),
         ])
-        tooltip.register(lineStyleButton, text: "Line style")
+        tooltip.register(lineStyleButton, text: L10n.tr("Line style"))
         stack.addArrangedSubview(lineStyleButton)
 
         // Arrow end-cap dropdown (Snipaste right picker).
         arrowEndCapButton = makeCapDropdownButton(
-            tooltip: "End cap",
+            tooltip: L10n.tr("End cap"),
             action: #selector(arrowEndCapTapped(_:))
         )
         stack.addArrangedSubview(arrowEndCapButton)
@@ -122,7 +122,7 @@ extension RefineToolbarController {
             switchBtn.widthAnchor.constraint(equalToConstant: 24),
             switchBtn.heightAnchor.constraint(equalToConstant: 24),
         ])
-        tooltip.register(switchBtn, text: "Switch arrowheads")
+        tooltip.register(switchBtn, text: L10n.tr("Switch arrowheads"))
         arrowDoubleButton = switchBtn
         stack.addArrangedSubview(arrowDoubleButton)
 

@@ -38,13 +38,13 @@ extension RefineToolbarController {
 
         markerRectButton = iconButton(
             image: mosaicBrushKindIcon(kind: .rectangle),
-            tooltip: "Rectangular area",
+            tooltip: L10n.tr("Rectangular area"),
             enabled: true,
             action: #selector(markerRectTapped)
         )
         markerOvalButton = iconButton(
             image: mosaicBrushKindIcon(kind: .ellipse),
-            tooltip: "Elliptical area",
+            tooltip: L10n.tr("Elliptical area"),
             enabled: true,
             action: #selector(markerOvalTapped)
         )

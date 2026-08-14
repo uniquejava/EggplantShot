@@ -130,9 +130,9 @@ extension RefineToolbarController {
     /// Mosaic / marker / eraser brush presets (14 / 18 / 24).
     static func brushSizeTooltip(index: Int) -> String {
         switch index {
-        case 0: return "Small brush"
-        case 1: return "Medium brush"
-        default: return "Large brush"
+        case 0: return L10n.tr("Small brush")
+        case 1: return L10n.tr("Medium brush")
+        default: return L10n.tr("Large brush")
         }
     }
 

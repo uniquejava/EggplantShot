@@ -1,0 +1,121 @@
+/* Menu */
+"Capture" = "截图";
+"Capture and copy" = "截图并复制";
+"Paste" = "粘贴";
+"Show all images" = "显示全部贴图";
+"Hide all images" = "隐藏全部贴图";
+"Switch to another image group" = "切换贴图分组";
+"Enable hotkeys" = "启用快捷键";
+"Disable hotkeys" = "禁用快捷键";
+"Images" = "贴图";
+"No images" = "暂无贴图";
+"Close All" = "全部关闭";
+"Preferences..." = "偏好设置…";
+"Help" = "帮助";
+"Check for updates..." = "检查更新…";
+"Quit" = "退出";
+"Language" = "语言";
+"Follow System" = "跟随系统";
+"English" = "English";
+"简体中文" = "简体中文";
+
+/* Settings */
+"Permissions" = "权限";
+"Hotkeys" = "快捷键";
+"About" = "关于";
+"General" = "通用";
+"Accessibility" = "辅助功能";
+"Screen Recording" = "屏幕录制";
+"Granted" = "已授权";
+"Required" = "需要授权";
+"Request..." = "请求…";
+"Needed for global hotkeys." = "用于监听全局快捷键。";
+"Needed to capture the screen. Use Request… — do not add the binary with +." = "用于截取屏幕。请点「请求…」——不要用「+」手动添加程序。";
+"Reset to Defaults" = "恢复默认";
+"Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work." = "点击快捷键框后按下新组合。F 键可单独使用；其他键需配合 ⌘/⌥/⌃/⇧。按 Esc 或点别处结束。禁用后，菜单操作仍可用。";
+"Type shortcut" = "按下快捷键";
+"Hide/Show images" = "隐藏/显示贴图";
+"App language" = "应用语言";
+"Language changes take effect after EggplantShot restarts." = "更改语言后需重启 EggplantShot 才会生效。";
+
+/* About */
+"Author · %@" = "作者 · %@";
+"Built with" = "技术栈";
+"Version %1$@ (%2$@)" = "版本 %1$@ (%2$@)";
+
+/* Alerts */
+"Accessibility Access Needed" = "需要辅助功能权限";
+"accessibility_alert_body" = "EggplantShot 需要「辅助功能」权限才能监听 F1 / F3 等全局快捷键。\n\n若已勾选但快捷键仍无效：\n1. 退出 EggplantShot\n2. 运行：tccutil reset Accessibility click.yinsb.EggplantShot\n3. 重新打开并在提示时再次授权";
+"Screen Recording Access Needed" = "需要屏幕录制权限";
+"screen_alert_body" = "EggplantShot 需要「屏幕录制」权限才能截取屏幕。\n\n点「打开系统设置」，然后在列表中启用 EggplantShot。\n（应用请求权限后才会出现，无需点「+」手动添加。）\n\n启用后请退出并重新打开一次。";
+"screen_alert_body_short" = "EggplantShot 需要「屏幕录制」权限才能截取屏幕。";
+"Open System Settings" = "打开系统设置";
+"Later" = "稍后";
+
+/* Save / pin */
+"Save Screenshot" = "保存截图";
+"Choose where to save the screenshot." = "选择截图保存位置。";
+"Couldn’t Save Screenshot" = "无法保存截图";
+"Failed to encode the image." = "图片编码失败。";
+"Screenshot %@" = "截图 %@";
+"Image %@" = "贴图 %@";
+"Copy Image" = "复制图片";
+"Save Image As…" = "图片另存为…";
+"Stay on Top" = "保持置顶";
+"Shadow" = "阴影";
+"Close" = "关闭";
+
+/* Overlay */
+"Press Esc again to discard" = "再按一次 Esc 放弃";
+
+/* Toolbar — main */
+"Move (V)" = "移动 (V)";
+"Shape (A)" = "形状 (A)";
+"Arrow (S)" = "箭头 (S)";
+"Pen (D)" = "画笔 (D)";
+"Mosaic (M)" = "马赛克 (M)";
+"Marker (F)" = "马克笔 (F)";
+"Text (I)" = "文字 (I)";
+"Number (N)" = "序号 (N)";
+"Magnifier" = "放大镜";
+"Eraser (E)" = "橡皮擦 (E)";
+"Undo (⌘Z)" = "撤销 (⌘Z)";
+"Redo (⇧⌘Z)" = "重做 (⇧⌘Z)";
+"OCR (O)" = "OCR (O)";
+"Cancel" = "取消";
+"Pin (P)" = "钉住 (P)";
+"Save (⌘S)" = "保存 (⌘S)";
+"Copy (⌘C)" = "复制 (⌘C)";
+"More" = "更多";
+
+/* Toolbar — style */
+"Solid" = "实线";
+"Long dash" = "长虚线";
+"Short dash" = "短虚线";
+"Dash-dot" = "点划线";
+"Dash-dot-dot" = "双点划线";
+"Thin" = "细";
+"Medium" = "中";
+"Thick" = "粗";
+"Small brush" = "小笔刷";
+"Medium brush" = "中笔刷";
+"Large brush" = "大笔刷";
+"Line style" = "线条样式";
+"Border style" = "边框样式";
+"Fill" = "填充";
+"Rectangle" = "矩形";
+"Ellipse" = "椭圆";
+"Start cap" = "起点";
+"End cap" = "终点";
+"Switch arrowheads" = "交换箭头";
+"Size" = "大小";
+"Filled" = "实心";
+"Outline" = "描边";
+"Number only" = "仅数字";
+"Bold" = "粗体";
+"Italic" = "斜体";
+"Background" = "背景";
+"Font size" = "字号";
+"Rectangular area" = "矩形区域";
+"Elliptical area" = "椭圆区域";
+"Include annotations" = "包含标注";

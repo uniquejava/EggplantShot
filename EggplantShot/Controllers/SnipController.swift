@@ -92,11 +92,11 @@ final class SnipController {
 
     private func promptScreenPermission() {
         let alert = NSAlert()
-        alert.messageText = "Screen Recording Access Needed"
-        alert.informativeText = "EggplantShot needs Screen Recording permission to capture your screen."
+        alert.messageText = L10n.tr("Screen Recording Access Needed")
+        alert.informativeText = L10n.tr("screen_alert_body_short")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Open System Settings")
-        alert.addButton(withTitle: "Later")
+        alert.addButton(withTitle: L10n.tr("Open System Settings"))
+        alert.addButton(withTitle: L10n.tr("Later"))
         if alert.runModal() == .alertFirstButtonReturn {
             ScreenPermissions.openScreenCaptureSettings()
         }

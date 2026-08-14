@@ -37,13 +37,13 @@ extension RefineToolbarController {
 
         magnifierRectButton = iconButton(
             systemName: "rectangle",
-            tooltip: "Rectangle",
+            tooltip: L10n.tr("Rectangle"),
             enabled: true,
             action: #selector(magnifierRectTapped)
         )
         magnifierOvalButton = iconButton(
             systemName: "oval",
-            tooltip: "Ellipse",
+            tooltip: L10n.tr("Ellipse"),
             enabled: true,
             action: #selector(magnifierOvalTapped)
         )
@@ -53,7 +53,7 @@ extension RefineToolbarController {
 
         magnifierIncludeButton = iconButton(
             systemName: "rectangle.on.rectangle",
-            tooltip: "Include annotations",
+            tooltip: L10n.tr("Include annotations"),
             enabled: true,
             action: #selector(magnifierIncludeTapped)
         )

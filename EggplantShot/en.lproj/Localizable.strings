@@ -1,0 +1,121 @@
+/* Menu */
+"Capture" = "Capture";
+"Capture and copy" = "Capture and copy";
+"Paste" = "Paste";
+"Show all images" = "Show all images";
+"Hide all images" = "Hide all images";
+"Switch to another image group" = "Switch to another image group";
+"Enable hotkeys" = "Enable hotkeys";
+"Disable hotkeys" = "Disable hotkeys";
+"Images" = "Images";
+"No images" = "No images";
+"Close All" = "Close All";
+"Preferences..." = "Preferences...";
+"Help" = "Help";
+"Check for updates..." = "Check for updates...";
+"Quit" = "Quit";
+"Language" = "Language";
+"Follow System" = "Follow System";
+"English" = "English";
+"简体中文" = "简体中文";
+
+/* Settings */
+"Permissions" = "Permissions";
+"Hotkeys" = "Hotkeys";
+"About" = "About";
+"General" = "General";
+"Accessibility" = "Accessibility";
+"Screen Recording" = "Screen Recording";
+"Granted" = "Granted";
+"Required" = "Required";
+"Request..." = "Request...";
+"Needed for global hotkeys." = "Needed for global hotkeys.";
+"Needed to capture the screen. Use Request… — do not add the binary with +." = "Needed to capture the screen. Use Request… — do not add the binary with +.";
+"Reset to Defaults" = "Reset to Defaults";
+"Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work." = "Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work.";
+"Type shortcut" = "Type shortcut";
+"Hide/Show images" = "Hide/Show images";
+"App language" = "App language";
+"Language changes take effect after EggplantShot restarts." = "Language changes take effect after EggplantShot restarts.";
+
+/* About */
+"Author · %@" = "Author · %@";
+"Built with" = "Built with";
+"Version %1$@ (%2$@)" = "Version %1$@ (%2$@)";
+
+/* Alerts */
+"Accessibility Access Needed" = "Accessibility Access Needed";
+"accessibility_alert_body" = "EggplantShot needs Accessibility to listen for F1 / F3 and other global hotkeys.\n\nIf the app is already checked but hotkeys still fail:\n1. Quit EggplantShot\n2. Run: tccutil reset Accessibility click.yinsb.EggplantShot\n3. Reopen and enable again when prompted";
+"Screen Recording Access Needed" = "Screen Recording Access Needed";
+"screen_alert_body" = "EggplantShot needs Screen Recording to capture the screen.\n\nClick Open System Settings, then enable EggplantShot in the list.\n(It appears after the app requests access — you do not need the + button.)\n\nAfter enabling, quit and reopen EggplantShot once.";
+"screen_alert_body_short" = "EggplantShot needs Screen Recording permission to capture your screen.";
+"Open System Settings" = "Open System Settings";
+"Later" = "Later";
+
+/* Save / pin */
+"Save Screenshot" = "Save Screenshot";
+"Choose where to save the screenshot." = "Choose where to save the screenshot.";
+"Couldn’t Save Screenshot" = "Couldn’t Save Screenshot";
+"Failed to encode the image." = "Failed to encode the image.";
+"Screenshot %@" = "Screenshot %@";
+"Image %@" = "Image %@";
+"Copy Image" = "Copy Image";
+"Save Image As…" = "Save Image As…";
+"Stay on Top" = "Stay on Top";
+"Shadow" = "Shadow";
+"Close" = "Close";
+
+/* Overlay */
+"Press Esc again to discard" = "Press Esc again to discard";
+
+/* Toolbar — main */
+"Move (V)" = "Move (V)";
+"Shape (A)" = "Shape (A)";
+"Arrow (S)" = "Arrow (S)";
+"Pen (D)" = "Pen (D)";
+"Mosaic (M)" = "Mosaic (M)";
+"Marker (F)" = "Marker (F)";
+"Text (I)" = "Text (I)";
+"Number (N)" = "Number (N)";
+"Magnifier" = "Magnifier";
+"Eraser (E)" = "Eraser (E)";
+"Undo (⌘Z)" = "Undo (⌘Z)";
+"Redo (⇧⌘Z)" = "Redo (⇧⌘Z)";
+"OCR (O)" = "OCR (O)";
+"Cancel" = "Cancel";
+"Pin (P)" = "Pin (P)";
+"Save (⌘S)" = "Save (⌘S)";
+"Copy (⌘C)" = "Copy (⌘C)";
+"More" = "More";
+
+/* Toolbar — style */
+"Solid" = "Solid";
+"Long dash" = "Long dash";
+"Short dash" = "Short dash";
+"Dash-dot" = "Dash-dot";
+"Dash-dot-dot" = "Dash-dot-dot";
+"Thin" = "Thin";
+"Medium" = "Medium";
+"Thick" = "Thick";
+"Small brush" = "Small brush";
+"Medium brush" = "Medium brush";
+"Large brush" = "Large brush";
+"Line style" = "Line style";
+"Border style" = "Border style";
+"Fill" = "Fill";
+"Rectangle" = "Rectangle";
+"Ellipse" = "Ellipse";
+"Start cap" = "Start cap";
+"End cap" = "End cap";
+"Switch arrowheads" = "Switch arrowheads";
+"Size" = "Size";
+"Filled" = "Filled";
+"Outline" = "Outline";
+"Number only" = "Number only";
+"Bold" = "Bold";
+"Italic" = "Italic";
+"Background" = "Background";
+"Font size" = "Font size";
+"Rectangular area" = "Rectangular area";
+"Elliptical area" = "Elliptical area";
+"Include annotations" = "Include annotations";

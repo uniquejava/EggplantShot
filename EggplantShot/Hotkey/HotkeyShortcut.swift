@@ -86,10 +86,10 @@ enum HotkeyAction: String, CaseIterable, Codable {
 
     var settingsTitle: String {
         switch self {
-        case .snip: return "Capture"
-        case .snipAndCopy: return "Capture and copy"
-        case .paste: return "Paste"
-        case .hideShowImages: return "Hide/Show images"
+        case .snip: return L10n.tr("Capture")
+        case .snipAndCopy: return L10n.tr("Capture and copy")
+        case .paste: return L10n.tr("Paste")
+        case .hideShowImages: return L10n.tr("Hide/Show images")
         }
     }
 }

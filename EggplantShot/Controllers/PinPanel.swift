@@ -96,24 +96,24 @@ final class PinPanel: NSPanel {
     private func makeContextMenu() -> NSMenu {
         let menu = NSMenu()
 
-        menu.addItem(withTitle: "Copy Image", action: #selector(copyImage), keyEquivalent: "c")
+        menu.addItem(withTitle: L10n.tr("Copy Image"), action: #selector(copyImage), keyEquivalent: "c")
             .target = self
-        menu.addItem(withTitle: "Save Image As…", action: #selector(saveImageAs), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.tr("Save Image As…"), action: #selector(saveImageAs), keyEquivalent: "")
             .target = self
 
         menu.addItem(.separator())
 
-        let stay = menu.addItem(withTitle: "Stay on Top", action: #selector(toggleStayOnTop), keyEquivalent: "")
+        let stay = menu.addItem(withTitle: L10n.tr("Stay on Top"), action: #selector(toggleStayOnTop), keyEquivalent: "")
         stay.target = self
         stay.state = staysOnTop ? .on : .off
 
-        let shadow = menu.addItem(withTitle: "Shadow", action: #selector(toggleShadow), keyEquivalent: "")
+        let shadow = menu.addItem(withTitle: L10n.tr("Shadow"), action: #selector(toggleShadow), keyEquivalent: "")
         shadow.target = self
         shadow.state = chromeView.shadowEnabled ? .on : .off
 
         menu.addItem(.separator())
 
-        menu.addItem(withTitle: "Close", action: #selector(closePin), keyEquivalent: "")
+        menu.addItem(withTitle: L10n.tr("Close"), action: #selector(closePin), keyEquivalent: "")
             .target = self
 
         menu.addItem(.separator())

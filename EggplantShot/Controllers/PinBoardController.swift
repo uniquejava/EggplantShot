@@ -8,7 +8,7 @@ struct PinItem: Identifiable, Equatable {
     var title: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
-        return "Image \(formatter.string(from: createdAt))"
+        return L10n.tr("Image %@", formatter.string(from: createdAt))
     }
 }
 

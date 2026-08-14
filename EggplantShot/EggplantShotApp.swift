@@ -261,18 +261,11 @@ final class AppState: ObservableObject {
 
         if !accessibilityTrusted {
             let alert = NSAlert()
-            alert.messageText = "Accessibility Access Needed"
-            alert.informativeText = """
-            EggplantShot needs Accessibility to listen for F1 / F3 and other global hotkeys.
-
-            If the app is already checked but hotkeys still fail:
-            1. Quit EggplantShot
-            2. Run: tccutil reset Accessibility click.yinsb.EggplantShot
-            3. Reopen and enable again when prompted
-            """
+            alert.messageText = L10n.tr("Accessibility Access Needed")
+            alert.informativeText = L10n.tr("accessibility_alert_body")
             alert.alertStyle = .informational
-            alert.addButton(withTitle: "Open System Settings")
-            alert.addButton(withTitle: "Later")
+            alert.addButton(withTitle: L10n.tr("Open System Settings"))
+            alert.addButton(withTitle: L10n.tr("Later"))
             if alert.runModal() == .alertFirstButtonReturn {
                 requestAccessibility()
             }
@@ -283,18 +276,11 @@ final class AppState: ObservableObject {
         // when CGRequestScreenCaptureAccess() runs.
         if !screenAccessGranted {
             let alert = NSAlert()
-            alert.messageText = "Screen Recording Access Needed"
-            alert.informativeText = """
-            EggplantShot needs Screen Recording to capture the screen.
-
-            Click Open System Settings, then enable EggplantShot in the list.
-            (It appears after the app requests access — you do not need the + button.)
-
-            After enabling, quit and reopen EggplantShot once.
-            """
+            alert.messageText = L10n.tr("Screen Recording Access Needed")
+            alert.informativeText = L10n.tr("screen_alert_body")
             alert.alertStyle = .informational
-            alert.addButton(withTitle: "Open System Settings")
-            alert.addButton(withTitle: "Later")
+            alert.addButton(withTitle: L10n.tr("Open System Settings"))
+            alert.addButton(withTitle: L10n.tr("Later"))
             if alert.runModal() == .alertFirstButtonReturn {
                 requestScreenAccess()
             }

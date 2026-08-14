@@ -11,8 +11,8 @@ enum ImageFileSaver {
         panel.isExtensionHidden = false
         panel.allowsOtherFileTypes = false
         panel.nameFieldStringValue = defaultFileName(extension: "png")
-        panel.title = "Save Screenshot"
-        panel.message = "Choose where to save the screenshot."
+        panel.title = L10n.tr("Save Screenshot")
+        panel.message = L10n.tr("Choose where to save the screenshot.")
 
         // Menu-bar (accessory) apps need a Dock presence for the save field to take focus.
         let previousPolicy = NSApp.activationPolicy()
@@ -53,7 +53,7 @@ enum ImageFileSaver {
             try write(image, to: url)
         } catch {
             let alert = NSAlert(error: error)
-            alert.messageText = "Couldn’t Save Screenshot"
+            alert.messageText = L10n.tr("Couldn’t Save Screenshot")
             DispatchQueue.main.async {
                 NSApp.modalWindow?.level = abovePins
             }
@@ -89,8 +89,8 @@ enum ImageFileSaver {
     private static func defaultFileName(extension ext: String) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        return "Screenshot \(formatter.string(from: Date())).\(ext)"
+        formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        return L10n.tr("Screenshot %@", formatter.string(from: Date()) + ".\(ext)")
     }
 
     private enum SaveError: LocalizedError {
@@ -99,7 +99,7 @@ enum ImageFileSaver {
         var errorDescription: String? {
             switch self {
             case .encodeFailed:
-                return "Failed to encode the image."
+                return L10n.tr("Failed to encode the image.")
             }
         }
     }

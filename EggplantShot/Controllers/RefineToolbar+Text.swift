@@ -12,16 +12,16 @@ extension RefineToolbarController {
         stack.spacing = 4
         stack.edgeInsets = NSEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
 
-        textBoldButton = textStyleToggleButton(title: "B", tooltip: "Bold", action: #selector(textBoldTapped))
+        textBoldButton = textStyleToggleButton(title: "B", tooltip: L10n.tr("Bold"), action: #selector(textBoldTapped))
         textBoldButton.font = NSFont.boldSystemFont(ofSize: 12)
-        textItalicButton = textStyleToggleButton(title: "I", tooltip: "Italic", action: #selector(textItalicTapped))
+        textItalicButton = textStyleToggleButton(title: "I", tooltip: L10n.tr("Italic"), action: #selector(textItalicTapped))
         textItalicButton.font = {
             let base = NSFont.systemFont(ofSize: 12)
             return NSFontManager.shared.convert(base, toHaveTrait: .italicFontMask)
         }()
         textBackgroundButton = iconButton(
             systemName: "character.textbox",
-            tooltip: "Background",
+            tooltip: L10n.tr("Background"),
             enabled: true,
             action: #selector(textBackgroundTapped)
         )
@@ -47,7 +47,7 @@ extension RefineToolbarController {
             textSizeButton.widthAnchor.constraint(equalToConstant: 44),
             textSizeButton.heightAnchor.constraint(equalToConstant: 22),
         ])
-        tooltip.register(textSizeButton, text: "Font size")
+        tooltip.register(textSizeButton, text: L10n.tr("Font size"))
         stack.addArrangedSubview(textSizeButton)
         stack.addArrangedSubview(miniDivider())
 
