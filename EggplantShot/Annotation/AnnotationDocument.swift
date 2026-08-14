@@ -79,4 +79,28 @@ final class AnnotationHistory {
         redoStack.removeAll()
         gestureBaseline = nil
     }
+
+    /// Keep marks glued to freeze pixels when the selection origin moves (crop move / resize).
+    /// Updates the live document and every undo/redo snapshot so stacks stay consistent.
+    /// `delta` is `oldOrigin - newOrigin` in screen points (added to selection-local coords).
+    func rebaseForSelectionOriginDelta(_ delta: CGSize) {
+        guard delta.width != 0 || delta.height != 0 else { return }
+        translateAllMarks(in: &document, by: delta)
+        for i in undoStack.indices {
+            translateAllMarks(in: &undoStack[i], by: delta)
+        }
+        for i in redoStack.indices {
+            translateAllMarks(in: &redoStack[i], by: delta)
+        }
+        if var baseline = gestureBaseline {
+            translateAllMarks(in: &baseline, by: delta)
+            gestureBaseline = baseline
+        }
+    }
+
+    private func translateAllMarks(in doc: inout AnnotationDocument, by delta: CGSize) {
+        for i in doc.marks.indices {
+            doc.marks[i].translate(by: delta)
+        }
+    }
 }

@@ -743,7 +743,7 @@ final class SelectionOverlayController {
         if allowOutsideExpand, !currentRect.contains(point) {
             // Snipaste: click outside → that edge jumps to the pointer, then follows while dragged.
             dragKind = .expand(handle: handle, baseRect: currentRect)
-            currentRect = expandedRect(handle: handle, baseRect: currentRect, to: point)
+            setSelectionRect(expandedRect(handle: handle, baseRect: currentRect, to: point))
             updateHighlight(showHandles: true)
             repositionToolbar()
         } else {
@@ -780,18 +780,18 @@ final class SelectionOverlayController {
         case .move(let startRect, let startPoint):
             let dx = point.x - startPoint.x
             let dy = point.y - startPoint.y
-            currentRect = startRect.offsetBy(dx: dx, dy: dy)
+            setSelectionRect(startRect.offsetBy(dx: dx, dy: dy))
             clampRectToScreens()
             updateHighlight(showHandles: true)
             repositionToolbar()
 
         case .resize(let handle, let startRect, let startPoint):
-            currentRect = resizedRect(handle: handle, startRect: startRect, startPoint: startPoint, point: point)
+            setSelectionRect(resizedRect(handle: handle, startRect: startRect, startPoint: startPoint, point: point))
             updateHighlight(showHandles: true)
             repositionToolbar()
 
         case .expand(let handle, let baseRect):
-            currentRect = expandedRect(handle: handle, baseRect: baseRect, to: point)
+            setSelectionRect(expandedRect(handle: handle, baseRect: baseRect, to: point))
             updateHighlight(showHandles: true)
             repositionToolbar()
 

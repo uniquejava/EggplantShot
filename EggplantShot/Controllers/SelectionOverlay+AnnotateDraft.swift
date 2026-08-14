@@ -23,6 +23,16 @@ extension SelectionOverlayController {
         local.offsetBy(dx: currentRect.minX, dy: currentRect.minY)
     }
 
+    /// Assigns `currentRect`, rebasing selection-local marks so they stay fixed on the freeze
+    /// when the selection origin moves (crop move / resize / expand / clamp).
+    func setSelectionRect(_ newRect: CGRect) {
+        let old = currentRect
+        currentRect = newRect
+        guard !old.isNull, !newRect.isNull else { return }
+        let delta = CGSize(width: old.minX - newRect.minX, height: old.minY - newRect.minY)
+        annotationHistory.rebaseForSelectionOriginDelta(delta)
+    }
+
     func clampLocal(_ p: CGPoint) -> CGPoint {
         CGPoint(
             x: min(max(p.x, 0), currentRect.width),

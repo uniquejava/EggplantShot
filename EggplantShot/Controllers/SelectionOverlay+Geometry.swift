@@ -166,7 +166,7 @@ extension SelectionOverlayController {
         }
         r.origin.x = min(max(r.origin.x, screen.frame.minX), screen.frame.maxX - r.width)
         r.origin.y = min(max(r.origin.y, screen.frame.minY), screen.frame.maxY - r.height)
-        currentRect = r
+        setSelectionRect(r)
     }
 
 }
