@@ -8,7 +8,8 @@ extension AnnotationDrawing {
         geometry: MosaicGeometry,
         style: MosaicStyle,
         drawOrigin: CGPoint,
-        sample: MosaicSampleContext?
+        sample: MosaicSampleContext?,
+        priorMarks: [Annotation] = []
     ) {
         let radius = MosaicStyle.blurRadiusPoints(forIntensity: style.intensity)
 
@@ -28,7 +29,8 @@ extension AnnotationDrawing {
                 localHull: hull,
                 radius: radius,
                 drawOrigin: drawOrigin,
-                sample: sample
+                sample: sample,
+                priorMarks: priorMarks
             ) {
                 let offset = localPoints.map { CGPoint(x: $0.x + drawOrigin.x, y: $0.y + drawOrigin.y) }
                 drawMosaicFallbackStroke(points: offset, brushWidth: brush)
@@ -54,7 +56,8 @@ extension AnnotationDrawing {
                 localHull: hull,
                 radius: radius,
                 drawOrigin: drawOrigin,
-                sample: sample
+                sample: sample,
+                priorMarks: priorMarks
             ) {
                 drawMosaicFallbackRegion(
                     rect: localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y),
@@ -70,6 +73,7 @@ extension AnnotationDrawing {
         radius: CGFloat,
         drawOrigin: CGPoint,
         sample: MosaicSampleContext,
+        priorMarks: [Annotation] = [],
         fallback: () -> Void
     ) {
         guard localHull.width >= 1, localHull.height >= 1 else { return }
@@ -81,7 +85,21 @@ extension AnnotationDrawing {
         let crop = sampleHull.intersection(imageBounds)
         guard crop.width >= 1, crop.height >= 1 else { return }
 
-        guard let blurred = blurredCrop(from: sample.image, crop: crop, radius: radius) else {
+        let contributing = priorMarksOverlappingHull(priorMarks, hull: localHull)
+        let source: NSImage
+        let sourceCrop: CGRect
+        if contributing.isEmpty {
+            source = sample.image
+            sourceCrop = crop
+        } else {
+            source = compositeCropWithPriorMarks(
+                sample: sample,
+                crop: crop,
+                priorMarks: contributing
+            )
+            sourceCrop = CGRect(origin: .zero, size: crop.size)
+        }
+        guard let blurred = blurredCrop(from: source, crop: sourceCrop, radius: radius) else {
             fallback()
             return
         }
@@ -154,7 +172,43 @@ extension AnnotationDrawing {
 
     static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-    /// Crop → `CIGaussianBlur` → image (samples freeze/base pixels only).
+    /// Extra pad so stroke width / badges just outside the blur hull still contribute.
+    private static let mosaicPriorCullPad: CGFloat = 40
+
+    static func priorMarksOverlappingHull(_ prior: [Annotation], hull: CGRect) -> [Annotation] {
+        let cull = hull.insetBy(dx: -mosaicPriorCullPad, dy: -mosaicPriorCullPad)
+        return prior.filter { $0.boundingRect.intersects(cull) }
+    }
+
+    /// Freeze crop + prior marks (`drawMarksSimple`, not a nested `renderMarksLayer`).
+    /// Nested mosaics stay freeze-only to avoid recursive rebuilds. Marks go in a transparency
+    /// layer so eraser `destinationOut` punches annotations only.
+    static func compositeCropWithPriorMarks(
+        sample: MosaicSampleContext,
+        crop: CGRect,
+        priorMarks: [Annotation]
+    ) -> NSImage {
+        NSImage(size: crop.size, flipped: false) { _ in
+            sample.image.draw(
+                in: CGRect(origin: .zero, size: crop.size),
+                from: crop,
+                operation: .copy,
+                fraction: 1
+            )
+            let markOrigin = CGPoint(
+                x: sample.selectionOriginInImage.x - crop.minX,
+                y: sample.selectionOriginInImage.y - crop.minY
+            )
+            if let cg = NSGraphicsContext.current?.cgContext {
+                cg.beginTransparencyLayer(auxiliaryInfo: nil)
+                drawMarksSimple(priorMarks, origin: markOrigin, sample: sample)
+                cg.endTransparencyLayer()
+            }
+            return true
+        }
+    }
+
+    /// Crop → `CIGaussianBlur` → image.
     static func blurredCrop(
         from image: NSImage,
         crop: CGRect,

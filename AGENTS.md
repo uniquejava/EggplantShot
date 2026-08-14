@@ -81,7 +81,7 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 1. Add an `AnnotationPayload` case + `Annotation+<tool>.swift` (inits/accessors) + `AnnotationCoding+<tool>.swift` (encode/decode) + draw + hit-test together; history / store / confirm paths stay unchanged. Also add cases in `Annotation+Geometry.swift` and the encode/decode switches in `AnnotationCoding.swift`.
 2. Mutate marks **only** via `AnnotationHistory` (`commit` / `beginGesture`–`endGesture`) — never edit `marks` / `selectedID` from gesture code directly.
-3. Store effects as **data** (strokes / regions / style), not destructive pixels on `baseImage`. Sample the freeze/base at draw / bake time (e.g. mosaic `CIGaussianBlur`).
+3. Store effects as **data** (strokes / regions / style), not destructive pixels on `baseImage`. Sample the freeze/base at draw / bake time (e.g. mosaic `CIGaussianBlur` of freeze **+ prior marks**, crop-local).
 4. Do **not** bake into `baseImage` until Pin / Copy / Save; `,` / `.` always restore unannotated base + vector document.
 5. Disk: new `type` discriminator; unknown types skip on load. Bump `schemaVersion` only when the meta shape itself changes.
 
@@ -89,7 +89,9 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 → Annotate tools in: shape + arrow + pencil + marker + mosaic + text + step + magnifier + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload`. Login item via Preferences → General. See [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows).
 
-→ Mosaic blur samples freeze/base only (not prior marks). Smearing over pencil/ink on a dark freeze paints opaque freeze pixels on top of the ink (looks “all black”). Need a cheap way to sample freeze **+ prior marks** without full-screen recomposite every tip — see deferred note under Mosaic in `docs/selection-refine.md`.
+→ Mosaic: first smear over ink is fixed (crop-local freeze + prior marks). **Second smear over an existing mosaic still goes dark** — nested mosaics in the sample stay freeze-only. Do **not** nest `renderMarksLayer` inside the crop: pencil-handwritten digits (messy, several colors) + a few overlapping mosaic smears, then drawing more pencil **froze** the overlay. Handoff: Mosaic section in [`docs/selection-refine.md`](docs/selection-refine.md).
+
+→ Eraser brush tip: concentric-ring (currently reuses mosaic outline). See deferred note under Eraser in `docs/selection-refine.md`.
 
 
 ## Prefer

@@ -27,7 +27,13 @@ enum AnnotationDrawing {
         case .marker(let geometry, let style):
             drawMarker(geometry: geometry, style: style, drawOrigin: origin, sample: sample)
         case .mosaic(let geometry, let style):
-            drawMosaic(geometry: geometry, style: style, drawOrigin: origin, sample: sample)
+            drawMosaic(
+                geometry: geometry,
+                style: style,
+                drawOrigin: origin,
+                sample: sample,
+                priorMarks: []
+            )
         case .eraser(let geometry, let style):
             drawEraser(geometry: geometry, style: style, drawOrigin: origin)
         case .text(let string, let localRect, let style):
@@ -60,8 +66,9 @@ enum AnnotationDrawing {
     }
 
     /// Renders marks onto a transparent layer so eraser `destinationOut` punches annotations only.
-    /// Mosaic samples the freeze/base image directly. Magnifier with `includeAnnotations` samples
-    /// freeze/base + marks drawn before that magnifier — **source-crop only** (not full-screen).
+    /// Mosaic / magnifier (`includeAnnotations`) sample freeze/base + marks drawn **before** that
+    /// mark — **crop only** (not full-screen). Mosaic crop rebuilds use `drawMarksSimple`
+    /// (nested mosaics stay freeze-only; no recursive `renderMarksLayer`).
     /// `hiddenMagnifierSourceIDs`: skip nested source borders (lens still draws) for declutter.
     static func renderMarksLayer(
         _ annotations: [Annotation],
@@ -85,6 +92,14 @@ enum AnnotationDrawing {
                         sample: sample,
                         priorMarks: style.includeAnnotations ? prior : [],
                         showSourceBorder: !hiddenMagnifierSourceIDs.contains(annotation.id)
+                    )
+                } else if case .mosaic(let geometry, let style) = annotation.payload {
+                    drawMosaic(
+                        geometry: geometry,
+                        style: style,
+                        drawOrigin: origin,
+                        sample: sample,
+                        priorMarks: prior
                     )
                 } else {
                     draw(annotation, origin: origin, sample: sample)
@@ -140,7 +155,7 @@ enum AnnotationDrawing {
         return nx * nx + ny * ny <= 1
     }
 
-    /// Draw prior marks into a small buffer (no nested include-annotations rebuild).
+    /// Draw prior marks into a small buffer (no nested include-annotations / mosaic-prior rebuild).
     static func drawMarksSimple(
         _ annotations: [Annotation],
         origin: CGPoint,
