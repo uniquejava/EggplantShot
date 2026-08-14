@@ -137,6 +137,16 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
+    /// Same toggle as tapping a toolbar tool icon (armed ↔ none).
+    func toggleRefineTool(_ tool: AnnotateTool) {
+        let next = annotateTool == tool ? AnnotateTool.none : tool
+        if let toolbar {
+            toolbar.selectTool(next)
+        } else {
+            setAnnotateTool(next)
+        }
+    }
+
     func applyStyle(_ style: AnnotationStyle) {
         var next = style
         if annotateTool == .pencil || annotateTool == .arrow {

@@ -90,6 +90,11 @@ extension SelectionOverlayController {
                         self.textEditor?.undoManager?.redo()
                         return nil
                     }
+                    // ⌘S still saves the snip; ⌘C stays with the field editor (copy text).
+                    if chars == "s" {
+                        self.confirm(.save)
+                        return nil
+                    }
                 }
                 return event
             }
@@ -105,7 +110,7 @@ extension SelectionOverlayController {
                 }
             }
             if self.phase == .refining {
-                // ⌘Z undo; ⇧⌘Z / ⌘Y redo.
+                // ⌘Z undo; ⇧⌘Z / ⌘Y redo; ⌘S save; ⌘C copy.
                 if event.modifierFlags.contains(.command),
                    let chars = event.charactersIgnoringModifiers?.lowercased() {
                     if chars == "z" {
@@ -119,6 +124,34 @@ extension SelectionOverlayController {
                     if chars == "y" {
                         self.performRedo()
                         return nil
+                    }
+                    if chars == "s" {
+                        self.confirm(.save)
+                        return nil
+                    }
+                    if chars == "c" {
+                        self.confirm(.copy)
+                        return nil
+                    }
+                }
+                // Letter tool / action hotkeys (no ⌘/⌃/⌥). Toggle like toolbar taps.
+                if event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                   self.dragKind == nil,
+                   let chars = event.charactersIgnoringModifiers?.lowercased(),
+                   chars.count == 1,
+                   let ch = chars.first {
+                    switch ch {
+                    case "a": self.toggleRefineTool(.rectangle); return nil
+                    case "s": self.toggleRefineTool(.arrow); return nil
+                    case "d": self.toggleRefineTool(.pencil); return nil
+                    case "f": self.toggleRefineTool(.marker); return nil
+                    case "m": self.toggleRefineTool(.mosaic); return nil
+                    case "t": self.toggleRefineTool(.text); return nil
+                    case "n": self.toggleRefineTool(.step); return nil
+                    case "e": self.toggleRefineTool(.eraser); return nil
+                    case "p": self.confirm(.pin); return nil
+                    case "o": self.performOCR(); return nil
+                    default: break
                     }
                 }
                 // Delete / Forward Delete removes the selected annotation.

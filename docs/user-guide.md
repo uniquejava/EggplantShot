@@ -55,6 +55,7 @@ Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recogn
 - Marks work on the **full freeze**, not only inside the blue rect. Pin/Copy/Save still crop to the selection (outside ink is clipped from the baked image).
 - **Recognize Text** runs OCR on the selection, copies text to the clipboard, plays a short success sound, and closes the capture (no result panel).
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
+- Refine hotkeys (after selection is locked; letter keys type while editing text): **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **T** text · **N** step · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy.
 - **Esc** while editing text ends the editor only; otherwise Esc cancels the whole capture.
 
 ### Pencil / mosaic / eraser — move vs draw

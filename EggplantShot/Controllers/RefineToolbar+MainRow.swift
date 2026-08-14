@@ -4,43 +4,43 @@ extension RefineToolbarController {
     func buildMainRow(primaryAction: SelectionOverlayController.ConfirmAction) -> NSView {
         shapeButton = iconButton(
             systemName: "rectangle",
-            tooltip: "Shape",
+            tooltip: "Shape (A)",
             enabled: true,
             action: #selector(shapeTapped)
         )
         arrowButton = iconButton(
             systemName: "arrow.up.right",
-            tooltip: "Arrow",
+            tooltip: "Arrow (S)",
             enabled: true,
             action: #selector(arrowTapped)
         )
         pencilButton = iconButton(
             image: pencilToolIcon(),
-            tooltip: "Pen",
+            tooltip: "Pen (D)",
             enabled: true,
             action: #selector(pencilTapped)
         )
         mosaicButton = iconButton(
             image: mosaicToolIcon(),
-            tooltip: "Mosaic",
+            tooltip: "Mosaic (M)",
             enabled: true,
             action: #selector(mosaicTapped)
         )
         markerButton = iconButton(
             systemName: "paintbrush.pointed",
-            tooltip: "Marker",
+            tooltip: "Marker (F)",
             enabled: true,
             action: #selector(markerTapped)
         )
         textButton = iconButton(
             image: textToolIcon(),
-            tooltip: "Text",
+            tooltip: "Text (T)",
             enabled: true,
             action: #selector(textTapped)
         )
         stepButton = iconButton(
             image: stepToolIcon(),
-            tooltip: "Step",
+            tooltip: "Number (N)",
             enabled: true,
             action: #selector(stepTapped)
         )
@@ -52,7 +52,7 @@ extension RefineToolbarController {
         )
         eraserButton = iconButton(
             systemName: "eraser",
-            tooltip: "Eraser",
+            tooltip: "Eraser (E)",
             enabled: true,
             action: #selector(eraserTapped)
         )
@@ -70,20 +70,20 @@ extension RefineToolbarController {
         ]
         undoButton = iconButton(
             systemName: "arrow.uturn.backward",
-            tooltip: "Undo",
+            tooltip: "Undo (⌘Z)",
             enabled: false,
             action: #selector(undoTapped)
         )
         redoButton = iconButton(
             systemName: "arrow.uturn.forward",
-            tooltip: "Redo",
+            tooltip: "Redo (⇧⌘Z)",
             enabled: false,
             action: #selector(redoTapped)
         )
         let editViews: [NSView] = [
             iconButton(
                 systemName: "doc.text.viewfinder",
-                tooltip: "OCR (QR or text)",
+                tooltip: "OCR (O)",
                 enabled: true,
                 action: #selector(ocrTapped)
             ),
@@ -91,10 +91,10 @@ extension RefineToolbarController {
             redoButton,
         ]
 
-        let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
-        let pin = iconButton(systemName: "pin.fill", tooltip: "Pin", enabled: true, action: #selector(pinTapped))
-        let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save", enabled: true, action: #selector(saveTapped))
-        let copy = iconButton(systemName: "doc.on.doc", tooltip: "Copy", enabled: true, action: #selector(copyTapped))
+        let cancel = iconButton(systemName: "xmark", tooltip: "Cancel (Esc)", enabled: true, action: #selector(cancelTapped))
+        let pin = iconButton(systemName: "pin.fill", tooltip: "Pin (P)", enabled: true, action: #selector(pinTapped))
+        let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save (⌘S)", enabled: true, action: #selector(saveTapped))
+        let copy = iconButton(systemName: "doc.on.doc", tooltip: "Copy (⌘C)", enabled: true, action: #selector(copyTapped))
         let more = iconButton(systemName: "ellipsis", tooltip: "More", enabled: false, action: nil)
 
         let primary: NSButton

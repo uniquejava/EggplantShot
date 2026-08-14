@@ -17,6 +17,8 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Confirm composites marks onto the crop, then tears down the overlay.
 - Esc in refine (not editing text) cancels the whole capture.
 - Delete removes the selected mark. Undo / redo: toolbar + ⌘Z / ⇧⌘Z.
+- Refine tool / action hotkeys (armed after selection; ignored while editing text or mid-drag):
+  **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **T** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. (**G** reserved for green color.)
 
 ## Refine shell
 
