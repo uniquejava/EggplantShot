@@ -91,7 +91,7 @@ extension RefineToolbarController {
             redoButton,
         ]
 
-        let cancel = iconButton(systemName: "xmark", tooltip: "Cancel (Esc)", enabled: true, action: #selector(cancelTapped))
+        let cancel = iconButton(systemName: "xmark", tooltip: "Cancel", enabled: true, action: #selector(cancelTapped))
         let pin = iconButton(systemName: "pin.fill", tooltip: "Pin (P)", enabled: true, action: #selector(pinTapped))
         let save = iconButton(systemName: "square.and.arrow.down", tooltip: "Save (⌘S)", enabled: true, action: #selector(saveTapped))
         let copy = iconButton(systemName: "doc.on.doc", tooltip: "Copy (⌘C)", enabled: true, action: #selector(copyTapped))

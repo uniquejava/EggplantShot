@@ -59,6 +59,12 @@ final class SelectionOverlayController {
     /// When true (Capture and copy): lock / drag-complete copies immediately — no refine toolbar.
     var skipsRefine = false
     var eventMonitors: [Any] = []
+    /// After any Esc action, ignore further Esc until key-up (stops hold-repeat ladder walk).
+    var suppressEscapeUntilKeyUp = false
+    /// First Esc with marks armed a second-Esc discard; show a light tip until cleared.
+    var escapeDiscardArmed = false
+    var escapeHintPanel: NSPanel?
+    var escapeHintHideWork: DispatchWorkItem?
 
     /// Shared snip history for `,` / `.` playback (owned by `SnipController`).
     var historyStore: SnipHistoryStore?
@@ -316,6 +322,8 @@ final class SelectionOverlayController {
         currentRect = .null
         hoveredWindowRect = nil
         pendingWindowPick = nil
+        suppressEscapeUntilKeyUp = false
+        clearEscapeDiscardHint()
         annotateTool = .none
         let prefs = AnnotationPrefs.load()
         annotationStyle = prefs.style

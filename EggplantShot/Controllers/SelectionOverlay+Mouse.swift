@@ -64,14 +64,15 @@ extension SelectionOverlayController {
         if let mon = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
             guard let self else { return event }
             if event.keyCode == 53 { // Esc
-                if self.editingTextID != nil {
-                    self.endTextEditing(commit: true)
+                if self.suppressEscapeUntilKeyUp || event.isARepeat {
                     return nil
                 }
-                self.tearDownOverlays()
-                self.finish(.cancelled)
+                self.handleEscapeKey()
+                // One ladder step per press — hold must not walk tool→deselect→discard.
+                self.suppressEscapeUntilKeyUp = true
                 return nil
             }
+            self.clearEscapeDiscardHint()
             // While editing text: keep typing in the field editor; route ⌘Z to its
             // *private* undo manager (never the shared app one — that crashes after
             // the editor is torn down with stale `_undoRedoTextOperation:` targets).
@@ -177,6 +178,15 @@ extension SelectionOverlayController {
             eventMonitors.append(mon)
         }
 
+        if let mon = NSEvent.addLocalMonitorForEvents(matching: .keyUp, handler: { [weak self] event in
+            if event.keyCode == 53 {
+                self?.suppressEscapeUntilKeyUp = false
+            }
+            return event
+        }) {
+            eventMonitors.append(mon)
+        }
+
         // ⌘ up/down: refresh move-vs-draw cursor over pencil / mosaic / eraser without waiting for mouse move.
         let flagsMask: NSEvent.EventTypeMask = .flagsChanged
         if let mon = NSEvent.addLocalMonitorForEvents(matching: flagsMask, handler: { [weak self] event in
@@ -190,6 +200,164 @@ extension SelectionOverlayController {
         }) {
             eventMonitors.append(mon)
         }
+    }
+
+    /// Esc ladder while capturing: end text → abort drag → disarm tool → deselect mark.
+    /// With marks still present: first Esc shows a tip; second Esc discards (toolbar ✕ still immediate).
+    func handleEscapeKey() {
+        if editingTextID != nil {
+            clearEscapeDiscardHint()
+            endTextEditing(commit: true)
+            return
+        }
+        if phase == .refining {
+            if dragKind != nil || draftAnnotation != nil {
+                clearEscapeDiscardHint()
+                cancelInProgressRefineDrag()
+                return
+            }
+            if annotateTool != .none {
+                clearEscapeDiscardHint()
+                setAnnotateTool(.none)
+                return
+            }
+            if selectedAnnotationID != nil {
+                clearEscapeDiscardHint()
+                annotationHistory.select(nil)
+                updateHighlight(showHandles: true)
+                updateOverlayCursor(at: NSEvent.mouseLocation)
+                return
+            }
+            if !annotations.isEmpty {
+                if escapeDiscardArmed {
+                    clearEscapeDiscardHint()
+                    tearDownOverlays()
+                    finish(.cancelled)
+                    return
+                }
+                armEscapeDiscardHint()
+                return
+            }
+        }
+        clearEscapeDiscardHint()
+        tearDownOverlays()
+        finish(.cancelled)
+    }
+
+    /// Light tip: press Esc again to discard. Arms a one-shot second Esc.
+    func armEscapeDiscardHint() {
+        escapeDiscardArmed = true
+        showEscapeDiscardHint()
+        escapeHintHideWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.clearEscapeDiscardHint()
+        }
+        escapeHintHideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4, execute: work)
+    }
+
+    func clearEscapeDiscardHint() {
+        escapeDiscardArmed = false
+        escapeHintHideWork?.cancel()
+        escapeHintHideWork = nil
+        escapeHintPanel?.orderOut(nil)
+        escapeHintPanel?.close()
+        escapeHintPanel = nil
+    }
+
+    func showEscapeDiscardHint() {
+        escapeHintPanel?.orderOut(nil)
+        escapeHintPanel?.close()
+
+        let label = NSTextField(labelWithString: "Press Esc again to discard")
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.textColor = NSColor(calibratedWhite: 0.12, alpha: 1)
+        label.drawsBackground = false
+        label.isBezeled = false
+        label.isEditable = false
+        label.lineBreakMode = .byClipping
+        label.sizeToFit()
+
+        let padX: CGFloat = 10
+        let padY: CGFloat = 6
+        let contentSize = NSSize(
+            width: ceil(label.frame.width) + padX * 2,
+            height: ceil(label.frame.height) + padY * 2
+        )
+        label.frame = NSRect(
+            x: padX,
+            y: padY,
+            width: contentSize.width - padX * 2,
+            height: contentSize.height - padY * 2
+        )
+
+        let chrome = NSView(frame: NSRect(origin: .zero, size: contentSize))
+        chrome.wantsLayer = true
+        chrome.layer?.backgroundColor = NSColor.white.cgColor
+        chrome.layer?.cornerRadius = 6
+        chrome.layer?.borderWidth = 0.5
+        chrome.layer?.borderColor = NSColor(calibratedWhite: 0.75, alpha: 1).cgColor
+        chrome.addSubview(label)
+
+        let tip = NSPanel(
+            contentRect: NSRect(origin: .zero, size: contentSize),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        tip.isOpaque = false
+        tip.backgroundColor = .clear
+        tip.hasShadow = true
+        tip.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 2)
+        tip.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        tip.hidesOnDeactivate = false
+        tip.isReleasedWhenClosed = false
+        tip.ignoresMouseEvents = true
+        tip.contentView = chrome
+
+        // Center just above the selection (or toolbar if the rect is near the bottom).
+        var origin = CGPoint(
+            x: currentRect.midX - contentSize.width / 2,
+            y: currentRect.maxY + 10
+        )
+        if let screen = panels.first(where: { $0.screenFrame.intersects(currentRect) })?.screen
+            ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            if origin.y + contentSize.height > visible.maxY - 4 {
+                origin.y = currentRect.minY - contentSize.height - 10
+            }
+            origin.x = min(max(origin.x, visible.minX + 4), visible.maxX - contentSize.width - 4)
+            origin.y = min(max(origin.y, visible.minY + 4), visible.maxY - contentSize.height - 4)
+        }
+        tip.setFrameOrigin(origin)
+        tip.orderFrontRegardless()
+        escapeHintPanel = tip
+    }
+
+    /// Drop an unfinished refine gesture without committing (Esc mid-drag).
+    func cancelInProgressRefineDrag() {
+        switch dragKind {
+        case .annotateDraw:
+            draftAnnotation = nil
+        case .annotateMove, .annotateResize, .annotateEndpoint:
+            annotationHistory.cancelGesture()
+        case .move(let startRect, _):
+            setSelectionRect(startRect)
+        case .resize(_, let startRect, _):
+            setSelectionRect(startRect)
+        case .expand(_, let baseRect):
+            setSelectionRect(baseRect)
+        case .draw, .none:
+            break
+        }
+        dragKind = nil
+        draftAnnotation = nil
+        textClickCandidate = nil
+        textChromeDragStartFrame = nil
+        updateHighlight(showHandles: true)
+        repositionToolbar()
+        refreshHistoryChrome()
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     /// ⌘ over pencil / mosaic / eraser marks: temporary move (cursor updates on key alone).
@@ -282,6 +450,7 @@ extension SelectionOverlayController {
     }
 
     func handleMouseDown(at point: CGPoint) {
+        clearEscapeDiscardHint()
         switch phase {
         case .idle:
             if let frame = hoveredWindowRect ?? windowHitTester.windowFrame(at: point) {

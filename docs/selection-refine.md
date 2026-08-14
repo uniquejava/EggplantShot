@@ -15,7 +15,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
 - Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
 - Confirm composites marks onto the crop, then tears down the overlay.
-- Esc in refine (not editing text) cancels the whole capture.
+- Esc ladder (not editing text): abort in-progress drag → disarm tool → deselect mark → with marks, first Esc shows “Press Esc again to discard”, second Esc discards (toolbar **✕** still immediate).
 - Delete removes the selected mark. Undo / redo: toolbar + ⌘Z / ⇧⌘Z.
 - Refine tool / action hotkeys (armed after selection; ignored while editing text or mid-drag):
   **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **T** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy.

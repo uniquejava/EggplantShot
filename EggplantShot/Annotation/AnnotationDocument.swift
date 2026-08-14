@@ -49,6 +49,13 @@ final class AnnotationHistory {
         body(&document)
     }
 
+    /// If a live gesture is in progress, restore the baseline without pushing undo.
+    func cancelGesture() {
+        guard let baseline = gestureBaseline else { return }
+        gestureBaseline = nil
+        document = baseline
+    }
+
     /// If document ≠ baseline, push baseline onto undo and clear redo.
     func endGesture() {
         guard let baseline = gestureBaseline else { return }
