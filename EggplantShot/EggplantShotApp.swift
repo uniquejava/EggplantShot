@@ -158,6 +158,22 @@ final class AppState: ObservableObject {
         objectWillChange.send()
     }
 
+    func applyHotkey(_ binding: HotkeyBinding, for action: HotkeyAction) {
+        hotkeySettings.setBinding(binding, for: action)
+        applyHotkeyBindings()
+        hotkeyMonitor.setPaused(hotkeySettings.hotkeysDisabled)
+        if !hotkeyMonitor.isRunning {
+            ensureHotkeyMonitorRunning()
+        }
+        objectWillChange.send()
+    }
+
+    func resetHotkeysToDefaults() {
+        hotkeySettings.resetToDefaults()
+        applyHotkeyBindings()
+        objectWillChange.send()
+    }
+
     func refreshPermissions() {
         accessibilityTrusted = ScreenPermissions.accessibilityTrusted
         screenAccessGranted = ScreenPermissions.hasScreenAccess
@@ -220,11 +236,7 @@ final class AppState: ObservableObject {
     }
 
     private func applyHotkeyBindings() {
-        hotkeyMonitor.updateBindings([
-            .snip: hotkeySettings.snip,
-            .snipAndCopy: hotkeySettings.snipAndCopy,
-            .hideShowImages: hotkeySettings.hideShowImages,
-        ])
+        hotkeyMonitor.updateBindings(hotkeySettings.allBindings)
     }
 
     private func startAccessibilityPollingIfNeeded() {

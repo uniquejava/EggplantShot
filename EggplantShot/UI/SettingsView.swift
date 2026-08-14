@@ -21,7 +21,7 @@ struct SettingsView: View {
                     Label("About", systemImage: "info.circle")
                 }
         }
-        .frame(width: 460, height: 320)
+        .frame(width: 460, height: 340)
         .onAppear {
             appState.refreshPermissions()
         }
@@ -36,7 +36,7 @@ private struct PermissionsSettingsPane: View {
             permissionRow(
                 title: "Accessibility",
                 ok: appState.accessibilityTrusted,
-                detail: "Needed for global hotkeys (F1, ⌘F1, ⇧F3)."
+                detail: "Needed for global hotkeys."
             ) {
                 appState.requestAccessibility()
             }
@@ -89,42 +89,205 @@ private struct PermissionsSettingsPane: View {
 
 private struct HotkeysSettingsPane: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var settings: HotkeySettings
+
+    init(appState: AppState) {
+        self.appState = appState
+        _settings = ObservedObject(wrappedValue: appState.hotkeySettings)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            hotkeyRow("Capture", appState.hotkeySettings.snip.displayName)
-            hotkeyRow("Capture and copy", appState.hotkeySettings.snipAndCopy.displayName)
-            hotkeyRow("Hide/Show images", appState.hotkeySettings.hideShowImages.displayName)
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(HotkeyAction.allCases, id: \.self) { action in
+                hotkeyRow(action)
+            }
+
+            HStack {
+                Spacer()
+                Button("Reset to Defaults") {
+                    appState.resetHotkeysToDefaults()
+                }
+            }
 
             Divider()
 
             Toggle("Disable hotkeys", isOn: Binding(
-                get: { appState.hotkeySettings.hotkeysDisabled },
+                get: { settings.hotkeysDisabled },
                 set: { appState.setHotkeysDisabled($0) }
             ))
             .toggleStyle(.checkbox)
 
-            Text("When disabled, menu actions still work; only global shortcuts are paused.")
+            Text("Click a shortcut field, then press a new key combo. F-keys may stand alone; other keys need ⌘/⌥/⌃/⇧. Esc or click away to finish. When disabled, menu actions still work.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 0)
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color(nsColor: .windowBackgroundColor))
+        .onDisappear {
+            // Never leave the global tap paused if a recorder was focused.
+            appState.hotkeyMonitor.setPaused(settings.hotkeysDisabled)
+        }
     }
 
-    private func hotkeyRow(_ title: String, _ shortcut: String) -> some View {
+    private func hotkeyRow(_ action: HotkeyAction) -> some View {
         HStack {
-            Text(title)
+            Text(action.settingsTitle)
             Spacer()
-            Text(shortcut)
-                .font(.body.monospaced())
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 4))
+            HotkeyRecorderRepresentable(
+                binding: settings.binding(for: action),
+                onBindingChange: { appState.applyHotkey($0, for: action) },
+                onRecordingChange: { recording in
+                    if recording {
+                        appState.hotkeyMonitor.setPaused(true)
+                    } else {
+                        appState.hotkeyMonitor.setPaused(settings.hotkeysDisabled)
+                    }
+                }
+            )
+            .frame(width: 140, height: 28)
         }
+    }
+}
+
+// MARK: - AppKit hotkey recorder
+
+private struct HotkeyRecorderRepresentable: NSViewRepresentable {
+    let binding: HotkeyBinding
+    let onBindingChange: (HotkeyBinding) -> Void
+    let onRecordingChange: (Bool) -> Void
+
+    func makeNSView(context: Context) -> HotkeyRecorderView {
+        let view = HotkeyRecorderView()
+        view.binding = binding
+        view.onBindingChange = onBindingChange
+        view.onRecordingChange = onRecordingChange
+        return view
+    }
+
+    func updateNSView(_ nsView: HotkeyRecorderView, context: Context) {
+        nsView.binding = binding
+        nsView.onBindingChange = onBindingChange
+        nsView.onRecordingChange = onRecordingChange
+        nsView.refreshDisplay()
+    }
+}
+
+final class HotkeyRecorderView: NSView {
+    var binding = HotkeyBinding(keyCode: HotkeyBinding.f1, modifiers: 0)
+    var onBindingChange: ((HotkeyBinding) -> Void)?
+    var onRecordingChange: ((Bool) -> Void)?
+
+    private var isRecording = false
+    private let accent = NSColor.controlAccentColor
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.cornerRadius = 5
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+
+        label.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        label.alignment = .center
+        label.isSelectable = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+        refreshDisplay()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        beginRecording()
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok { beginRecording() }
+        return ok
+    }
+
+    override func resignFirstResponder() -> Bool {
+        endRecording()
+        return super.resignFirstResponder()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard isRecording else {
+            super.keyDown(with: event)
+            return
+        }
+
+        // Esc ends recording without changing the binding.
+        if event.keyCode == 53 {
+            endRecording()
+            window?.makeFirstResponder(nil)
+            return
+        }
+
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let next = HotkeyBinding(keyCode: event.keyCode, modifiers: modifiers.rawValue)
+        guard next.isValidAssignable else { return }
+
+        commit(next)
+    }
+
+    func refreshDisplay() {
+        layer?.borderColor = isRecording ? accent.cgColor : NSColor.separatorColor.cgColor
+        layer?.backgroundColor = isRecording
+            ? accent.withAlphaComponent(0.12).cgColor
+            : NSColor.controlBackgroundColor.cgColor
+
+        if isRecording {
+            label.stringValue = "Type shortcut"
+            label.textColor = .secondaryLabelColor
+        } else {
+            label.stringValue = binding.displayName
+            label.textColor = .labelColor
+        }
+    }
+
+    private func beginRecording() {
+        guard !isRecording else {
+            refreshDisplay()
+            return
+        }
+        isRecording = true
+        onRecordingChange?(true)
+        refreshDisplay()
+    }
+
+    private func endRecording() {
+        guard isRecording else { return }
+        isRecording = false
+        onRecordingChange?(false)
+        refreshDisplay()
+    }
+
+    private func commit(_ next: HotkeyBinding) {
+        binding = next
+        isRecording = false
+        onRecordingChange?(false)
+        refreshDisplay()
+        onBindingChange?(next)
+        window?.makeFirstResponder(nil)
     }
 }
