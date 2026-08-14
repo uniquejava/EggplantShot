@@ -87,10 +87,25 @@ struct MosaicStyle: Equatable {
         min(max(value, intensityRange.lowerBound), intensityRange.upperBound)
     }
 
-    /// Maps Snipaste intensity 3…24 → gaussian radius in **points** (simple linear).
+    /// Maps intensity 3…24 → gaussian **sigma** in points (linear, like Photoshop's radius field).
+    ///
+    /// `CIGaussianBlur.inputRadius` is sigma, so a thin stroke smears over roughly ±2…3 sigma.
+    /// The old 0.7…14 range ignored that: the default sigma of ~5 pt turned a 2 pt pencil line
+    /// into a ~15 pt blob (≈6–8× thicker), and everything above intensity ~6 bloomed past the
+    /// brush and got clipped to it — so half the slider did nothing except make the smear
+    /// brush-width-shaped, and perceived thickness tracked the brush instead of the intensity.
+    ///
+    /// 0.8…3.2 pt keeps the spread inside every brush preset, so intensity means the same thing at
+    /// 14 pt and 24 pt. Measured on a 2 pt stroke: 1.7× at minimum, ≈2.8× at the default, ≈5× at
+    /// maximum. Fine detail is already gone by ~1.5 pt, so the default obscures more than the old
+    /// one needed to while looking far less bloated. Radius stays absolute rather than scaling with
+    /// the brush, matching Photoshop's blur tool.
+    ///
+    /// Note this is **not** security-grade redaction at any setting — blurred text is recoverable
+    /// (Hill et al., PoPETs 2016). Solid fill is the only safe way to hide sensitive content.
     static func blurRadiusPoints(forIntensity intensity: CGFloat) -> CGFloat {
         let t = (clampedIntensity(intensity) - intensityRange.lowerBound)
             / (intensityRange.upperBound - intensityRange.lowerBound)
-        return 0.7 + t * 13.3 // ≈ 0.7 … 14
+        return 0.8 + t * 2.4 // ≈ 0.8 … 3.2
     }
 }

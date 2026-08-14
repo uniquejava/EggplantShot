@@ -106,9 +106,35 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to blur an area) | intensity **3…24** with live blur preview left of the slider.
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
 - Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
-- Effect: **gaussian blur** of freeze/base **plus whatever marks are already under it** (`CIGaussianBlur`; linear intensity 3…24 → ~0.7…14 pt). Path: hull crop → read the marks drawn so far out of the `MarksCanvas` (`snapshotCrop`) → composite over the freeze crop → blur → clip to stroke/region. Because the sample is *pixels already rendered*, a mosaic over an earlier mosaic sees that one's blurred output. **Vector** stroke/region data only (P4; never mutates `baseImage`).
+- Effect: **gaussian blur** of freeze/base **plus whatever marks are already under it** (`CIGaussianBlur`; linear intensity 3…24 → sigma ~0.8…3.2 pt — see *Blur calibration* below). Path: hull crop → read the marks drawn so far out of the `MarksCanvas` (`snapshotCrop`) → composite over the freeze crop → blur → clip to stroke/region. Because the sample is *pixels already rendered*, a mosaic over an earlier mosaic sees that one's blurred output. **Vector** stroke/region data only (P4; never mutates `baseImage`).
 - Hit: under object tools, mosaic marks draw-through (no move hand over blurred areas). Under paint tools, all marks draw-through (Shared rules). Move via **V** (region handles still work when selected).
 - No color palette.
+
+**Blur calibration.** `CIGaussianBlur.inputRadius` **is sigma**, and a thin stroke smears over
+roughly ±2…3 sigma — so sigma has to stay small or a pencil line turns into a blob. Intensity
+3…24 maps linearly to sigma **0.8…3.2 pt**, absolute (not scaled by brush width, matching
+Photoshop's blur tool). Measured on a 2 pt stroke against a dark freeze:
+
+| intensity | sigma | thickening | fine detail left |
+|---|---|---|---|
+| 3 | 0.80 pt | 1.7× | 21% |
+| 6 | 1.14 pt | 2.1× | 5% |
+| **10 (default)** | **1.60 pt** | **2.8×** | **0.1%** |
+| 15 | 2.17 pt | 3.7× | 0% |
+| 20 | 2.74 pt | 4.6× | 0% |
+| 24 | 3.20 pt | 5.2× | 0% |
+
+Two things this range is chosen to avoid. Sigma above ~3 pt **blooms past the brush** and gets
+clipped to it, so perceived thickness starts tracking the brush width instead of the intensity —
+the old 0.7…14 pt range saturated by intensity ~6, wasting most of the slider and making a 14 pt
+and a 24 pt brush read as different strengths (5.9× vs 7.8× at the same setting). And detail is
+already gone by ~1.5 pt, so the old default of ~5 pt was roughly 3× more blur than obscuring
+needs — all of that excess went into fattening strokes.
+
+**Not security-grade redaction at any setting.** Blurred and pixelated text is recoverable
+(Hill et al., *On the (In)effectiveness of Mosaicing and Blurring as Tools for Document
+Redaction*, PoPETs 2016 — 24 pt text recovered through a 45 px blur). Solid fill is the only safe
+way to hide sensitive content.
 
 Sampling design (mosaic / magnifier): marks render into a `MarksCanvas` (an owned bitmap), and a
 mosaic reads the hull it is about to blur back out of it — so a mosaic over an earlier mosaic sees

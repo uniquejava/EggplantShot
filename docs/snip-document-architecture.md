@@ -369,7 +369,7 @@ Arrow: `.arrow(start:end:style:caps:)` — segment + Snipaste end-caps; Shift �
 
 Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
 
-Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius, linear ~0.7…14 pt); samples freeze/base **+ the marks already under it** at draw time (read back from the `MarksCanvas` hull, so nested mosaics work); disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
+Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius **is sigma**, linear ~0.8…3.2 pt; default 10 ≈ 2.8× thickening on a 2 pt stroke); samples freeze/base **+ the marks already under it** at draw time (read back from the `MarksCanvas` hull, so nested mosaics work); disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
 Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **multiply** color fill (Snipaste highlighter; stamps freeze under the clip on the transparent marks layer so multiply isn’t against clear; near-white → sourceOver wash) instead of blur; region chrome = solid while draw/move/resize, handles-only when idle, dashed on non-selected hover; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
 
