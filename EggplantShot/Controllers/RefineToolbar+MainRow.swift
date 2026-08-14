@@ -5,7 +5,7 @@ extension RefineToolbarController {
         selectButton = iconButton(
             systemName: "cursorarrow",
             tooltip: "Move (V)",
-            enabled: true,
+            enabled: false,
             action: #selector(selectTapped)
         )
         shapeButton = iconButton(

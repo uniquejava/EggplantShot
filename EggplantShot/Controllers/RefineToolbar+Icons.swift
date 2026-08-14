@@ -6,6 +6,11 @@ import QuartzCore
 
 extension RefineToolbarController {
     func tintSelected(_ button: NSButton, selected: Bool) {
+        guard button.isEnabled else {
+            button.contentTintColor = NSColor(calibratedWhite: 0.55, alpha: 1)
+            button.layer?.backgroundColor = nil
+            return
+        }
         button.contentTintColor = selected
             ? NSColor.systemBlue
             : NSColor(calibratedWhite: 0.22, alpha: 1)

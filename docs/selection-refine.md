@@ -82,7 +82,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Start / end caps: plain, bar, circle, diamond, open chevron (default end; shaft to tip), filled triangle, hollow triangle. Body reuses `StrokeLineStyle` (5 dashes).
 - **Switch** (Snipaste): stacked miniature — top = armed caps (current or last-arrowed), bottom = plain line. Active row dark / inactive light. Tap strips arrowheads ↔ restores last armed caps (does **not** force double-ended). Press nudges glyphs down; release restores. One divider before the palette (no double rule).
 - Geometry: `AnnotationPayload.arrow(start:end:style:caps:)` in selection-local points. Drag start→end; Shift → 45° snap; auto-select after draw.
-- Edit: filled start / hollow end square handles; drag shaft to move; no 8-handle resize chrome.
+- Edit: hollow white square endpoint handles; drag shaft to move; no 8-handle resize chrome.
 - Disk: `type: "arrow"` with `points: [start, end]`, `style`, `startCap` / `endCap` ints (stable raw values).
 
 ### Pencil

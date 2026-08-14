@@ -15,12 +15,6 @@ struct StatusMenuContent: View {
         }
         .keyboardShortcut(.f1, modifiers: [.command])
 
-        Button("Custom capture") {
-            // Stub — future: remembered / fixed region.
-        }
-        .keyboardShortcut(.f1, modifiers: [.shift])
-        .disabled(true)
-
         Button("Paste") {
             appState.pasteFromClipboard()
         }

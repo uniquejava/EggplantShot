@@ -141,6 +141,10 @@ extension SelectionOverlayController {
     }
 
     func setAnnotateTool(_ tool: AnnotateTool) {
+        var tool = tool
+        if tool == .select, annotations.isEmpty {
+            tool = .none
+        }
         if tool != annotateTool {
             endTextEditing(commit: true)
         }
@@ -162,6 +166,7 @@ extension SelectionOverlayController {
 
     /// Same toggle as tapping a toolbar tool icon (armed ↔ none).
     func toggleRefineTool(_ tool: AnnotateTool) {
+        if tool == .select, annotations.isEmpty, annotateTool != .select { return }
         let next = annotateTool == tool ? AnnotateTool.none : tool
         if let toolbar {
             toolbar.selectTool(next)
@@ -482,10 +487,15 @@ extension SelectionOverlayController {
     }
 
     func refreshHistoryChrome() {
+        let hasMarks = !annotations.isEmpty
         toolbar?.setHistoryAvailability(
             canUndo: annotationHistory.canUndo,
             canRedo: annotationHistory.canRedo
         )
+        toolbar?.setMoveAvailability(enabled: hasMarks)
+        if !hasMarks, annotateTool == .select {
+            setAnnotateTool(.none)
+        }
     }
 
 }

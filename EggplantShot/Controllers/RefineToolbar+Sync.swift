@@ -2,6 +2,7 @@ import AppKit
 
 extension RefineToolbarController {
     func selectTool(_ next: AnnotateTool) {
+        if next == .select, !selectButton.isEnabled { return }
         tool = next
         if next == .pencil || next == .arrow {
             style.isFilled = false
@@ -95,6 +96,12 @@ extension RefineToolbarController {
     func setHistoryAvailability(canUndo: Bool, canRedo: Bool) {
         setHistoryButton(undoButton, enabled: canUndo)
         setHistoryButton(redoButton, enabled: canRedo)
+    }
+
+    /// Move (V) only makes sense when there is at least one mark.
+    func setMoveAvailability(enabled: Bool) {
+        selectButton.isEnabled = enabled
+        tintSelected(selectButton, selected: tool == .select)
     }
 
     func setHistoryButton(_ button: NSButton, enabled: Bool) {

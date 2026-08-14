@@ -4,7 +4,7 @@ import CoreImage
 // Handles + geometry hit-testing.
 
 extension AnnotationDrawing {
-    static func drawHandles(in rect: CGRect, size: CGFloat, accent: NSColor) {
+    static func drawHandles(in rect: CGRect, size: CGFloat) {
         let centers: [CGPoint] = [
             CGPoint(x: rect.minX, y: rect.maxY),
             CGPoint(x: rect.midX, y: rect.maxY),
@@ -17,40 +17,28 @@ extension AnnotationDrawing {
         ]
         for c in centers {
             let r = CGRect(x: c.x - size / 2, y: c.y - size / 2, width: size, height: size)
-            NSColor.white.setFill()
-            NSBezierPath(rect: r).fill()
-            accent.setStroke()
+            // Hollow white square — keep freeze visible under the handle.
+            NSColor.white.setStroke()
             let stroke = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
             stroke.lineWidth = 1
             stroke.stroke()
         }
     }
 
-    /// Snipaste-style square endpoint handles (start filled, end hollow).
+    /// Square endpoint handles (start / end); hollow white border so the freeze shows through.
     static func drawArrowEndpointHandles(
         start: CGPoint,
         end: CGPoint,
-        size: CGFloat,
-        accent: NSColor
+        size: CGFloat
     ) {
         let half = size / 2
-        // Start: filled accent square.
-        let startRect = CGRect(x: start.x - half, y: start.y - half, width: size, height: size)
-        accent.setFill()
-        NSBezierPath(rect: startRect).fill()
-        NSColor.white.setStroke()
-        let startStroke = NSBezierPath(rect: startRect.insetBy(dx: 0.5, dy: 0.5))
-        startStroke.lineWidth = 1
-        startStroke.stroke()
-
-        // End: hollow white square with accent border.
-        let endRect = CGRect(x: end.x - half, y: end.y - half, width: size, height: size)
-        NSColor.white.setFill()
-        NSBezierPath(rect: endRect).fill()
-        accent.setStroke()
-        let endStroke = NSBezierPath(rect: endRect.insetBy(dx: 0.5, dy: 0.5))
-        endStroke.lineWidth = 1
-        endStroke.stroke()
+        for center in [start, end] {
+            let r = CGRect(x: center.x - half, y: center.y - half, width: size, height: size)
+            NSColor.white.setStroke()
+            let stroke = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
+            stroke.lineWidth = 1
+            stroke.stroke()
+        }
     }
 
     /// Distance from `point` to the polyline (selection-local). Used for pencil hit-testing.

@@ -217,32 +217,31 @@ final class SelectionOverlayNSView: NSView {
                 AnnotationDrawing.drawArrowEndpointHandles(
                     start: s,
                     end: e,
-                    size: annotationHandleSize,
-                    accent: accent
+                    size: annotationHandleSize
                 )
             } else if case .mosaic(.region(let mode, let rect), _) = selected.payload {
                 // After release: dashed hairline + resize handles.
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
                 drawRegionChrome(in: r, mode: mode, dashed: true)
-                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize)
             } else if case .eraser(.region(let mode, let rect), _) = selected.payload {
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
                 drawRegionChrome(in: r, mode: mode, dashed: true)
-                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize)
             } else if case .marker(.region(let mode, let rect), _) = selected.payload {
                 // Snipaste marker: handles only when idle; solid border while moving / resizing.
                 let r = rect.offsetBy(dx: origin.x, dy: origin.y)
                 if showSolidMarkerRegionBorder {
                     drawRegionChrome(in: r, mode: mode, dashed: false)
                 }
-                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize)
             } else if case .magnifier(_, _, let lens, _) = selected.payload {
                 // Source is move-only; lens handles resize both frames at fixed scale.
                 let lensR = lens.offsetBy(dx: origin.x, dy: origin.y)
-                AnnotationDrawing.drawHandles(in: lensR, size: annotationHandleSize, accent: accent)
+                AnnotationDrawing.drawHandles(in: lensR, size: annotationHandleSize)
             } else {
                 let r = selected.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
-                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize, accent: accent)
+                AnnotationDrawing.drawHandles(in: r, size: annotationHandleSize)
             }
         }
 
