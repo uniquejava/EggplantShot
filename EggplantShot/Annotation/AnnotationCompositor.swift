@@ -11,6 +11,9 @@ enum AnnotationCompositor {
             image: image,
             selectionOriginInImage: .zero
         )
+        // Render marks at the base image's pixel density so the bake matches what was on screen.
+        let pixels = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        let scale = max(pixels.map { CGFloat($0.width) / size.width } ?? 2, 1)
         return NSImage(size: size, flipped: false) { _ in
             image.draw(
                 in: CGRect(origin: .zero, size: size),
@@ -23,6 +26,8 @@ enum AnnotationCompositor {
                 annotations,
                 size: size,
                 origin: .zero,
+                scale: scale,
+                colorSpace: pixels?.colorSpace,
                 sample: sample,
                 // Match idle overlay: hide nested sources when ≥2 magnifiers (no hover on bake).
                 hiddenMagnifierSourceIDs: AnnotationDrawing.nestedMagnifierSourceIDsToHide(

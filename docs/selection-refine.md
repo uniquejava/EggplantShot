@@ -106,32 +106,17 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to blur an area) | intensity **3…24** with live blur preview left of the slider.
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
 - Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
-- Effect: **gaussian blur** of freeze/base **plus prior marks** under the brush/region (`CIGaussianBlur`; linear intensity 3…24 → ~0.7…14 pt). Crop-local path: hull crop → (if overlapping prior marks) composite freeze + those marks (`drawMarksSimple`, not a nested `renderMarksLayer`) → blur → clip to stroke/region. Nested mosaics in that crop stay freeze-only. **Vector** stroke/region data only (P4; never mutates `baseImage`).
-- Remaining: smearing a **second** mosaic over an existing mosaic on a dark freeze still looks black (nested mosaic in the sample is freeze-only, so opaque freeze pixels cover the first smear’s blurred ink). See deferred note below.
+- Effect: **gaussian blur** of freeze/base **plus whatever marks are already under it** (`CIGaussianBlur`; linear intensity 3…24 → ~0.7…14 pt). Path: hull crop → read the marks drawn so far out of the `MarksCanvas` (`snapshotCrop`) → composite over the freeze crop → blur → clip to stroke/region. Because the sample is *pixels already rendered*, a mosaic over an earlier mosaic sees that one's blurred output. **Vector** stroke/region data only (P4; never mutates `baseImage`).
 - Hit: under object tools, mosaic marks draw-through (no move hand over blurred areas). Under paint tools, all marks draw-through (Shared rules). Move via **V** (region handles still work when selected).
 - No color palette.
 
-Deferred / handoff (mosaic sample) — 2026-08-15:
+Sampling design (mosaic / magnifier): marks render into a `MarksCanvas` (an owned bitmap), and a
+mosaic reads the hull it is about to blur back out of it — so a mosaic over an earlier mosaic sees
+that one's blurred pixels, and nothing re-derives prior marks from vectors. Full write-up, the two
+rejected approaches, measurements, and the rules that must not be broken:
+[`marks-rendering.md`](marks-rendering.md).
 
-**Shipped:** crop-local freeze **+ prior marks** so a first smear over pencil/marker/text blurs the ink instead of covering it with opaque freeze (the original “all black on dark freeze” bug). P4 unchanged: vector data only, no bake into `baseImage`. Overlay and Pin/Copy/Save bake share `renderMarksLayer`.
-
-**Code:**
-- `renderMarksLayer` passes `prior` into `drawMosaic` (magnifier-style). `AnnotationDrawing.draw` still calls mosaic with `priorMarks: []` (the simple/nested path).
-- `drawBlurredMask` → if any prior mark’s `boundingRect` hits the padded hull, `compositeCropWithPriorMarks` builds a **crop-sized** buffer: freeze crop + transparency layer + `drawMarksSimple` (eraser `destinationOut` punches marks only, then sourceOver onto freeze) → `blurredCrop`.
-- Empty hull overlap still blurs freeze directly (old cheap path).
-
-**Still broken:** second (and further) smear over an existing mosaic. Nested mosaics inside `drawMarksSimple` go through `draw()` → freeze-only blur → opaque freeze pixels cover the first smear’s blurred ink → looks black again on a dark freeze.
-
-**Tried and rejected:** nesting `renderMarksLayer` inside `compositeCropWithPriorMarks` so nested mosaics keep *their* priors. Second smear looked correct, then the overlay **froze**. Repro: **pencil** (not step tool) — handwritten 一 / 二 / 三 / 四 / 五, different colors, scribbly strokes; mosaic over them a few times; then drawing more pencil locked the overlay. Each live mouse-move rebuilds every nested mosaic (which rebuilds *its* priors: other mosaics + every pencil polyline) inside the crop — combinatorial, not “a bit slow”. Dense pencil points make it worse. Do **not** bring that back.
-
-**Constraints for a follow-up:**
-- Do **not** full-screen recomposite freeze+marks on every brush tip.
-- Do **not** nest `renderMarksLayer` in the crop.
-- `lockFocus` inside overlay/`NSImage` drawing handlers steals the current context — don’t.
-- Coordinate space: overlay `isFlipped == false`; crop buffer must use `NSImage(size:flipped: false)` like magnifier `drawMagnifiedContentWithAnnotations`.
-- Prefer sampling “what’s already visible in this hull” cheaply (e.g. copy a subrect of the marks-so-far bitmap while drawing the layer in order) over re-vectorizing nested mosaics.
-
-**Unrelated leftover:** eraser concentric-ring tip still deferred (reuses mosaic outline).
+**Still deferred:** eraser concentric-ring brush tip (reuses the mosaic outline).
 
 ### Eraser
 

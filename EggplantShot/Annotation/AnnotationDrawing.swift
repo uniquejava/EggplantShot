@@ -32,7 +32,7 @@ enum AnnotationDrawing {
                 style: style,
                 drawOrigin: origin,
                 sample: sample,
-                priorMarks: []
+                canvas: nil
             )
         case .eraser(let geometry, let style):
             drawEraser(geometry: geometry, style: style, drawOrigin: origin)
@@ -66,23 +66,29 @@ enum AnnotationDrawing {
     }
 
     /// Renders marks onto a transparent layer so eraser `destinationOut` punches annotations only.
-    /// Mosaic / magnifier (`includeAnnotations`) sample freeze/base + marks drawn **before** that
-    /// mark — **crop only** (not full-screen). Mosaic crop rebuilds use `drawMarksSimple`
-    /// (nested mosaics stay freeze-only; no recursive `renderMarksLayer`).
+    ///
+    /// Mosaic / magnifier (`includeAnnotations`) need to know what sits underneath them. They read
+    /// it back out of the `MarksCanvas` they are drawing into — the marks before them are already
+    /// painted there — instead of re-deriving it from vectors. So a mosaic over an earlier mosaic
+    /// sees that one's blurred pixels, and the cost per mosaic does not grow with the mark count.
     /// `hiddenMagnifierSourceIDs`: skip nested source borders (lens still draws) for declutter.
     static func renderMarksLayer(
         _ annotations: [Annotation],
         size: CGSize,
         origin: CGPoint = .zero,
+        scale: CGFloat = 2,
+        colorSpace: CGColorSpace? = nil,
         sample: MosaicSampleContext? = nil,
         hiddenMagnifierSourceIDs: Set<UUID> = []
     ) -> NSImage? {
         guard size.width > 0, size.height > 0, !annotations.isEmpty else { return nil }
-        return NSImage(size: size, flipped: false) { _ in
-            var prior: [Annotation] = []
-            prior.reserveCapacity(annotations.count)
+        guard let canvas = MarksCanvas(size: size, scale: scale, colorSpace: colorSpace) else {
+            return nil
+        }
+        canvas.draw {
             for annotation in annotations {
-                if case .magnifier(let kind, let source, let lens, let style) = annotation.payload {
+                switch annotation.payload {
+                case .magnifier(let kind, let source, let lens, let style):
                     drawMagnifier(
                         kind: kind,
                         source: source,
@@ -90,24 +96,23 @@ enum AnnotationDrawing {
                         style: style,
                         drawOrigin: origin,
                         sample: sample,
-                        priorMarks: style.includeAnnotations ? prior : [],
+                        canvas: style.includeAnnotations ? canvas : nil,
                         showSourceBorder: !hiddenMagnifierSourceIDs.contains(annotation.id)
                     )
-                } else if case .mosaic(let geometry, let style) = annotation.payload {
+                case .mosaic(let geometry, let style):
                     drawMosaic(
                         geometry: geometry,
                         style: style,
                         drawOrigin: origin,
                         sample: sample,
-                        priorMarks: prior
+                        canvas: canvas
                     )
-                } else {
+                default:
                     draw(annotation, origin: origin, sample: sample)
                 }
-                prior.append(annotation)
             }
-            return true
         }
+        return canvas.finishedImage()
     }
 
     /// Nested source frames to hide when ≥2 magnifiers (declutter). `revealedIDs` stay visible.
@@ -153,31 +158,6 @@ enum AnnotationDrawing {
         let nx = (point.x - oval.midX) / rx
         let ny = (point.y - oval.midY) / ry
         return nx * nx + ny * ny <= 1
-    }
-
-    /// Draw prior marks into a small buffer (no nested include-annotations / mosaic-prior rebuild).
-    static func drawMarksSimple(
-        _ annotations: [Annotation],
-        origin: CGPoint,
-        sample: MosaicSampleContext?
-    ) {
-        for annotation in annotations {
-            if case .magnifier(let kind, let source, let lens, var style) = annotation.payload {
-                style.includeAnnotations = false
-                drawMagnifier(
-                    kind: kind,
-                    source: source,
-                    lens: lens,
-                    style: style,
-                    drawOrigin: origin,
-                    sample: sample,
-                    priorMarks: [],
-                    showSourceBorder: true
-                )
-            } else {
-                draw(annotation, origin: origin, sample: sample)
-            }
-        }
     }
 
     static func containsEraser(_ annotations: [Annotation]) -> Bool {

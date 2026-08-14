@@ -11,7 +11,7 @@ extension AnnotationDrawing {
         style: MagnifierStyle,
         drawOrigin: CGPoint,
         sample: MosaicSampleContext?,
-        priorMarks: [Annotation] = [],
+        canvas: MarksCanvas? = nil,
         showSourceBorder: Bool = true
     ) {
         let sourceDraw = source.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y)
@@ -30,16 +30,16 @@ extension AnnotationDrawing {
             return
         }
 
-        // Magnified content inside the lens (sample freeze/base or source-crop + prior marks).
+        // Magnified content inside the lens (sample freeze/base, or freeze + marks under the source).
         if let sample {
-            if style.includeAnnotations, !priorMarks.isEmpty {
+            if style.includeAnnotations, let canvas {
                 drawMagnifiedContentWithAnnotations(
                     kind: kind,
                     sourceLocal: source,
                     lensDraw: lensDraw,
                     sample: sample,
                     drawOrigin: drawOrigin,
-                    priorMarks: priorMarks
+                    canvas: canvas
                 )
             } else {
                 drawMagnifiedContent(
@@ -208,15 +208,16 @@ extension AnnotationDrawing {
         sample.image.draw(in: dest, from: crop, operation: .copy, fraction: 1)
     }
 
-    /// Composite freeze crop + prior marks into a **source-sized** buffer, then scale into the lens.
-    /// Avoids full-display re-composite on every overlay redraw (was unusably slow).
+    /// Composite freeze crop + the marks already drawn over the source into a **source-sized**
+    /// buffer, then scale it into the lens. Marks come from the canvas the lens is being drawn
+    /// into, so this costs one crop readback rather than a re-draw of every prior mark.
     static func drawMagnifiedContentWithAnnotations(
         kind: ShapeKind,
         sourceLocal: CGRect,
         lensDraw: CGRect,
         sample: MosaicSampleContext,
         drawOrigin: CGPoint,
-        priorMarks: [Annotation]
+        canvas: MarksCanvas
     ) {
         let imageBounds = CGRect(origin: .zero, size: sample.image.size)
         let sampleSource = sourceLocal.offsetBy(
@@ -226,6 +227,12 @@ extension AnnotationDrawing {
         let crop = sampleSource.intersection(imageBounds)
         guard crop.width >= 1, crop.height >= 1 else { return }
 
+        let cropInContext = crop.offsetBy(
+            dx: drawOrigin.x - sample.selectionOriginInImage.x,
+            dy: drawOrigin.y - sample.selectionOriginInImage.y
+        )
+        let priorPixels = canvas.snapshotCrop(cropInContext)
+
         let composed = NSImage(size: crop.size, flipped: false) { _ in
             sample.image.draw(
                 in: CGRect(origin: .zero, size: crop.size),
@@ -233,12 +240,9 @@ extension AnnotationDrawing {
                 operation: .copy,
                 fraction: 1
             )
-            // selection-local → crop-image: L + selectionOrigin - crop.origin
-            let markOrigin = CGPoint(
-                x: sample.selectionOriginInImage.x - crop.minX,
-                y: sample.selectionOriginInImage.y - crop.minY
-            )
-            drawMarksSimple(priorMarks, origin: markOrigin, sample: sample)
+            if let priorPixels, let cg = NSGraphicsContext.current?.cgContext {
+                cg.draw(priorPixels, in: CGRect(origin: .zero, size: crop.size))
+            }
             return true
         }
 

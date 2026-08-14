@@ -93,6 +93,7 @@
 		B1E00000000000000000000028 /* AnnotationCoding+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000028 /* AnnotationCoding+Text.swift */; };
 		B1E00000000000000000000029 /* AnnotationCoding+Step.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000029 /* AnnotationCoding+Step.swift */; };
 		B1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift */; };
+		B1E0000000000000000000002B /* MarksCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E0000000000000000000002B /* MarksCanvas.swift */; };
 		B1F00000000000000000000010 /* RefineToolbar+MainRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000010 /* RefineToolbar+MainRow.swift */; };
 		B1F00000000000000000000011 /* RefineToolbar+Shape.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000011 /* RefineToolbar+Shape.swift */; };
 		B1F00000000000000000000012 /* RefineToolbar+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000012 /* RefineToolbar+Layout.swift */; };
@@ -199,6 +200,7 @@
 		C1E00000000000000000000028 /* AnnotationCoding+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Text.swift"; sourceTree = "<group>"; };
 		C1E00000000000000000000029 /* AnnotationCoding+Step.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Step.swift"; sourceTree = "<group>"; };
 		C1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AnnotationCoding+Magnifier.swift"; sourceTree = "<group>"; };
+		C1E0000000000000000000002B /* MarksCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarksCanvas.swift; sourceTree = "<group>"; };
 		C1F00000000000000000000010 /* RefineToolbar+MainRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+MainRow.swift"; sourceTree = "<group>"; };
 		C1F00000000000000000000011 /* RefineToolbar+Shape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Shape.swift"; sourceTree = "<group>"; };
 		C1F00000000000000000000012 /* RefineToolbar+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RefineToolbar+Layout.swift"; sourceTree = "<group>"; };
@@ -389,6 +391,7 @@
 				C1E00000000000000000000028 /* AnnotationCoding+Text.swift */,
 				C1E00000000000000000000029 /* AnnotationCoding+Step.swift */,
 				C1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift */,
+				C1E0000000000000000000002B /* MarksCanvas.swift */,
 				C1000000000000000000001D /* ContrastChrome.swift */,
 				C10000000000000000000013 /* AnnotationDocument.swift */,
 				C10000000000000000000016 /* AnnotationCoding.swift */,
@@ -539,6 +542,7 @@
 				B1E00000000000000000000028 /* AnnotationCoding+Text.swift in Sources */,
 				B1E00000000000000000000029 /* AnnotationCoding+Step.swift in Sources */,
 				B1E0000000000000000000002A /* AnnotationCoding+Magnifier.swift in Sources */,
+				B1E0000000000000000000002B /* MarksCanvas.swift in Sources */,
 				B1F000000000000000000000 /* RefineToolbarViews.swift in Sources */,
 				B1F000000000000000000001 /* RefineToolbar+Text.swift in Sources */,
 				B1F000000000000000000002 /* RefineToolbar+Mosaic.swift in Sources */,

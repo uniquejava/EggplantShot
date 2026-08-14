@@ -54,7 +54,7 @@ EggplantShot/
   Controllers/TextAnnotationEditor.swift
   Controllers/SelectionOverlayPanel.swift + SelectionOverlayNSView.swift
   Controllers/PinBoardController.swift + PinPanel.swift
-  Annotation/  # Annotation(+Tool/Geometry) + Drawing(+Tool) + Coding(+Tool) + Document/Compositor + ContrastChrome
+  Annotation/  # Annotation(+Tool/Geometry) + Drawing(+Tool) + Coding(+Tool) + Document/Compositor + MarksCanvas + ContrastChrome
   History/SnipRecord.swift + SnipHistoryStore.swift
   UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift
   Assets.xcassets/
@@ -81,7 +81,7 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 1. Add an `AnnotationPayload` case + `Annotation+<tool>.swift` (inits/accessors) + `AnnotationCoding+<tool>.swift` (encode/decode) + draw + hit-test together; history / store / confirm paths stay unchanged. Also add cases in `Annotation+Geometry.swift` and the encode/decode switches in `AnnotationCoding.swift`.
 2. Mutate marks **only** via `AnnotationHistory` (`commit` / `beginGesture`–`endGesture`) — never edit `marks` / `selectedID` from gesture code directly.
-3. Store effects as **data** (strokes / regions / style), not destructive pixels on `baseImage`. Sample the freeze/base at draw / bake time (e.g. mosaic `CIGaussianBlur` of freeze **+ prior marks**, crop-local).
+3. Store effects as **data** (strokes / regions / style), not destructive pixels on `baseImage`. Sample the freeze/base at draw / bake time. A tool that needs what is **under** it reads the hull back from the `MarksCanvas` (`snapshotCrop`) — never re-draw prior marks from vectors, and never nest `renderMarksLayer`.
 4. Do **not** bake into `baseImage` until Pin / Copy / Save; `,` / `.` always restore unannotated base + vector document.
 5. Disk: new `type` discriminator; unknown types skip on load. Bump `schemaVersion` only when the meta shape itself changes.
 
@@ -89,9 +89,9 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 
 → Annotate tools in: shape + arrow + pencil + marker + mosaic + text + step + magnifier + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload`. Login item via Preferences → General. See [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows).
 
-→ Mosaic: first smear over ink is fixed (crop-local freeze + prior marks). **Second smear over an existing mosaic still goes dark** — nested mosaics in the sample stay freeze-only. Do **not** nest `renderMarksLayer` inside the crop: pencil-handwritten digits (messy, several colors) + a few overlapping mosaic smears, then drawing more pencil **froze** the overlay. Handoff: Mosaic section in [`docs/selection-refine.md`](docs/selection-refine.md).
-
 → Eraser brush tip: concentric-ring (currently reuses mosaic outline). See deferred note under Eraser in `docs/selection-refine.md`.
+
+→ Marks render into a `MarksCanvas` (owned bitmap) so mosaic / magnifier can read back what is under them, instead of re-deriving prior marks from vectors. Rules, rejected approaches and measurements: [`docs/marks-rendering.md`](docs/marks-rendering.md).
 
 
 ## Prefer
