@@ -5,17 +5,17 @@ struct StatusMenuContent: View {
     @ObservedObject var appState: AppState
 
     var body: some View {
-        Button("Snip") {
+        Button("Capture") {
             appState.snip(mode: .pin)
         }
         .keyboardShortcut(.f1, modifiers: [])
 
-        Button("Snip and copy") {
+        Button("Capture and copy") {
             appState.snip(mode: .copy)
         }
         .keyboardShortcut(.f1, modifiers: [.command])
 
-        Button("Custom snip") {
+        Button("Custom capture") {
             // Stub — future: remembered / fixed region.
         }
         .keyboardShortcut(.f1, modifiers: [.shift])

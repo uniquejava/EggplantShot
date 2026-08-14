@@ -34,8 +34,8 @@ On first launch, grant Accessibility and Screen Recording when prompted.
 ## Features (MVP)
 
 - Menu bar extra (LSUIElement) with Snipaste-like menu
-- **Snip** / **F1** — area select → refine (handles + Snipaste-style toolbar) → optional annotate → pin with soft glow
-- **Snip and copy** / **⌘F1** — same refine UX; primary action copies to clipboard
+- **Capture** / **F1** — area select → refine (handles + Snipaste-style toolbar) → optional annotate → pin with soft glow
+- **Capture and copy** / **⌘F1** — area select → copy to clipboard immediately (no refine / annotate)
 - **Shape annotate** — stroke widths / fill / rect·ellipse / line style / color sub-toolbar; draw, move, resize; baked into pin/copy/save
 - **Text annotate** — click-to-place + inline edit; Bold / Italic / background / size / color; move / resize; baked into pin/copy/save
 - **OCR** — Recognize Text on the toolbar: copy selection text to clipboard, bubble-pop sound, dismiss (no result UI)

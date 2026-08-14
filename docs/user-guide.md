@@ -1,6 +1,6 @@
 # EggplantShot — User guide
 
-Menu-bar screenshot tool for macOS (Snipaste-style snip → annotate → pin / copy / save).
+Menu-bar screenshot tool for macOS (Snipaste-style capture → annotate → pin / copy / save).
 
 ## Permissions
 
@@ -15,13 +15,12 @@ Without Accessibility, hotkeys do nothing. Without Screen Recording, capture fai
 
 | Action | Default |
 |--------|---------|
-| **Snip** | `F1` |
-| **Snip and copy** | `⌘F1` |
+| **Capture** | `F1` |
+| **Capture and copy** | `⌘F1` |
 
-1. Displays freeze; hover highlights the window under the cursor.
-2. Click to lock that window, or drag to free-select a region.
-3. Refine the blue rect (move interior / resize handles), annotate if you want, then **Pin** / **Copy** / **Save**.
-4. **Return** confirms the primary action (Pin for Snip, Copy for Snip and copy). **Esc** cancels the snip.
+**Capture:** Displays freeze; hover highlights the window under the cursor; click to lock or drag to free-select; refine the blue rect, annotate if you want, then **Pin** / **Copy** / **Save**. **Return** confirms Pin. **Esc** cancels.
+
+**Capture and copy:** Same freeze + hover/drag select; as soon as you lock a window or finish a drag, the crop is copied to the clipboard (no toolbar / annotate). **Esc** cancels while selecting.
 
 Menu bar → **Disable hotkeys** pauses global shortcuts (persisted).
 
@@ -34,9 +33,9 @@ Floating image above ordinary windows. Drag to move. Scroll wheel zooms ±10% (b
 Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recognize Text** (OCR), undo/redo, then cancel / pin / save / copy.
 
 - Marks work on the **full freeze**, not only inside the blue rect. Pin/Copy/Save still crop to the selection (outside ink is clipped from the baked image).
-- **Recognize Text** runs OCR on the selection, copies text to the clipboard, plays a short success sound, and closes the snip (no result panel).
+- **Recognize Text** runs OCR on the selection, copies text to the clipboard, plays a short success sound, and closes the capture (no result panel).
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
-- **Esc** while editing text ends the editor only; otherwise Esc cancels the whole snip.
+- **Esc** while editing text ends the editor only; otherwise Esc cancels the whole capture.
 
 ### Pencil / mosaic / eraser — move vs draw
 
@@ -59,9 +58,9 @@ To **move** one of those marks without switching tools:
 | Arrow / pencil / freehand mosaic | **Shift** | Straight line (arrow also 45° snap) |
 | Pencil / mosaic / eraser marks | **⌘** | Temporary move |
 
-## History while snipping
+## History while capturing
 
-With the overlay up, **`,`** goes to an older snip record and **`.`** to a newer one (replay prior capture + marks into the current refine session).
+With the overlay up, **`,`** goes to an older capture record and **`.`** to a newer one (replay prior capture + marks into the current refine session).
 
 ## Preferences
 

@@ -6,7 +6,7 @@ Native **macOS 15+** Snipaste-style screenshot utility (MVP).
 
 - Menu bar only (`LSUIElement`); Dock icon only while Preferences is open
 - Global hotkeys via `CGEvent` tap (Accessibility required)
-- Area snip → pin floating image, or copy to clipboard
+- Area capture → pin floating image, or copy to clipboard
 - Screen Recording permission required for capture
 
 Inspiration: Snipaste menu + pin workflow.
@@ -63,15 +63,15 @@ EggplantShot/
 
 ## Product behaviour to preserve
 
-1. **Snip (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; scroll wheel ±10% zoom with brief top-left % badge; Esc / double-click closes).
-2. **Snip and copy (⌘F1)** → same refine UX; Return primary is Copy.
+1. **Capture (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; scroll wheel ±10% zoom with brief top-left % badge; Esc / double-click closes).
+2. **Capture and copy (⌘F1)** → same freeze + hover/drag select; on window lock or drag mouse-up, crop + copy to clipboard immediately (no refine toolbar / annotate).
 3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
-4. **Esc** during drag/refine cancels the snip. Esc on a pin closes that pin only.
-5. Pins use `.statusBar` level (above ordinary windows; below snip overlay).
+4. **Esc** during drag/refine cancels the capture. Esc on a pin closes that pin only.
+5. Pins use `.statusBar` level (above ordinary windows; below capture overlay).
 6. **Disable hotkeys** pauses the event tap (persisted).
 7. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
 8. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
-9. During an active snip, **`,`** / **`.`** step through prior snip records (older / newer).
+9. During an active **Capture** (refine), **`,`** / **`.`** step through prior capture records (older / newer).
 
 ## Annotate extensibility (P4 — always)
 

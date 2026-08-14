@@ -14,23 +14,23 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
 - Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
 - Confirm composites marks onto the crop, then tears down the overlay.
-- Esc in refine (not editing text) cancels the whole snip.
+- Esc in refine (not editing text) cancels the whole capture.
 - Delete removes the selected mark. Undo / redo: toolbar + ⌘Z / ⇧⌘Z.
 
 ## Refine shell
 
-1. F1 / **Snip** → freeze each display → dim overlay → drag region (or click-lock window).
-2. Mouse-up (large enough) → **refine** (no capture yet):
+1. F1 / **Capture** → freeze each display → dim overlay → drag region (or click-lock window).
+2. Mouse-up (large enough) → **refine** (no export yet):
    - Blue selection + **8 circular** handles; interior moves; handles resize; size label `W × H`.
    - Toolbar: white rounded card (≈6pt), icon row + dividers, **right-aligned** under selection (≈4pt gap; flips above near bottom).
 3. Actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** / **OCR** (+ Esc / Return for primary).
 
-### Snip vs Snip and copy
+### Capture vs Capture and copy
 
-| Entry | Default primary (Return) | Notes |
-|-------|--------------------------|--------|
-| **Snip** / F1 | Pin | Copy still on toolbar |
-| **Snip and copy** / ⌘F1 | Copy | Pin still on toolbar |
+| Entry | After window lock / drag complete | Notes |
+|-------|-----------------------------------|--------|
+| **Capture** / F1 | Refine + toolbar; Return → Pin | Annotate / resize before Pin/Copy/Save |
+| **Capture and copy** / ⌘F1 | Crop + copy immediately | No toolbar, no annotate; Esc still cancels while selecting |
 
 ## Toolbar layout (Snipaste parity)
 
@@ -165,7 +165,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 ## Acceptance checklist
 
 - [x] Refine: blue rect + 8 handles; move / resize; size label; toolbar placement
-- [x] Cancel / Esc; confirm crops then tears down; ⌘F1 primary = Copy
+- [x] Cancel / Esc; confirm crops then tears down; ⌘F1 Capture and copy = immediate copy (no refine)
 - [x] Pin soft glow + drag
 - [x] Shape / arrow / pencil / marker / mosaic / text / step / magnifier / eraser: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] OCR: recognize selection → clipboard + bubble-pop; dismiss overlay; no result UI

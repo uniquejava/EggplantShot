@@ -33,7 +33,11 @@ final class SnipController {
             }
 
             let primary: SelectionOverlayController.ConfirmAction = (mode == .pin) ? .pin : .copy
-            let outcome = await overlay.beginSelection(primaryAction: primary)
+            // Capture and copy: no refine / annotate — copy as soon as the region is locked.
+            let outcome = await overlay.beginSelection(
+                primaryAction: primary,
+                skipsRefine: mode == .copy
+            )
             switch outcome {
             case .cancelled:
                 return

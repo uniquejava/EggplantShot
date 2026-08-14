@@ -92,8 +92,8 @@ private struct HotkeysSettingsPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            hotkeyRow("Snip", appState.hotkeySettings.snip.displayName)
-            hotkeyRow("Snip and copy", appState.hotkeySettings.snipAndCopy.displayName)
+            hotkeyRow("Capture", appState.hotkeySettings.snip.displayName)
+            hotkeyRow("Capture and copy", appState.hotkeySettings.snipAndCopy.displayName)
             hotkeyRow("Hide/Show images", appState.hotkeySettings.hideShowImages.displayName)
 
             Divider()

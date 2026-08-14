@@ -56,6 +56,8 @@ final class SelectionOverlayController {
     var dragKind: DragKind?
     var currentRect: CGRect = .null
     var primaryAction: ConfirmAction = .pin
+    /// When true (Capture and copy): lock / drag-complete copies immediately — no refine toolbar.
+    var skipsRefine = false
     var eventMonitors: [Any] = []
 
     /// Shared snip history for `,` / `.` playback (owned by `SnipController`).
@@ -152,11 +154,12 @@ final class SelectionOverlayController {
 
     var isActive: Bool { continuation != nil }
 
-    func beginSelection(primaryAction: ConfirmAction = .pin) async -> Outcome {
+    func beginSelection(primaryAction: ConfirmAction = .pin, skipsRefine: Bool = false) async -> Outcome {
         if continuation != nil {
             cancel()
         }
         self.primaryAction = primaryAction
+        self.skipsRefine = skipsRefine
         historyCursor = nil
         playbackBaseImage = nil
 
@@ -551,6 +554,15 @@ final class SelectionOverlayController {
         pendingWindowPick = nil
         hoveredWindowRect = nil
         currentRect = frame
+        enterRefineOrAutoConfirm()
+    }
+
+    /// After window lock or free-drag mouse-up: refine + toolbar, or immediate confirm when `skipsRefine`.
+    func enterRefineOrAutoConfirm() {
+        if skipsRefine {
+            confirm(primaryAction)
+            return
+        }
         phase = .refining
         setOverlayCursorMode(.controllerDriven)
         updateHighlight(showHandles: true)
@@ -880,11 +892,7 @@ final class SelectionOverlayController {
                 return
             }
             currentRect = rect
-            phase = .refining
-            setOverlayCursorMode(.controllerDriven)
-            updateHighlight(showHandles: true)
-            showToolbar()
-            updateOverlayCursor(at: point)
+            enterRefineOrAutoConfirm()
 
         case .refining:
             switch dragKind {

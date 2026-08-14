@@ -7,6 +7,8 @@ extension SelectionOverlayController {
     // MARK: - History playback (, / .)
 
     func browseHistory(older: Bool) {
+        // Quick-copy flow has no refine UI; history playback is for annotate sessions only.
+        guard !skipsRefine else { return }
         guard let store = historyStore, store.count > 0 else { return }
 
         let nextIndex: Int
