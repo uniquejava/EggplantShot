@@ -1,24 +1,41 @@
 # EggplantShot
 
-Native **macOS 15+** Snipaste-style screenshot tool — menu bar only, SwiftUI + AppKit.
+Native **macOS 15+** screenshot tool in the menu bar — Snipaste-style capture, annotate, pin, and paste.
 
-## Docs
+[简体中文](./README_zh.md)
 
-| Doc | Contents |
-|-----|----------|
-| [AGENTS.md](./AGENTS.md) | Architecture & agent notes |
-| [docs/selection-refine.md](./docs/selection-refine.md) | Selection refine: blue rect, handles, toolbar |
+![EggplantShot refine toolbar with annotations](./docs/screenshot.png)
 
-## Requirements
+## Features
 
-- macOS 15 or later
-- Xcode 16+ (sign with Apple Development team `M5J7K9HVYB`)
-- **Accessibility** for global hotkeys (`CGEvent` tap)
-- **Screen Recording** for capture
+- **Capture** — freeze the screen, click a window or drag a region, refine, annotate, then pin / copy / save
+- **Capture and copy** — select and copy immediately (no toolbar)
+- **Annotate** — shape, arrow, pencil, marker, mosaic, text, step numbers, magnifier, eraser; undo / redo
+- **OCR** — recognize **QR codes or text** from the selection → clipboard
+- **Paste** — turn the clipboard into a floating pin (image, color swatch, or text sticky)
+- **Pins** — stay on top, drag, scroll to zoom, hide/show all
 
-## Run
+## Hotkeys (defaults)
 
-Stable Debug path is `build/` (gitignored). Always use `-derivedDataPath build`, and kill the running menu-bar instance before reopen — otherwise you may still be on an old binary.
+| Action | Shortcut |
+|--------|----------|
+| Capture | `F1` |
+| Capture and copy | `⌘F1` |
+| Paste (clipboard → pin) | `F3` |
+| Hide / show all pins | `⇧F3` |
+
+Hotkeys can be changed in Preferences. Menu bar → **Disable hotkeys** pauses them globally.
+
+## Permissions
+
+| Permission | Why |
+|------------|-----|
+| **Accessibility** | Global hotkeys |
+| **Screen Recording** | Capture |
+
+## Build & run
+
+Requires macOS 15+ and Xcode 16+.
 
 ```bash
 killall EggplantShot 2>/dev/null
@@ -27,28 +44,11 @@ xcodebuild -project EggplantShot.xcodeproj -scheme EggplantShot \
 open build/Build/Products/Debug/EggplantShot.app
 ```
 
-Or open the project in Xcode: `open EggplantShot.xcodeproj`
+Or: `open EggplantShot.xcodeproj`
 
-On first launch, grant Accessibility and Screen Recording when prompted.
+Always use `-derivedDataPath build` and kill the running app first — otherwise you may launch a stale binary.
 
-## Features (MVP)
+## Docs
 
-- Menu bar extra (LSUIElement) with Snipaste-like menu
-- **Capture** / **F1** — area select → refine (handles + Snipaste-style toolbar) → optional annotate → pin with soft glow
-- **Capture and copy** / **⌘F1** — area select → copy to clipboard immediately (no refine / annotate)
-- **Shape annotate** — stroke widths / fill / rect·ellipse / line style / color sub-toolbar; draw, move, resize; baked into pin/copy/save
-- **Text annotate** — click-to-place + inline edit; Bold / Italic / background / size / color; move / resize; baked into pin/copy/save
-- **OCR** — Recognize Text on the toolbar: copy selection text to clipboard, bubble-pop sound, dismiss (no result UI)
-- **Paste** / **F3** — clipboard → floating pin (image / color HEX·RGB / text·HTML / image file)
-- Pinned images: drag, Esc / double-click to close, stay above other windows
-- **Hide/Show all images** / **⇧F3**
-- Disable hotkeys
-- Preferences: permission status + hotkey list
-
-## Project layout
-
-- `EggplantShot/EggplantShotApp.swift` — `@main`, MenuBarExtra, AppState
-- `EggplantShot/Hotkey/` — multi-binding `CGEvent` tap
-- `EggplantShot/Capture/` — permissions + ScreenCaptureKit freeze/crop
-- `EggplantShot/Controllers/` — selection overlay, pin board, snip orchestration
-- `EggplantShot/UI/` — status menu, preferences
+- [User guide](./docs/user-guide.md)
+- [AGENTS.md](./AGENTS.md) — architecture notes for contributors / agents
