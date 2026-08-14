@@ -73,9 +73,6 @@ final class SnipController {
     func pasteFromClipboard() {
         guard !overlay.isActive else { return }
         guard let image = ClipboardPaster.imageFromPasteboard() else { return }
-        if pinBoard.imagesHidden {
-            pinBoard.toggleHideShow()
-        }
         let mouse = NSEvent.mouseLocation
         let anchor = CGRect(x: mouse.x - 1, y: mouse.y - 1, width: 2, height: 2)
         pinBoard.pin(image, near: anchor)

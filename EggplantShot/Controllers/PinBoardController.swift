@@ -43,10 +43,10 @@ final class PinBoardController: ObservableObject {
             self?.close(id)
         }
         panels[item.id] = panel
-        if !imagesHidden {
-            panel.orderFrontRegardless()
-            panel.makeKeyAndOrderFront(nil)
-        }
+        // New pin means the user wants pins on screen again (incl. after ⇧F3 hide-all).
+        revealAllIfHidden()
+        panel.orderFrontRegardless()
+        panel.makeKeyAndOrderFront(nil)
         objectWillChange.send()
     }
 
@@ -78,8 +78,17 @@ final class PinBoardController: ObservableObject {
     }
 
     func bringToFront(_ id: UUID) {
+        revealAllIfHidden()
         panels[id]?.orderFrontRegardless()
+    }
+
+    /// Clears hide-all so every pin (and any newly created one) is visible again.
+    private func revealAllIfHidden() {
+        guard imagesHidden else { return }
         imagesHidden = false
+        for panel in panels.values {
+            panel.orderFrontRegardless()
+        }
     }
 
     /// Pin image frames for hover hit-test during snip, front → back.

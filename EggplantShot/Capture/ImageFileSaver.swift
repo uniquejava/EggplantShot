@@ -14,7 +14,39 @@ enum ImageFileSaver {
         panel.title = "Save Screenshot"
         panel.message = "Choose where to save the screenshot."
 
+        // Menu-bar (accessory) apps need a Dock presence for the save field to take focus.
+        let previousPolicy = NSApp.activationPolicy()
+        if previousPolicy != .regular {
+            NSApp.setActivationPolicy(.regular)
+        }
         NSApp.activate(ignoringOtherApps: true)
+
+        // Pin panels use `.statusBar`, which sits above the default modal level and
+        // otherwise covers the dialog. Drop them for the duration of the sheet.
+        let pinLevels: [(PinPanel, NSWindow.Level)] = NSApp.windows.compactMap { window in
+            guard let pin = window as? PinPanel, pin.isVisible else { return nil }
+            return (pin, pin.level)
+        }
+        for (pin, _) in pinLevels {
+            pin.level = .normal
+        }
+
+        let abovePins = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        panel.level = abovePins
+        // `runModal` can reset the panel level; re-apply once the modal window exists.
+        DispatchQueue.main.async {
+            NSApp.modalWindow?.level = abovePins
+        }
+
+        defer {
+            for (pin, level) in pinLevels {
+                pin.level = level
+            }
+            if previousPolicy != .regular {
+                NSApp.setActivationPolicy(previousPolicy)
+            }
+        }
+
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
@@ -22,6 +54,9 @@ enum ImageFileSaver {
         } catch {
             let alert = NSAlert(error: error)
             alert.messageText = "Couldn’t Save Screenshot"
+            DispatchQueue.main.async {
+                NSApp.modalWindow?.level = abovePins
+            }
             alert.runModal()
         }
     }
