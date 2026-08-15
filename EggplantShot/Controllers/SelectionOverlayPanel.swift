@@ -74,7 +74,7 @@ final class SelectionPanel: NSPanel {
         playbackImage: NSImage?,
         editingAnnotationID: UUID?,
         hoveredTextID: UUID?,
-        hoveredMarkerRegionID: UUID? = nil,
+        hoveredPaintRegionID: UUID? = nil,
         showSolidMarkerRegionBorder: Bool = false,
         hiddenMagnifierSourceIDs: Set<UUID> = []
     ) {
@@ -99,7 +99,7 @@ final class SelectionPanel: NSPanel {
         overlayView.playbackImage = playbackImage
         overlayView.editingAnnotationID = editingAnnotationID
         overlayView.hoveredTextID = hoveredTextID
-        overlayView.hoveredMarkerRegionID = hoveredMarkerRegionID
+        overlayView.hoveredPaintRegionID = hoveredPaintRegionID
         overlayView.showSolidMarkerRegionBorder = showSolidMarkerRegionBorder
         overlayView.hiddenMagnifierSourceIDs = hiddenMagnifierSourceIDs
         overlayView.needsDisplay = true

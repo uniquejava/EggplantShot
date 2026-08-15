@@ -21,8 +21,9 @@ final class SelectionOverlayNSView: NSView {
     var editingAnnotationID: UUID?
     /// Snipaste-style hover: dashed outline while the pointer is over a text mark.
     var hoveredTextID: UUID?
-    /// Snipaste-style hover: dashed outline over a non-selected marker region.
-    var hoveredMarkerRegionID: UUID?
+    /// Snipaste-style hover: dashed outline over a non-selected rect / oval paint region
+    /// (marker / mosaic / eraser).
+    var hoveredPaintRegionID: UUID?
     /// While moving / resizing a selected marker region: solid hairline (Snipaste).
     var showSolidMarkerRegionBorder = false
     /// Magnifier nested source frames to skip while decluttering (≥2 magnifiers, tool inactive).
@@ -319,18 +320,19 @@ final class SelectionOverlayNSView: NSView {
             drawTextHoverOutline(in: r, style: hovered.textStyle)
         }
 
-        if let hid = hoveredMarkerRegionID,
+        if let hid = hoveredPaintRegionID,
            hid != selectedAnnotation?.id,
            let hovered = annotations.first(where: { $0.id == hid }),
-           case .marker(.region(let mode, let rect), _) = hovered.payload {
-            let r = rect.offsetBy(dx: origin.x, dy: origin.y)
-            drawRegionChrome(in: r, mode: mode, dashed: true)
+           let region = hovered.paintRegion {
+            let r = region.rect.offsetBy(dx: origin.x, dy: origin.y)
+            drawRegionChrome(in: r, mode: region.mode, dashed: true)
         }
     }
 
-    /// Snipaste mosaic / marker region: 1 device-pixel hairline; black on light / white on dark.
-    /// Mosaic: solid while dragging, dashed when selected. Marker: solid while drawing / moving / resizing;
-    /// idle selected = handles only; non-selected hover = dashed.
+    /// Snipaste mosaic / marker / eraser region: 1 device-pixel hairline; black on light / white on dark.
+    /// Mosaic / eraser: solid while dragging, dashed when selected. Marker: solid while drawing / moving /
+    /// resizing; idle selected = handles only. Any non-selected region under the pointer = dashed hover
+    /// (only while it is actually grabable — see `paintRegionID`).
     private func drawRegionChrome(in rect: CGRect, mode: MosaicDrawMode, dashed: Bool) {
         guard rect.width >= 1, rect.height >= 1 else { return }
         let scale = window?.backingScaleFactor ?? 2

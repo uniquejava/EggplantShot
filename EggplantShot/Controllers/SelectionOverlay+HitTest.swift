@@ -39,6 +39,20 @@ extension SelectionOverlayController {
         // Paint tools (pencil / marker / mosaic / eraser): always draw-through. Move via **V**.
         // Selected handles still work (checked above).
         if annotateTool.drawsThroughMarks {
+            // …except in a rect / oval draw mode, where the tool drags out a region like the shape
+            // tool rather than brushing. There an existing region mark is grabbable by its whole
+            // **body** (move), so a highlight keeps its handles after losing selection instead of
+            // becoming permanently inert. Body — not border-only like shapes — because these marks
+            // have no interior to nest-draw into; the trade is that starting a new region *inside*
+            // an existing one needs V, Esc, or a start point outside it.
+            // Brush strokes stay draw-through in every mode: never steal freehand work.
+            if armedPaintRegionMode != nil {
+                for ann in annotations.reversed() where ann.isPaintRegionMark {
+                    if isInsidePaintRegion(ann, at: point) {
+                        return .border(id: ann.id)
+                    }
+                }
+            }
             return .draw
         }
 
@@ -146,22 +160,27 @@ extension SelectionOverlayController {
         updateHighlight(showHandles: true)
     }
 
-    func markerRegionID(at point: CGPoint) -> UUID? {
+    /// Non-selected rect / oval paint region (marker / mosaic / eraser) under the pointer.
+    func paintRegionID(at point: CGPoint) -> UUID? {
+        // Only advertise a grab the click will honor: Move (V) or a rect / oval paint mode.
+        // Under a brush (or any object tool) the pointer draws through, so a dashed outline there
+        // would promise a move that never happens.
+        guard annotateTool == .select || armedPaintRegionMode != nil else { return nil }
         for ann in annotations.reversed() {
-            guard ann.isMarkerRegion else { continue }
+            guard ann.isPaintRegionMark else { continue }
             // Selected mark uses handles chrome, not hover dashed.
             if ann.id == selectedAnnotationID { continue }
-            if isOnAnnotationStroke(ann, at: point) {
+            if isInsidePaintRegion(ann, at: point) {
                 return ann.id
             }
         }
         return nil
     }
 
-    func updateHoveredMarkerRegion(at point: CGPoint) {
-        let id = markerRegionID(at: point)
-        guard id != hoveredMarkerRegionID else { return }
-        hoveredMarkerRegionID = id
+    func updateHoveredPaintRegion(at point: CGPoint) {
+        let id = paintRegionID(at: point)
+        guard id != hoveredPaintRegionID else { return }
+        hoveredPaintRegionID = id
         updateHighlight(showHandles: true)
     }
 
@@ -336,6 +355,32 @@ extension SelectionOverlayController {
                 tolerance: tolerance
             )
         }
+    }
+
+    /// Rect / oval draw mode of the armed paint tool; `nil` for freehand and non-paint tools.
+    /// In these modes the paint tool behaves like the shape tool (drag out a region), which is why
+    /// existing region marks stay grabbable instead of being drawn through.
+    var armedPaintRegionMode: MosaicDrawMode? {
+        let mode: MosaicDrawMode
+        switch annotateTool {
+        case .marker: mode = markerDrawMode
+        case .mosaic: mode = mosaicDrawMode
+        case .eraser: mode = eraserDrawMode
+        case .none, .select, .rectangle, .arrow, .pencil, .text, .step, .magnifier:
+            return nil
+        }
+        return mode == .freehand ? nil : mode
+    }
+
+    /// Whole body (interior + border, plus grab slop) of a rect / oval paint mark.
+    func isInsidePaintRegion(_ annotation: Annotation, at globalPoint: CGPoint) -> Bool {
+        guard let region = annotation.paintRegion else { return false }
+        return magnifierShapeContains(
+            kind: region.mode == .ellipse ? .ellipse : .rectangle,
+            globalRect: toGlobal(region.rect),
+            point: globalPoint,
+            tolerance: annotationBorderHitSlop
+        )
     }
 
     /// Full shape body (rect / oval interior + border). Used by Move (V) so hollow frames

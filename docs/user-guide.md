@@ -67,7 +67,9 @@ Press **V** (or the cursor toolbar icon) to enter move mode: click and drag any 
 
 ### Paint tools — move vs draw
 
-With **pencil**, **marker**, **mosaic**, or **eraser** armed, hovering **any** existing mark **keeps the draw cursor**. To rearrange marks, press **V**, drag, then switch back (e.g. **D**) to keep drawing. Selected region marks still expose resize handles while a paint tool is armed.
+With **pencil**, **marker**, **mosaic**, or **eraser** armed in **freehand** (brush) mode, hovering **any** existing mark **keeps the draw cursor**. To rearrange marks, press **V**, drag, then switch back (e.g. **D**) to keep drawing.
+
+**In rect / oval mode this is different.** A highlight, mosaic or eraser area behaves like an object: click anywhere on it — inside or on the edge — to drag it, and use the handles to resize, all without leaving the tool. Brush strokes still draw through. One consequence: to start a **new** area *inside* an existing one, begin the drag outside it (or press **Esc** / use **V** first).
 
 Under object tools (shape / arrow / text / …), paint-like marks still draw-through; other marks stay hit-to-move.
 

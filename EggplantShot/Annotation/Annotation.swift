@@ -104,6 +104,10 @@ struct Annotation: Equatable {
         isPencil || isMarker || isMosaic || isEraser
     }
 
+    /// Rect / oval marker / mosaic / eraser mark. Unlike a brush stroke these are dragged out
+    /// like a shape, so a matching region tool grabs them by the body instead of drawing through.
+    var isPaintRegionMark: Bool { paintRegion != nil }
+
     var isText: Bool {
         if case .text = payload { return true }
         return false

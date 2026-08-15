@@ -38,7 +38,7 @@ extension SelectionOverlayController {
         draftAnnotation = nil
         textClickCandidate = nil
         hoveredTextID = nil
-        hoveredMarkerRegionID = nil
+        hoveredPaintRegionID = nil
         hoveredMagnifierLensIDs = []
         annotateTool = .none
         let prefs = AnnotationPrefs.load()

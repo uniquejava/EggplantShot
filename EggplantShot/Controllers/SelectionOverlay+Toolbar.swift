@@ -63,8 +63,8 @@ extension SelectionOverlayController {
 
     func updateHighlight(showHandles: Bool) {
         let selected = selectedAnnotationID.flatMap { id in annotations.first(where: { $0.id == id }) }
-        if let hid = hoveredMarkerRegionID, hid == selectedAnnotationID {
-            hoveredMarkerRegionID = nil
+        if let hid = hoveredPaintRegionID, hid == selectedAnnotationID {
+            hoveredPaintRegionID = nil
         }
         let movingOrResizingMarkerRegion: Bool = {
             switch dragKind {
@@ -87,7 +87,7 @@ extension SelectionOverlayController {
                 playbackImage: playbackBaseImage,
                 editingAnnotationID: editingTextID,
                 hoveredTextID: hoveredTextID,
-                hoveredMarkerRegionID: hoveredMarkerRegionID,
+                hoveredPaintRegionID: hoveredPaintRegionID,
                 showSolidMarkerRegionBorder: movingOrResizingMarkerRegion,
                 hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs()
             )

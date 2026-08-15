@@ -20,7 +20,7 @@ extension SelectionOverlayController {
             // Always drive the cursor ourselves (incl. over the text editor).
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
                 self.updateHoveredText(at: point)
-                self.updateHoveredMarkerRegion(at: point)
+                self.updateHoveredPaintRegion(at: point)
                 self.updateHoveredMagnifier(at: point)
                 self.updateOverlayCursor(at: point)
             }
@@ -48,7 +48,7 @@ extension SelectionOverlayController {
             }
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
                 self.updateHoveredText(at: point)
-                self.updateHoveredMarkerRegion(at: point)
+                self.updateHoveredPaintRegion(at: point)
                 self.updateHoveredMagnifier(at: point)
                 self.updateOverlayCursor(at: point)
             }
@@ -461,7 +461,7 @@ extension SelectionOverlayController {
         }
         if phase == .refining, dragKind == nil {
             updateHoveredText(at: point)
-            updateHoveredMarkerRegion(at: point)
+            updateHoveredPaintRegion(at: point)
             updateOverlayCursor(at: point)
         }
     }

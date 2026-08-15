@@ -3,6 +3,20 @@ import AppKit
 // Shared mark geometry: bounds, translate, resize-map.
 
 extension Annotation {
+    /// Rect / oval region of a paint mark (marker / mosaic / eraser). `nil` for freehand strokes
+    /// and every other payload — those have no body to grab.
+    var paintRegion: (mode: MosaicDrawMode, rect: CGRect)? {
+        switch payload {
+        case .marker(let geometry, _), .mosaic(let geometry, _), .eraser(let geometry, _):
+            if case .region(let mode, let rect) = geometry {
+                return (mode, rect)
+            }
+            return nil
+        case .shape, .arrow, .pencil, .text, .step, .magnifier:
+            return nil
+        }
+    }
+
     /// Axis-aligned bounds in selection-local space.
     var boundingRect: CGRect {
         switch payload {

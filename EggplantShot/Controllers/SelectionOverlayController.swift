@@ -111,8 +111,9 @@ final class SelectionOverlayController {
     var textClickCandidate: (id: UUID?, start: CGPoint, wasSelected: Bool)?
     /// Snipaste hover outline while the pointer is over a text mark.
     var hoveredTextID: UUID?
-    /// Snipaste hover: dashed outline over a non-selected marker region.
-    var hoveredMarkerRegionID: UUID?
+    /// Snipaste hover: dashed outline over a non-selected rect / oval paint region
+    /// (marker / mosaic / eraser).
+    var hoveredPaintRegionID: UUID?
     /// Magnifier lenses under the cursor (reveal nested source when decluttering).
     var hoveredMagnifierLensIDs: Set<UUID> = []
     /// Active inline text editor (selection-local mark id).
@@ -352,7 +353,7 @@ final class SelectionOverlayController {
         draftAnnotation = nil
         textClickCandidate = nil
         hoveredTextID = nil
-        hoveredMarkerRegionID = nil
+        hoveredPaintRegionID = nil
         hoveredMagnifierLensIDs = []
         discardTextEditor()
         historyCursor = nil
