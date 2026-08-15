@@ -43,6 +43,10 @@ extension RefineToolbarController {
         slider.doubleValue = value
         slider.target = self
         slider.action = action
+        // A drag fires `action` on every tick, and each tick re-styles the selected mark. Bracket the
+        // run so the whole drag is one undo step (zero if the value came back to where it started).
+        slider.onDragBegan = { [weak self] in self?.onEvent(.valueDragBegan) }
+        slider.onDragEnded = { [weak self] in self?.onEvent(.valueDragEnded) }
         slider.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             slider.widthAnchor.constraint(equalToConstant: 90),

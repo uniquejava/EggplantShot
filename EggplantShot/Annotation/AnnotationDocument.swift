@@ -17,17 +17,34 @@ final class AnnotationHistory {
 
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
+    /// Live edits are in `document` but no step exists yet — the window in which swapping the
+    /// document (undo / redo / playback) would strand the gesture. Callers gate keys on this.
+    var isGestureOpen: Bool { gestureBaseline != nil }
 
     init(document: AnnotationDocument = AnnotationDocument()) {
         self.document = document
     }
 
-    /// Snapshot current doc, then mutate. Clears redo. No-op push if unchanged.
+    /// The one definition of "worth an undo step": the **marks** differ. Selection is deliberately
+    /// excluded — `select` is not a step, so an edit that only moved the selection isn't one either,
+    /// no matter which entry point it arrived through.
+    private func marksDiffer(from other: AnnotationDocument) -> Bool {
+        other.marks != document.marks
+    }
+
+    /// Snapshot current doc, then mutate. Clears redo. No-op push if the marks are unchanged.
+    ///
+    /// If a gesture is open the mutation folds into it (live edit, no push) and `endGesture`
+    /// collapses the whole run into one step. That's what keeps a slider drag off the stack:
+    /// a toolbar slider fires its action on every tick, and each tick lands here.
     func commit(_ body: (inout AnnotationDocument) -> Void) {
-        gestureBaseline = nil
+        if gestureBaseline != nil {
+            body(&document)
+            return
+        }
         let before = document
         body(&document)
-        guard document != before else { return }
+        guard marksDiffer(from: before) else { return }
         undoStack.append(before)
         redoStack.removeAll()
     }
@@ -37,11 +54,43 @@ final class AnnotationHistory {
         document.selectedID = id
     }
 
-    /// Drag/resize: remember baseline once; live-mutate `document` without pushing.
-    func beginGesture() {
-        if gestureBaseline == nil {
-            gestureBaseline = document
+    /// True when the newest step is the one that introduced `id` — the mark exists now and did not
+    /// exist in that snapshot — so a follow-up edit to it may belong *in* that step.
+    ///
+    /// Necessary but **not sufficient**: this also goes true long afterwards if the mark is deleted and
+    /// the delete undone (the top step is then an older baseline that predates the mark). Pair it with
+    /// a one-shot "this is the first edit" token at the call site — see `textAwaitingFirstEditID`.
+    func lastStepIntroduced(_ id: UUID) -> Bool {
+        guard let last = undoStack.last else { return false }
+        return document.marks.contains { $0.id == id }
+            && !last.marks.contains { $0.id == id }
+    }
+
+    /// Fold a follow-up edit into the step already on top of the stack instead of pushing a new one.
+    /// That snapshot is still the correct baseline, so nothing is pushed — and if the edit brings the
+    /// document back to it, the step disappears (place a text, type nothing → no undo step at all).
+    func amendLastStep(_ body: (inout AnnotationDocument) -> Void) {
+        guard gestureBaseline == nil, !undoStack.isEmpty else {
+            commit(body)
+            return
         }
+        body(&document)
+        redoStack.removeAll()
+        if let last = undoStack.last, !marksDiffer(from: last) {
+            undoStack.removeLast()
+        }
+    }
+
+    /// Drag/resize: remember baseline once; live-mutate `document` without pushing.
+    ///
+    /// Overlapping gestures would silently merge into one step (and the first `endGesture` would
+    /// close the wrong one), so a second `beginGesture` closes the open one first. Defined behaviour
+    /// beats a silent no-op: worst case is one extra undo step, never a lost or fused one.
+    func beginGesture() {
+        if gestureBaseline != nil {
+            endGesture()
+        }
+        gestureBaseline = document
     }
 
     /// Live mutation between `beginGesture` and `endGesture` (no stack push).
@@ -56,25 +105,28 @@ final class AnnotationHistory {
         document = baseline
     }
 
-    /// If document ≠ baseline, push baseline onto undo and clear redo.
+    /// If the marks moved, push the baseline onto undo and clear redo — one step for the whole
+    /// gesture, none if the drag ended where it started.
     func endGesture() {
         guard let baseline = gestureBaseline else { return }
         gestureBaseline = nil
-        guard document != baseline else { return }
+        guard marksDiffer(from: baseline) else { return }
         undoStack.append(baseline)
         redoStack.removeAll()
     }
 
     func undo() {
+        // A live gesture's edits were never a recorded step. Drop them rather than baking them into
+        // the document behind the user's back — then move the stack.
+        cancelGesture()
         guard let previous = undoStack.popLast() else { return }
-        gestureBaseline = nil
         redoStack.append(document)
         document = previous
     }
 
     func redo() {
+        cancelGesture()
         guard let next = redoStack.popLast() else { return }
-        gestureBaseline = nil
         undoStack.append(document)
         document = next
     }

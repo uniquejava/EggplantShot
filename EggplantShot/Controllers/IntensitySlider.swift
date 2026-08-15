@@ -31,6 +31,10 @@ final class MosaicIntensitySlider: NSView {
 
     weak var target: AnyObject?
     var action: Selector?
+    /// Called once when a drag starts / ends, around the run of `action` ticks — lets the owner
+    /// coalesce the whole drag into a single undo step instead of one per tick.
+    var onDragBegan: (() -> Void)?
+    var onDragEnded: (() -> Void)?
 
     var isHovered = false
     var isDragging = false
@@ -72,6 +76,8 @@ final class MosaicIntensitySlider: NSView {
     override func mouseDown(with event: NSEvent) {
         isDragging = true
         setHovered(true)
+        // Before the first tick: the initial click already moves the knob.
+        onDragBegan?()
         updateValue(from: event, notify: true)
         // Keep receiving drag/up even if the pointer leaves the view.
         var keepGoing = true
@@ -84,6 +90,7 @@ final class MosaicIntensitySlider: NSView {
                 keepGoing = false
             }
         }
+        onDragEnded?()
         isDragging = false
         syncHoverFromMouseLocation()
         needsDisplay = true

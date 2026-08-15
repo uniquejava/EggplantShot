@@ -28,6 +28,10 @@ final class RefineToolbarController: NSObject {
         case magnifierChanged(kind: ShapeKind, style: MagnifierStyle)
         case kindChanged(ShapeKind)
         case arrowCapsChanged(ArrowCaps)
+        /// A value slider (mosaic strength / magnifier scale) started / finished dragging. The
+        /// `…Changed` events in between are one continuous edit, not one per tick.
+        case valueDragBegan
+        case valueDragEnded
         case ocr
         case undo
         case redo

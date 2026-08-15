@@ -58,6 +58,7 @@ extension SelectionOverlayController {
             doc.marks.append(ann)
             doc.selectedID = ann.id
         }
+        textAwaitingFirstEditID = ann.id
         refreshHistoryChrome()
         updateHighlight(showHandles: true)
         startTextEditing(id: ann.id)
@@ -137,6 +138,13 @@ extension SelectionOverlayController {
 
     func endTextEditing(commit: Bool) {
         guard let id = editingTextID else { return }
+        // Consume the one-shot placement token whatever happens next, so a later edit to this same
+        // mark can never fold into the placement step.
+        let isFirstEditAfterPlacing = (textAwaitingFirstEditID == id)
+        textAwaitingFirstEditID = nil
+        // Amend only when the token agrees *and* the placement step is still the newest one (a border
+        // drag mid-edit pushes its own step in between — then this is an ordinary edit).
+        let amendsPlacement = isFirstEditAfterPlacing && annotationHistory.lastStepIntroduced(id)
         let string = textEditor?.string ?? textEditBaselineString
         let editorFrame = textChromeView?.frame
         let host = textEditorHost
@@ -150,9 +158,16 @@ extension SelectionOverlayController {
 
         let trimmedEmpty = string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if trimmedEmpty {
-            annotationHistory.commit { doc in
+            // Placed then abandoned: amending removes the mark *and* the placement step, so a text
+            // the user never typed into leaves no undo step behind.
+            let removeEmptyMark: (inout AnnotationDocument) -> Void = { doc in
                 doc.marks.removeAll { $0.id == id }
                 if doc.selectedID == id { doc.selectedID = nil }
+            }
+            if amendsPlacement {
+                annotationHistory.amendLastStep(removeEmptyMark)
+            } else {
+                annotationHistory.commit(removeEmptyMark)
             }
             refreshHistoryChrome()
             updateHighlight(showHandles: true)
@@ -185,11 +200,18 @@ extension SelectionOverlayController {
         let baselineString = textEditBaselineString
         let baselineRect = textEditBaselineRect
         if string != baselineString || newRect != baselineRect {
-            annotationHistory.commit { doc in
+            let applyEdit: (inout AnnotationDocument) -> Void = { doc in
                 guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
                 doc.marks[idx].string = string
                 doc.marks[idx].rect = newRect
                 doc.selectedID = id
+            }
+            // Typing into a text mark that was *just placed* belongs in the placement step: otherwise
+            // ⌘Z after typing leaves a stray empty mark on screen and needs a second press.
+            if amendsPlacement {
+                annotationHistory.amendLastStep(applyEdit)
+            } else {
+                annotationHistory.commit(applyEdit)
             }
             refreshHistoryChrome()
         } else {

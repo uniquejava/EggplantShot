@@ -123,6 +123,11 @@ final class SelectionOverlayController {
     var textEditor: AnnotationTextView?
     var textEditBaselineString: String = ""
     var textEditBaselineRect: CGRect = .null
+    /// Set by `placeAndEditText`, consumed by the next `endTextEditing`: this edit session is the
+    /// *first* one for a just-placed mark, so its result belongs in the placement step rather than a
+    /// step of its own. One-shot on purpose — "the mark is missing from the top snapshot" alone can be
+    /// true again much later (delete the mark, then ⌘Z), which would fold an unrelated edit into it.
+    var textAwaitingFirstEditID: UUID?
     /// Chrome frame at the start of a live-move while editing (panel-local).
     var textChromeDragStartFrame: CGRect?
     let textClickDragThreshold: CGFloat = 4

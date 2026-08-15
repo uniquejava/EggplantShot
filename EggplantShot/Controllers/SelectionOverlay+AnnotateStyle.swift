@@ -463,6 +463,21 @@ extension SelectionOverlayController {
         }
     }
 
+    /// A toolbar slider (mosaic strength / magnifier scale) began dragging. Mosaic strength snaps to
+    /// 7 blur stops / 15 block stops and magnifier scale is continuous, so a single sweep re-styles
+    /// the selected mark many times — one `commit` each without this bracket. Coalescing here rather
+    /// than debouncing ticks keeps the mark live under the cursor while the stack sees one edit.
+    func beginToolbarValueDrag() {
+        guard selectedAnnotationID != nil else { return }
+        annotationHistory.beginGesture()
+    }
+
+    /// One undo step if the value ended somewhere new, none if the drag returned it.
+    func endToolbarValueDrag() {
+        annotationHistory.endGesture()
+        refreshHistoryChrome()
+    }
+
     func performUndo() {
         guard annotationHistory.canUndo else { return }
         annotationHistory.undo()

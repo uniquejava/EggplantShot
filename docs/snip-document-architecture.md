@@ -108,31 +108,60 @@ final class AnnotationHistory {
     var canRedo: Bool { … }
 
     /// Snapshot current doc, then mutate. Clears redo.
+    /// Folds into the open gesture (no push) if one is in progress.
     func commit(_ body: (inout AnnotationDocument) -> Void)
 
-    /// Drag/resize: remember baseline once; live-mutate `document` without pushing.
+    /// True when the newest step is the one that introduced `id`.
+    func lastStepIntroduced(_ id: UUID) -> Bool    /// Fold a follow-up edit into the step already on the stack; the step vanishes if the
+    /// edit undoes it (place a text, type nothing → no step at all).
+    func amendLastStep(_ body: (inout AnnotationDocument) -> Void)
+
+    /// Drag/resize: capture baseline; live-mutate `document` without pushing.
+    /// A second call closes the open gesture first, so overlapping gestures can't fuse.
     func beginGesture()
-    /// If document ≠ baseline, push baseline onto undo and clear redo.
+    /// If the marks moved, push baseline onto undo and clear redo.
     func endGesture()
 
-    func undo()
-    func redo()
+    func undo()   // cancels any open gesture first
+    func redo()   // cancels any open gesture first
     func reset(to document: AnnotationDocument) // used by history restore; clears stacks
 }
 ```
 
-**What counts as one undo step** (commit or successful endGesture):
+**What counts as one undo step** (commit, amend, or successful endGesture):
 
 | Action | When recorded |
 |--------|----------------|
 | Finish drawing a mark | mouse-up if size ≥ minimum |
-| Move / resize mark | endGesture if rect changed |
+| Move / resize mark | endGesture if the marks changed |
 | Style / kind on selection | immediate `commit` (discrete clicks: color, brush, effect, kind) |
-| Continuous slider on selection (intensity / scale) | **gap:** each tick is a `commit` today; should be one gesture like move/resize |
+| Continuous slider on selection (intensity / scale) | endGesture if the value changed (toolbar brackets the drag) |
+| Place a text + type into it | **one** step via `amendLastStep`; **zero** if left empty. Requires *both* the one-shot `textAwaitingFirstEditID` token and `lastStepIntroduced(id)` — the state check alone goes true again if the mark is deleted and the delete undone |
+| Edit an existing text | immediate `commit` at end of edit (typing itself uses the field editor's own undo manager) |
 | Delete selection | immediate `commit` |
 | Clear marks on re-select | `commit` that empties marks (see below) |
+| Selection change | **never** — `select` is not a step |
+| Crop move / resize | **never** — marks rebase onto the new origin (`rebaseForSelectionOriginDelta`) |
 
-Do **not** push on every mouse-dragged frame. The intensity / scale sliders still do — see the deferred note in [`selection-refine.md`](selection-refine.md).
+Three invariants hold this together:
+
+1. **Marks decide, selection never does.** One private `marksDiffer(from:)` defines "worth a step", so
+   `commit` and `endGesture` cannot disagree, and no entry point can record a step that only moved the
+   selection.
+2. **Do not push on every mouse-dragged frame.** `commit` folds into an open gesture rather than
+   pushing, so a control that fires per tick (the intensity / scale sliders) only has to bracket its
+   drag with `beginGesture` … `endGesture` — see [`selection-refine.md`](selection-refine.md).
+3. **An open gesture owns the keyboard.** While `annotationHistory.isGestureOpen` the keyDown monitor
+   swallows everything but Esc (`SelectionOverlay+Mouse.swift`). ⌘Z mid-drag would otherwise swap the
+   document out from under the gesture — the drag bakes in with no step recorded and a phantom mid-drag
+   snapshot lands on the redo stack; ⌘S / Return would finalize the snip on a half-finished edit. Gated
+   on the *gesture*, not on `dragKind`: crop draw / move / resize never open one and keep their keys
+   (`,` / `.` playback works in any phase). Esc stays live because it routes to `cancelGesture` via
+   `cancelInProgressRefineDrag`; `undo` / `redo` also cancel an open gesture defensively.
+4. **Never strand a gesture.** Both mouse monitors pass events through to the floating toolbar, but
+   only while `dragKind == nil` — otherwise a mark drag released over the toolbar loses its mouse-up,
+   leaving the gesture open and fusing the abandoned edit into the next drag's step. The text-editor
+   pass-through (`shouldPassThroughToTextEditor`) has the same guard.
 
 ### `SnipRecord`
 
@@ -223,7 +252,10 @@ When restoring a record:
 ### Undo / redo (in-session)
 
 - Toolbar Undo / Redo enabled from `canUndo` / `canRedo`.
-- Keys: **⌘Z** undo; **⇧⌘Z** redo (⌘Y optional alias).
+- Keys: **⌘Z** undo; **⇧⌘Z** redo (⌘Y optional alias) — ignored while a drag is in progress.
+- While a text mark is being edited, ⌘Z goes to the field editor's **private** undo manager (never the
+  shared app one — that crashes after the editor is torn down), so typing undo and mark undo stay
+  separate stacks.
 - Selecting a different annotate tool does not itself push history.
 
 ### Re-select (click dimmed area, new drag)

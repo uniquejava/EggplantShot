@@ -9,8 +9,11 @@ extension SelectionOverlayController {
         if let mon = NSEvent.addLocalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             guard let self else { return event }
             let point = NSEvent.mouseLocation
-            // Pass through so the floating toolbar can receive clicks.
-            if let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
+            // Pass through so the floating toolbar can receive clicks — but never mid-drag. Marks live
+            // fullscreen while the toolbar hugs the crop, so releasing a mark drag over the toolbar is
+            // easy; swallowing that mouse-up used to strand `dragKind` and leave the history gesture
+            // open, which fused the abandoned edit into the next drag's step.
+            if self.dragKind == nil, let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
                 NSCursor.arrow.set()
                 return event
             }
@@ -39,7 +42,7 @@ extension SelectionOverlayController {
         if let mon = NSEvent.addGlobalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             guard let self else { return }
             let point = NSEvent.mouseLocation
-            if let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
+            if self.dragKind == nil, let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
                 NSCursor.arrow.set()
                 return
             }
@@ -108,6 +111,16 @@ extension SelectionOverlayController {
                 }
                 return nil
             }
+            // An **open history gesture** owns the keyboard until it ends — Esc (handled above) is the
+            // only way out. Without this, ⌘Z mid-drag swaps the document out from under the gesture:
+            // the drag bakes in with no undo step and leaves a phantom mid-drag snapshot on the redo
+            // stack, and ⌘S / ⌘C / Return finalize the snip on a half-finished edit.
+            //
+            // Gated on the gesture, not on `dragKind`: crop draw / move / resize never open one, and
+            // they must keep their keys — `,` / `.` playback is documented to work in any phase, and
+            // ⌘Z during a crop drag was always harmless. Typing while dragging an editing text mark's
+            // border still works too — that path returned above.
+            if self.annotationHistory.isGestureOpen { return nil }
             // `,` / `.` snip-history browse (any phase while overlay is up).
             if event.modifierFlags.intersection([.command, .control, .option]).isEmpty {
                 if event.keyCode == 43 || event.charactersIgnoringModifiers == "," {
@@ -145,7 +158,11 @@ extension SelectionOverlayController {
                     }
                 }
                 // Letter tool / action hotkeys (no ⌘/⌃/⌥). Toggle like toolbar taps.
+                // `isARepeat`: holding a tool letter would otherwise arm/disarm ~15×/sec. The palette
+                // letters survive repeat only because re-applying a color is idempotent — don't rely
+                // on that for anything added here.
                 if event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                   !event.isARepeat,
                    self.dragKind == nil,
                    let chars = event.charactersIgnoringModifiers?.lowercased(),
                    chars.count == 1,

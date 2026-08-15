@@ -80,7 +80,7 @@ EggplantShot/
 New annotate tools **must** follow these without being asked. Details: [`docs/snip-document-architecture.md`](docs/snip-document-architecture.md).
 
 1. Add an `AnnotationPayload` case + `Annotation+<tool>.swift` (inits/accessors) + `AnnotationCoding+<tool>.swift` (encode/decode) + draw + hit-test together; history / store / confirm paths stay unchanged. Also add cases in `Annotation+Geometry.swift` and the encode/decode switches in `AnnotationCoding.swift`.
-2. Mutate marks **only** via `AnnotationHistory` (`commit` / `beginGesture`–`endGesture`) — never edit `marks` / `selectedID` from gesture code directly.
+2. Mutate marks **only** via `AnnotationHistory` (`commit` / `beginGesture`–`endGesture`) — never edit `marks` / `selectedID` from gesture code directly. A control that fires **per tick** (value sliders) must bracket its drag — `onDragBegan` / `onDragEnded` → `valueDragBegan` / `valueDragEnded` → `beginToolbarValueDrag` / `endToolbarValueDrag`; `commit` folds into the open gesture so the run is one step. Never debounce ticks instead. Marks alone decide whether a step exists (`marksDiffer`) — selection never does. A key that repeats needs an `isARepeat` guard unless re-applying it is idempotent. While `annotationHistory.isGestureOpen` only Esc reaches the keyboard handler, and neither mouse monitor may swallow an event while `dragKind != nil` (a stranded mouse-up leaves the gesture open).
 3. Store effects as **data** (strokes / regions / style), not destructive pixels on `baseImage`. Sample the freeze/base at draw / bake time. A tool that needs what is **under** it reads the hull back from the `MarksCanvas` (`snapshotCrop`) — never re-draw prior marks from vectors, and never nest `renderMarksLayer`.
 4. Do **not** bake into `baseImage` until Pin / Copy / Save; `,` / `.` always restore unannotated base + vector document.
 5. Disk: new `type` discriminator; unknown types skip on load. Bump `schemaVersion` only when the meta shape itself changes.
@@ -90,8 +90,6 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 → Annotate tools in: shape + arrow + pencil + marker + mosaic + text + step + magnifier + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload`. Login item via Preferences → General. See [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows).
 
 → Eraser brush tip: concentric-ring (currently reuses mosaic outline). See deferred note under Eraser in `docs/selection-refine.md`.
-
-→ Slider-drag undo: mosaic intensity / magnifier scale `commit` on every tick while a mark is selected (3→24→3 floods the stack). Coalesce with `beginGesture`…`endGesture`, not a debounce. See deferred note in `docs/selection-refine.md`.
 
 → Marks render into a `MarksCanvas` (owned bitmap) so mosaic / magnifier can read back what is under them; the overlay caches the committed layer so a pencil drag does not re-blur every mosaic. Rules, rejected approaches and measurements: [`docs/marks-rendering.md`](docs/marks-rendering.md).
 

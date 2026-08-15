@@ -234,7 +234,42 @@ committed layer so a pencil drag does not re-render every mosaic per frame. Full
 rejected approaches, measurements, and the rules that must not be broken:
 [`marks-rendering.md`](marks-rendering.md).
 
-**Still deferred:** eraser concentric-ring brush tip (reuses the mosaic outline). Slider-drag undo coalescing: mosaic intensity and magnifier scale fire `commit` on every `mouseDragged` tick (`applyMosaicStyle` / `applyMagnifier`), so 3→24→3 leaves dozens of undo steps. Discrete style clicks stay one `commit`; a continuous slider should be `beginGesture` / `mutateLive` / `endGesture` like mark move/resize (one step if the value changed, zero if it returned). Debouncing ticks is the wrong fix. Same gap is noted under the undo table in [`snip-document-architecture.md`](snip-document-architecture.md).
+**Still deferred:** eraser concentric-ring brush tip (reuses the mosaic outline).
+
+**Undo mechanics (audited — all tools).** Every repeating input is now coalesced, and the rule is
+uniform: *if a gesture is open, everything folds into it.*
+
+- **Mark move / resize / arrow endpoint** — `beginGesture` at mouse-down, `mutateLive` per tick,
+  `endGesture` at mouse-up. Always was correct.
+- **Freehand stroke** (pencil / mosaic / marker / eraser) — the draft lives *outside* the document and
+  is committed once at mouse-up, so a 500-point stroke is one step.
+- **Value sliders** (mosaic strength / magnifier scale) — **was broken**: they fire their action per
+  tick, so one sweep pushed 7 (blur) / 15 (pixelate) / dozens (scale, continuous) steps, and a
+  there-and-back drag left a pile instead of nothing. Fixed by bracketing the drag:
+  `MosaicIntensitySlider.onDragBegan` / `onDragEnded` → `valueDragBegan` / `valueDragEnded` →
+  `beginToolbarValueDrag` / `endToolbarValueDrag`. Debouncing ticks would have been the wrong fix — it
+  lags the mark under the cursor and still can't collapse a there-and-back drag to zero.
+- **Place a text + type into it** — **was two steps** (⌘Z left a stray empty mark and needed a second
+  press). `endTextEditing` now `amendLastStep`s into the placement step — one step, zero if the text was
+  left empty. Gated on the one-shot `textAwaitingFirstEditID` token **and** `lastStepIntroduced(id)`:
+  the state check alone would go true again after "delete the mark, ⌘Z the delete", folding a much
+  later edit into the placement step.
+- **Discrete clicks** (color, brush size, kind, effect toggle, region mode, caps) — one `commit` each,
+  unchanged.
+- **Key auto-repeat** — the palette letters (**R** / **G** / **B**) survive a held key only because
+  re-applying a color is idempotent and `commit` no-ops when the marks don't change. The tool letters
+  are *not* idempotent, so the letter-hotkey block now checks `isARepeat` (holding **V** used to
+  arm/disarm the tool ~15×/sec). Don't rely on idempotence for anything added there.
+- **An open gesture owns the keyboard** — while `annotationHistory.isGestureOpen` the keyDown monitor
+  swallows everything but Esc. ⌘Z mid-drag used to swap the document out from under the gesture (drag
+  baked in with no undo step, phantom snapshot on the redo stack) and ⌘S / ⌘C / Return finalized the
+  snip on a half-finished edit. Crop drags don't open a gesture, so they keep their keys.
+- **Mouse-up is never swallowed mid-drag** — the toolbar pass-through in both monitors now requires
+  `dragKind == nil`. Releasing a mark drag over the toolbar used to strand `dragKind` and leave the
+  gesture open, which fused the abandoned edit into the next drag's step.
+
+Stack semantics live in [`snip-document-architecture.md`](snip-document-architecture.md) — including the
+one that trips people up: **selection is never an undo step**, so `marksDiffer` (marks only) decides.
 
 ### Eraser
 

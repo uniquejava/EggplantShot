@@ -150,6 +150,10 @@ extension SelectionOverlayController {
                 self.applyKind(kind)
             case .arrowCapsChanged(let caps):
                 self.applyArrowCaps(caps)
+            case .valueDragBegan:
+                self.beginToolbarValueDrag()
+            case .valueDragEnded:
+                self.endToolbarValueDrag()
             case .ocr:
                 self.performOCR()
             case .undo:
