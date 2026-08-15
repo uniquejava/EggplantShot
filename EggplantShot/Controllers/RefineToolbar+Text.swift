@@ -170,8 +170,7 @@ extension RefineToolbarController {
             item.state = (abs(size - textStyle.fontSize) < 0.5) ? .on : .off
             menu.addItem(item)
         }
-        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
-        menu.popUp(positioning: nil, at: point, in: sender)
+        popUpToolbarMenu(menu, from: sender)
     }
 
     @objc func textSizeMenuPicked(_ sender: NSMenuItem) {

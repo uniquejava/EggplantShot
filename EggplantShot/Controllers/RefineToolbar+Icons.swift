@@ -127,6 +127,14 @@ extension RefineToolbarController {
         return button
     }
 
+    /// Pop a menu under a chip; suppress the custom tooltip so it cannot cover row 1.
+    func popUpToolbarMenu(_ menu: NSMenu, from sender: NSView) {
+        tooltip.beginMenuSuppression()
+        defer { tooltip.endMenuSuppression() }
+        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
+        menu.popUp(positioning: nil, at: point, in: sender)
+    }
+
     /// Mosaic / marker / eraser brush presets (14 / 18 / 24).
     static func brushSizeTooltip(index: Int) -> String {
         switch index {

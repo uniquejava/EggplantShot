@@ -75,8 +75,7 @@ extension RefineToolbarController {
             )
             menu.addItem(item)
         }
-        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
-        menu.popUp(positioning: nil, at: point, in: sender)
+        popUpToolbarMenu(menu, from: sender)
     }
 
     @objc func arrowCapMenuPicked(_ sender: NSMenuItem) {

@@ -11,6 +11,9 @@ final class RefineToolbarTooltip {
     private weak var anchor: NSView?
     private var panel: NSPanel?
     private let label = NSTextField(labelWithString: "")
+    /// While an NSMenu is open under a toolbar control, keep the tip dismissed
+    /// so it cannot cover the menu’s first row (menus open below the chip).
+    private var suppressed = false
 
     init() {
         label.font = .systemFont(ofSize: 11)
@@ -27,7 +30,18 @@ final class RefineToolbarTooltip {
         view.toolTip = nil
     }
 
+    /// Hide and block re-show until `endMenuSuppression()` (pair around `NSMenu.popUp`).
+    func beginMenuSuppression() {
+        suppressed = true
+        hide()
+    }
+
+    func endMenuSuppression() {
+        suppressed = false
+    }
+
     func handleHover(_ button: NSButton?) {
+        guard !suppressed else { return }
         cancelPending()
         guard let button, let text = texts[ObjectIdentifier(button)] else {
             hide()
@@ -56,6 +70,7 @@ final class RefineToolbarTooltip {
     }
 
     private func show(text: String, relativeTo view: NSView) {
+        guard !suppressed else { return }
         guard let host = view.window else { return }
         label.stringValue = text
         label.sizeToFit()
@@ -114,4 +129,3 @@ final class RefineToolbarTooltip {
         panel = tip
     }
 }
-

@@ -227,8 +227,7 @@ extension RefineToolbarController {
             item.image = lineStyleMenuImage(option)
             menu.addItem(item)
         }
-        let point = NSPoint(x: 0, y: sender.bounds.height + 2)
-        menu.popUp(positioning: nil, at: point, in: sender)
+        popUpToolbarMenu(menu, from: sender)
     }
 
     @objc func lineStyleMenuPicked(_ sender: NSMenuItem) {
