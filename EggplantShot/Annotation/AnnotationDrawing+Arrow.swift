@@ -239,12 +239,13 @@ extension AnnotationDrawing {
     }
 
     static func openArrowLength(strokeWidth: CGFloat, wide: Bool) -> CGFloat {
-        // Shorter depth + wider span → opener V (closer to Snipaste open chevron).
-        wide ? max(strokeWidth * 2.8, 8) : max(strokeWidth * 2.5, 7)
+        // Match toolbar/menu cap preview: longer tip, narrower span (stroke makes open Vs look wider than fill).
+        wide ? max(strokeWidth * 3.8, 10) : max(strokeWidth * 3.6, 9)
     }
 
     static func openArrowWidth(strokeWidth: CGFloat, wide: Bool) -> CGFloat {
-        wide ? max(strokeWidth * 4.6, 12) : max(strokeWidth * 4.2, 11)
+        // ~0.75–0.85 width/length ≈ filled-triangle preview angle (not the old ~1.7 opener).
+        wide ? max(strokeWidth * 3.2, 8) : max(strokeWidth * 2.7, 7)
     }
 
     static func arrowheadLength(strokeWidth: CGFloat) -> CGFloat {
@@ -506,9 +507,33 @@ extension AnnotationDrawing {
         stub.lineCapStyle = .butt
         stub.stroke()
 
-        // Tip ornaments stay inside tipLen × modest height (breathing room).
-        let halfH = min(rect.height * 0.32, 3.2)
-        let slot = tipLen
+        // Every ornament fills the same **ink** box: `tipDepth` deep, ending at `tip`, `tipSpan` tall.
+        // Ink, not path — a mitered stroke reaches well past its own path, so a path built to the box
+        // still renders oversized. Measured by rendering each glyph at 8× and taking the bounds of
+        // pixels with alpha > 0.15: at sw 1.5 a chevron tip threw +1.31pt past `tip`, and the hollow
+        // triangle's default-miter base corners +1.12pt per side — which is why those two read a point
+        // longer and up to 2pt taller than the filled triangle beside them. Filled shapes need no
+        // correction (ink == path); stroked ones are inset below. Re-measuring the same way should
+        // show 0.00pt spread across all six ornaments, in both directions and both icon sizes.
+        let tipSpan = min(rect.height * 0.70, 7.0)
+        let halfSpan = tipSpan / 2
+        let tipDepth = min(tipLen * 0.88, 5.6)
+
+        /// Path geometry for a stroked arrowhead whose *ink* fills `tipDepth` × `tipSpan`.
+        /// The mitered tip adds `(w/2)/sin α` along the axis and each wing end adds `(w/2)·cos α`
+        /// vertically; α depends on the result, so iterate — converges in two passes at this size.
+        func strokedHead(width w: CGFloat) -> (tipInset: CGFloat, depth: CGFloat, half: CGFloat) {
+            var depth = tipDepth
+            var half = halfSpan
+            var inset: CGFloat = 0
+            for _ in 0..<3 {
+                let a = atan2(half, depth)
+                inset = (w / 2) / max(sin(a), 0.25)
+                depth = tipDepth - inset
+                half = max(halfSpan - (w / 2) * cos(a), 0.6)
+            }
+            return (inset, max(depth, 1), half)
+        }
 
         switch cap {
         case .none:
@@ -520,21 +545,24 @@ extension AnnotationDrawing {
             ext.stroke()
 
         case .bar:
+            // Stroked vertical: its half-width spills past the path, so sit it back by sw/2.
+            let barX = tipX - ux * (sw / 2)
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: barX, y: y + halfSpan))
+            path.line(to: CGPoint(x: barX, y: y - halfSpan))
+            path.lineWidth = sw
+            path.lineCapStyle = .butt
+            // Bridge stub → bar so it sits at the tip like other ornaments.
             let bridge = NSBezierPath()
             bridge.move(to: join)
-            bridge.line(to: tip)
+            bridge.line(to: CGPoint(x: barX, y: y))
             bridge.lineWidth = sw
             bridge.lineCapStyle = .butt
             bridge.stroke()
-            let path = NSBezierPath()
-            path.move(to: CGPoint(x: tipX, y: y + halfH))
-            path.line(to: CGPoint(x: tipX, y: y - halfH))
-            path.lineWidth = sw
-            path.lineCapStyle = .butt
             path.stroke()
 
         case .circle:
-            let r = min(halfH, slot * 0.42)
+            let r = halfSpan
             let c = CGPoint(x: tipX - ux * r, y: y)
             let bridgeEnd = CGPoint(x: c.x - ux * r, y: y)
             let br = NSBezierPath()
@@ -546,8 +574,8 @@ extension AnnotationDrawing {
             NSBezierPath(ovalIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)).fill()
 
         case .diamond:
-            let halfLen = min(slot * 0.45, 3.2)
-            let halfWid = halfH * 0.9
+            let halfLen = tipDepth / 2
+            let halfWid = halfSpan
             let mid = CGPoint(x: tipX - ux * halfLen, y: y)
             let base = CGPoint(x: tipX - ux * halfLen * 2, y: y)
             let br = NSBezierPath()
@@ -565,28 +593,27 @@ extension AnnotationDrawing {
             path.fill()
 
         case .openArrow, .openArrowWide:
-            let length = min(slot * 0.85, 5.5)
-            let width = halfH * 1.7
-            let base = CGPoint(x: tipX - ux * length, y: y)
+            let head = strokedHead(width: sw)
+            let headTip = CGPoint(x: tipX - ux * head.tipInset, y: y)
+            let baseX = headTip.x - ux * head.depth
             let br = NSBezierPath()
             br.move(to: join)
-            br.line(to: tip)
+            br.line(to: headTip)
             br.lineWidth = sw
             br.lineCapStyle = .butt
             br.stroke()
             let path = NSBezierPath()
-            path.move(to: CGPoint(x: base.x, y: y + width / 2))
-            path.line(to: tip)
-            path.line(to: CGPoint(x: base.x, y: y - width / 2))
+            path.move(to: CGPoint(x: baseX, y: y + head.half))
+            path.line(to: headTip)
+            path.line(to: CGPoint(x: baseX, y: y - head.half))
             path.lineWidth = sw
             path.lineJoinStyle = .miter
             path.lineCapStyle = .butt
             path.stroke()
 
         case .arrow:
-            let length = min(slot * 0.88, 5.5)
-            let width = halfH * 1.55
-            let base = CGPoint(x: tipX - ux * length, y: y)
+            // Filled: ink is the path, so it takes the target box as-is.
+            let base = CGPoint(x: tipX - ux * tipDepth, y: y)
             let br = NSBezierPath()
             br.move(to: join)
             br.line(to: base)
@@ -595,28 +622,32 @@ extension AnnotationDrawing {
             br.stroke()
             let path = NSBezierPath()
             path.move(to: tip)
-            path.line(to: CGPoint(x: base.x, y: y + width / 2))
-            path.line(to: CGPoint(x: base.x, y: y - width / 2))
+            path.line(to: CGPoint(x: base.x, y: y + halfSpan))
+            path.line(to: CGPoint(x: base.x, y: y - halfSpan))
             path.close()
             path.fill()
 
         case .hollowArrow:
-            let length = min(slot * 0.88, 5.5)
-            let width = halfH * 1.55
-            let base = CGPoint(x: tipX - ux * length, y: y)
+            let swH = max(sw * 0.9, 1)
+            let head = strokedHead(width: swH)
+            let headTip = CGPoint(x: tipX - ux * head.tipInset, y: y)
+            let baseX = headTip.x - ux * head.depth
             let br = NSBezierPath()
             br.move(to: join)
-            br.line(to: base)
+            br.line(to: CGPoint(x: baseX, y: y))
             br.lineWidth = sw
             br.lineCapStyle = .butt
             br.stroke()
             let path = NSBezierPath()
-            path.move(to: tip)
-            path.line(to: CGPoint(x: base.x, y: y + width / 2))
-            path.line(to: CGPoint(x: base.x, y: y - width / 2))
+            path.move(to: headTip)
+            path.line(to: CGPoint(x: baseX, y: y + head.half))
+            path.line(to: CGPoint(x: baseX, y: y - head.half))
             path.close()
-            path.lineWidth = max(sw * 0.9, 1)
+            path.lineWidth = swH
             path.lineJoinStyle = .miter
+            // Default limit (10) lets the two base corners throw ~1.1pt spikes past the box. At 2 the
+            // tip's 1.89 ratio still miters sharp while those corners bevel away.
+            path.miterLimit = 2
             path.stroke()
         }
     }
