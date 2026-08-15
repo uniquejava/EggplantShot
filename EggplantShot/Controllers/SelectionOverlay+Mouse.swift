@@ -633,8 +633,8 @@ extension SelectionOverlayController {
                 dragKind = .annotateDraw(startLocal: local)
                 draftAnnotation = makeDraftAnnotation(startingAt: local)
                 // Pencil: hide reticle so only the ink shows.
-                // Mosaic / marker / eraser: keep the translucent brush tip while stroking
-                // (a fully hidden tip looks like a black blob on macOS).
+                // Mosaic / marker: keep the translucent brush tip while stroking; eraser keeps
+                // its ring tip (a fully hidden tip looks like a black blob on macOS).
                 if annotateTool == .pencil {
                     AnnotationCursors.hidden.set()
                 } else if annotateTool == .mosaic, mosaicDrawMode == .freehand {
@@ -642,7 +642,7 @@ extension SelectionOverlayController {
                 } else if annotateTool == .marker, markerDrawMode == .freehand {
                     AnnotationCursors.mosaicCrosshair(brushWidth: markerStyle.brushWidth).set()
                 } else if annotateTool == .eraser, eraserDrawMode == .freehand {
-                    AnnotationCursors.mosaicCrosshair(brushWidth: eraserStyle.brushWidth).set()
+                    AnnotationCursors.eraserRing(brushWidth: eraserStyle.brushWidth).set()
                 } else {
                     AnnotationCursors.whitePlus.set()
                 }

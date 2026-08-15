@@ -234,8 +234,6 @@ committed layer so a pencil drag does not re-render every mosaic per frame. Full
 rejected approaches, measurements, and the rules that must not be broken:
 [`marks-rendering.md`](marks-rendering.md).
 
-**Still deferred:** eraser concentric-ring brush tip (reuses the mosaic outline).
-
 **Undo mechanics (audited — all tools).** Every repeating input is now coalesced, and the rule is
 uniform: *if a gesture is open, everything folds into it.*
 
@@ -274,7 +272,7 @@ one that trips people up: **selection is never an undo step**, so `marksDiffer` 
 ### Eraser
 
 - Sub-toolbar: same first **5** icons as mosaic — brush **14 / 18 / 24** | **rect / oval region** (no intensity / color).
-- Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking (tip temporarily reuses mosaic brush outline; concentric-ring tip deferred). No resize chrome / no auto-select after stroke.
+- Freehand: stroke sampling; Shift → straight; keep the ring brush tip while stroking (concentric hairline rings at the real diameter, no fill — a filled tip would hide the marks being punched out). No resize chrome / no auto-select after stroke.
 - Region: drag like mosaic; Shift → square / circle; auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles.
 - Effect: punches **annotation marks only** (`destinationOut` on a marks layer composited over the freeze/base) — never erases image pixels (P4). Order matters: later marks redraw on top of earlier erasures.
 - Hit: under object tools, eraser marks draw-through (no move hand over erased areas). Under paint tools, all marks draw-through (Shared rules). Move via **V**.

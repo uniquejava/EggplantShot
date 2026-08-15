@@ -46,6 +46,7 @@ enum AnnotationCursors {
 
     static var pencilCrosshairCache: (key: UInt64, cursor: NSCursor)?
     static var mosaicCrosshairCache: (key: Int, cursor: NSCursor)?
+    static var eraserRingCache: (key: Int, cursor: NSCursor)?
     static var stepBadgeCache: (key: String, cursor: NSCursor)?
 
     /// Brush outline matching actual diameter (no artificial cap that hid size changes).
@@ -70,6 +71,38 @@ enum AnnotationCursors {
         }
         let cursor = NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
         mosaicCrosshairCache = (key, cursor)
+        return cursor
+    }
+
+    /// Eraser tip: concentric hairline rings at the actual diameter, **no fill** — the point of
+    /// erasing is seeing the marks about to be punched out, and mosaic's translucent disc reads
+    /// as laying ink down. Dark ring outside / light ring inside means one of the two always
+    /// separates from the backdrop, so the tip stays legible on light and dark screenshots.
+    static func eraserRing(brushWidth: CGFloat) -> NSCursor {
+        let diameter = max(brushWidth, 8)
+        let key = Int((diameter * 2).rounded()) // half-point precision
+        if let cache = eraserRingCache, cache.key == key {
+            return cache.cursor
+        }
+        let pad: CGFloat = 3
+        let size = diameter + pad * 2
+        let image = NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            // Outer path spans exactly `diameter` once the 1pt stroke is centred on it;
+            // the inner ring sits flush against it (no gap) for a single 2pt contrast band.
+            let outer = rect.insetBy(dx: pad + 0.5, dy: pad + 0.5)
+            let outerRing = NSBezierPath(ovalIn: outer)
+            outerRing.lineWidth = 1
+            NSColor(calibratedWhite: 0.18, alpha: 0.88).setStroke()
+            outerRing.stroke()
+
+            let innerRing = NSBezierPath(ovalIn: outer.insetBy(dx: 1, dy: 1))
+            innerRing.lineWidth = 1
+            NSColor.white.withAlphaComponent(0.9).setStroke()
+            innerRing.stroke()
+            return true
+        }
+        let cursor = NSCursor(image: image, hotSpot: NSPoint(x: size / 2, y: size / 2))
+        eraserRingCache = (key, cursor)
         return cursor
     }
 

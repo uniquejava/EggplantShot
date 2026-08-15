@@ -108,8 +108,7 @@ extension SelectionOverlayController {
                 }
             } else if annotateTool == .eraser {
                 if eraserDrawMode == .freehand {
-                    // Temporary: same tip as mosaic. Concentric-ring tip deferred.
-                    AnnotationCursors.mosaicCrosshair(brushWidth: eraserStyle.brushWidth).set()
+                    AnnotationCursors.eraserRing(brushWidth: eraserStyle.brushWidth).set()
                 } else {
                     AnnotationCursors.whitePlus.set()
                 }
