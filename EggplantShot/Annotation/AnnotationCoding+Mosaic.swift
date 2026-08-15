@@ -28,16 +28,26 @@ extension AnnotationCoding {
     static func encode(_ style: MosaicStyle) -> MosaicStyleDTO {
         MosaicStyleDTO(
             brushWidth: Double(style.brushWidth),
-            intensity: Double(style.intensity),
+            intensity: nil,
+            blurSigma: Double(style.blurSigma),
+            blockSize: Double(style.blockSize),
             brushKind: nil,
             effect: effectString(style.effect)
         )
     }
 
+    /// Physical fields win; a record with only the legacy `intensity` is run back through the curves
+    /// that used to derive both quantities at draw time, so an old snip reopens rendering the same.
     static func decode(_ dto: MosaicStyleDTO) -> MosaicStyle {
+        let legacy = dto.intensity.map { CGFloat($0) }
         var style = MosaicStyle(
             brushWidth: CGFloat(dto.brushWidth),
-            intensity: CGFloat(dto.intensity),
+            blurSigma: dto.blurSigma.map { CGFloat($0) }
+                ?? legacy.map { MosaicStyle.blurSigma(forLegacyIntensity: $0) }
+                ?? MosaicStyle.defaultBlurSigma,
+            blockSize: dto.blockSize.map { CGFloat($0) }
+                ?? legacy.map { MosaicStyle.blockSize(forLegacyIntensity: $0) }
+                ?? MosaicStyle.defaultBlockSize,
             effect: effectFromString(dto.effect)
         )
         style.clamp()

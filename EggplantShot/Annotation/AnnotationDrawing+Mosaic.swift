@@ -71,11 +71,11 @@ extension AnnotationDrawing {
     static func mosaicBleedPoints(for style: MosaicStyle) -> CGFloat {
         switch style.effect {
         case .blur:
-            return MosaicStyle.blurRadiusPoints(forIntensity: style.intensity) * 2
+            return style.blurSigma * 2
         case .pixelate:
             // One whole block, so the outermost lattice cell is complete rather than averaging
             // against missing neighbours.
-            return MosaicStyle.blockSizePoints(forIntensity: style.intensity)
+            return style.blockSize
         }
     }
 
@@ -208,17 +208,13 @@ extension AnnotationDrawing {
         let output: CIImage?
         switch style.effect {
         case .blur:
-            let radius = MosaicStyle.blurRadiusPoints(forIntensity: style.intensity)
             let filter = CIFilter(name: "CIGaussianBlur")
             filter?.setValue(ci.clampedToExtent(), forKey: kCIInputImageKey)
-            filter?.setValue(max(radius * pixelScale, 0.35), forKey: kCIInputRadiusKey)
+            filter?.setValue(max(style.blurSigma * pixelScale, 0.35), forKey: kCIInputRadiusKey)
             output = filter?.outputImage
         case .pixelate:
             // Whole device pixels, so block edges stay crisp instead of landing mid-pixel.
-            let block = max(
-                (MosaicStyle.blockSizePoints(forIntensity: style.intensity) * pixelScale).rounded(),
-                2
-            )
+            let block = max((style.blockSize * pixelScale).rounded(), 2)
             let pixellate = CIFilter(name: "CIPixellate")
             pixellate?.setValue(ci.clampedToExtent(), forKey: kCIInputImageKey)
             pixellate?.setValue(block, forKey: kCIInputScaleKey)

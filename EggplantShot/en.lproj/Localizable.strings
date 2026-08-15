@@ -121,6 +121,5 @@
 "Font size" = "Font size";
 "Rectangular area" = "Rectangular area";
 "Elliptical area" = "Elliptical area";
-"Blur" = "Blur";
-"Pixelate" = "Pixelate";
+"Toggle blur / pixelate" = "Toggle blur / pixelate";
 "Include annotations" = "Include annotations";

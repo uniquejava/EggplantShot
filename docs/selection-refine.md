@@ -51,7 +51,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
   Pen: same card without fill / rect / oval
   Palette chips ≈11pt, gap ≈2pt
 ‖ Marker: [ · | ·· | ··· ] | [ rect region | oval region ] | [ preview 24 + palette 2×10 ]  (sizes 14/18/24 freehand; rect/oval = area highlight)
-¶ Mosaic: [ · | ·· | ··· ] | [ rect region | oval region ] | [ preview | slider 3…24 | value ]  (sizes 14/18/24 freehand; rect/oval = area blur)
+¶ Mosaic: [ · | ·· | ··· ] | [ rect region | oval region ] | [ chip⇄ | slider | value ]  (sizes 14/18/24 freehand; rect/oval = area blur; chip toggles Blur/Pixelate, knob ●/■, slider = sigma 0.8…3.2 pt or block 2…16 pt)
 ‡ Text: [ B | I | bg ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 § Step: [ filled | outline | plain ] | [ size ▾ ] | [ preview 24 + palette 2×10 ]
 ♯ Eraser: [ · | ·· | ··· ] | [ rect region | oval region ]  (same first 5 as mosaic; punches marks only)
@@ -103,10 +103,10 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 ### Mosaic
 
-- Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to obscure an area) | **Blur / Pixelate** effect pair | intensity **3…24** with live preview left of the slider.
+- Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to obscure an area) | **preview chip = Blur/Pixelate toggle** | strength slider whose **knob shape shows the mode** and whose units change with it — sigma **0.8…3.2 pt** for Blur, block edge **2…16 pt** for Pixelate.
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
 - Region: drag like shape; Shift → square / circle; entire rect/oval is obscured. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
-- Effect: **Blur** = gaussian smear (`CIGaussianBlur`, intensity → sigma ~0.8…3.2 pt) or **Pixelate** = coarse colour squares (`CIPixellate`, intensity → block edge ~2…16 pt) — see *Effect calibration* below. Either way it processes freeze/base **plus whatever marks are already under it**. Path: hull crop → read the marks drawn so far out of the `MarksCanvas` (`snapshotCrop`) → composite over the freeze crop → filter → clip to stroke/region. Because the sample is *pixels already rendered*, a mosaic over an earlier mosaic sees that one's output. **Vector** stroke/region data only (P4; never mutates `baseImage`).
+- Effect: **Blur** = gaussian smear (`CIGaussianBlur`, sigma 0.8…3.2 pt) or **Pixelate** = coarse colour squares (`CIPixellate`, block edge 2…16 pt) — see *Effect calibration* below. Either way it processes freeze/base **plus whatever marks are already under it**. Path: hull crop → read the marks drawn so far out of the `MarksCanvas` (`snapshotCrop`) → composite over the freeze crop → filter → clip to stroke/region. Because the sample is *pixels already rendered*, a mosaic over an earlier mosaic sees that one's output. **Vector** stroke/region data only (P4; never mutates `baseImage`).
 - Hit: under object tools, mosaic marks draw-through (no move hand over obscured areas). Under paint tools, all marks draw-through (Shared rules). Move via **V** (region handles still work when selected).
 - No color palette.
 
@@ -114,51 +114,101 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 chrome and the `.mosaic` payload — only the Core Image filter differs, so a second main-toolbar
 icon would duplicate the whole surface for one filter swap. The effect lives on `MosaicStyle`
 (`effect: blur | pixelate`, disk field `effect`, records without it decode to blur) and rides the
-existing `mosaicStyleChanged` event, which means picking an effect while a mosaic mark is selected
-converts that mark — same as changing its intensity. Last-used effect persists in
-`annotate.mosaic.effect`. The chips sit between the geometry group and the slider because they
-change what the slider *means*; the slider keeps one shared 3…24 value across both modes and the
-label keeps showing that raw number rather than sigma or points.
+existing `mosaicStyleChanged` event, which means switching effect while a mosaic mark is selected
+converts that mark — same as changing its strength. Last-used effect persists in
+`annotate.mosaic.effect`.
 
-**Effect calibration.** Both curves are **absolute** — not scaled by brush width — so a given
-intensity means the same thing at 14 pt and 24 pt, matching Photoshop's blur tool.
+**The switch is the preview chip, and the knob is the readout** — Snipaste's design (its tooltip
+reads "Toggle mosaic/blur"), adopted after an explicit Blur/Pixelate chip pair was built first.
+Clicking the chip flips the effect; the chip already renders the armed effect (soft halo vs blocks),
+so the control *is* its own state display, and the slider knob draws a **circle for Blur, a rounded
+square for Pixelate** so the mode stays visible at the point your eye is during a drag. Dropping the
+two chips and their divider takes ~54 pt off what was the widest sub-toolbar in the app.
 
-*Blur.* `CIGaussianBlur.inputRadius` **is sigma**, and a thin stroke smears over
-roughly ±2…3 sigma — so sigma has to stay small or a pencil line turns into a blob. Intensity
-3…24 maps linearly to sigma **0.8…3.2 pt**. Measured on a 2 pt stroke against a dark freeze:
+The cost is that a preview-looking chip is a click target you have to discover. Mitigated by making
+it an `NSButton` rather than a view with a `mouseDown`: `HoverChromeCard` walks up to the nearest
+button, so the chip inherits the same **accent underline on hover** and the same custom tooltip as
+every real button in the row — the affordance it lacks in appearance it gets on hover. `knobIsSquare`
+defaults to circle because `MosaicIntensitySlider` is shared with magnifier scale, which has no mode.
 
-| intensity | sigma | thickening | fine detail left |
-|---|---|---|---|
-| 3 | 0.80 pt | 1.7× | 21% |
-| 6 | 1.14 pt | 2.1× | 5% |
-| **10 (default)** | **1.60 pt** | **2.8×** | **0.1%** |
-| 15 | 2.17 pt | 3.7× | 0% |
-| 20 | 2.74 pt | 4.6× | 0% |
-| 24 | 3.20 pt | 5.2× | 0% |
+The chip glyph is a **thin dark annulus** (8 of 64 sample px) filling the 24 pt slot, so it reads like
+Snipaste's ring rather than a blob. Its two effects need *opposite* fudge factors, both verified by
+rendering the glyph headlessly across the intensity range: blur is exaggerated **1.6×** because a 3 pt
+sigma shrinks to under a point at this size, while pixelate is scaled **0.7×** — blocks-across is
+`64 / block`, a function of the sample rather than the drawn size, so at 1.2 (let alone 1.6) the top
+of the range collapsed into one flat square. 0.7 holds ~6 blocks at maximum, which still reads as a
+lattice.
+
+**The slider carries the real filter parameter, one value per effect** — `blurSigma` and
+`blockSize`, both in points, each with its own range, step and default. It does not carry an abstract
+"intensity".
+
+Snipaste's 3…24 scale was inherited early, and it fits neither effect. 21 integer steps across sigma
+0.8…3.2 pt is **0.114 pt per step — a quarter of a device pixel at 2×**, so most adjacent settings
+were indistinguishable and roughly two thirds of the slider did nothing you could see. (Snipaste's
+own reason for 3…24 is undocumented; the likeliest explanation is a mosaic block size in pixels,
+which its pixel-denominated brush labels support, inherited by blur when the slider was reused. That
+is inference, not a citation.) Naming the quantity fixes both halves: the label reads what the filter
+will actually do, and a block edge in points is the same thing Photoshop calls Mosaic **"Cell Size"**
+and ShareX calls **"Pixel size"**.
+
+| | range | step | stops | per step @2× | default |
+|---|---|---|---|---|---|
+| Blur sigma | 0.8…3.2 pt | 0.4 pt | 7 | 0.8 px | **1.6** |
+| Pixelate block | 2…16 pt | 1 pt | 15 | 2.0 px | **6** |
+
+Each effect keeps its own value, so toggling Blur → Pixelate → Blur restores the blur strength you
+had. Both are **absolute** — never scaled by brush width — so a value means the same thing at 14 pt
+and 24 pt, matching Photoshop's blur tool. `strength` on `MosaicStyle` is the accessor that routes to
+whichever one the armed effect reads, and it snaps on write; `clamp()` deliberately does **not** snap
+(see the migration note below).
+
+*Blur.* `CIGaussianBlur.inputRadius` **is sigma**, and a thin stroke smears over roughly ±2…3 sigma,
+so sigma has to stay small or a pencil line turns into a blob. Measured on a 2 pt stroke against a
+dark freeze:
+
+| sigma | thickening | fine detail left |
+|---|---|---|
+| 0.8 | 1.7× | 21% |
+| 1.2 | 2.1× | 5% |
+| **1.6 (default)** | **2.8×** | **0.1%** |
+| 2.0 | 3.7× | 0% |
+| 2.8 | 4.6× | 0% |
+| 3.2 | 5.2× | 0% |
 
 Two things this range is chosen to avoid. Sigma above ~3 pt **blooms past the brush** and gets
-clipped to it, so perceived thickness starts tracking the brush width instead of the intensity —
-the old 0.7…14 pt range saturated by intensity ~6, wasting most of the slider and making a 14 pt
+clipped to it, so perceived thickness starts tracking the brush width instead of the setting — an
+earlier 0.7…14 pt range saturated almost immediately, wasting most of the slider and making a 14 pt
 and a 24 pt brush read as different strengths (5.9× vs 7.8× at the same setting). And detail is
-already gone by ~1.5 pt, so the old default of ~5 pt was roughly 3× more blur than obscuring
-needs — all of that excess went into fattening strokes.
+already gone by ~1.5 pt, which is why the default sits just past it — an old default of ~5 pt was
+roughly 3× more blur than obscuring needs, and all of that excess went into fattening strokes.
 
-*Pixelate.* Intensity 3…24 maps linearly to a block edge of **2…16 pt**, rounded to whole device
-pixels so the lattice lands on pixel boundaries. The failure mode is the mirror image of blur bloom:
-blocks *larger* than the brush can't tile it, so a stroke narrower than ~3 blocks reads as a flat
-smudge instead of a mosaic. Drawing wider or switching to region mode is the fix — clamping the
-block to the brush would break the "same intensity, same result at every brush" rule.
+*Pixelate.* Block edge 2…16 pt, rounded to whole device pixels so the lattice lands on pixel
+boundaries. The failure mode is the mirror image of blur bloom: blocks *larger* than the brush can't
+tile it, so a stroke narrower than ~3 blocks reads as a flat smudge instead of a mosaic. Drawing
+wider or switching to region mode is the fix — clamping the block to the brush would break the
+"same value, same result at every brush" rule.
 
-| intensity | block | blocks across a 14 pt brush | typical read |
-|---|---|---|---|
-| 3 | 2 pt | 7 | light texture |
-| **10 (default)** | **6.7 pt** | **2** | **chunky; past what body text survives** |
-| 16 | 10.7 pt | 1.3 | region-only |
-| 24 | 16 pt | <1 | coarse enough to bury a face in a large region |
+| block | blocks across a 14 pt brush | typical read |
+|---|---|---|
+| 2 pt | 7 | light texture |
+| **6 pt (default)** | **2** | **chunky; past what body text survives** |
+| 11 pt | 1.3 | region-only |
+| 16 pt | <1 | coarse enough to bury a face in a large region |
+
+**Migrating off `intensity`.** Records and prefs written before this stored the abstract 3…24 value
+and derived both quantities at draw time. Disk gains optional `blurSigma` / `blockSize`; when they are
+absent, decode runs the legacy `intensity` back through the *old* curves
+(`blurSigma(forLegacyIntensity:)` / `blockSize(forLegacyIntensity:)`), so a reopened snip renders
+byte-identically instead of shifting. This is why `clamp()` range-clamps but does **not** snap to the
+step grid — snapping a legacy value would move it by up to half a step (intensity 15 → sigma 2.1714,
+which would land on 2.0, a 0.17 pt change on every old mark). Snapping lives on the input path only:
+the `strength` setter and `MosaicIntensitySlider.step`. Prefs read the retired
+`annotate.mosaic.intensity` once to seed `annotate.mosaic.blurSigma` / `.blockSize`, then delete it.
+No `schemaVersion` bump — the new fields are additive and unknown keys are ignored.
 
 **Blocks are left hard-edged** — Pixelate is the lattice and nothing else. Hull bleed is one whole
-block, so the outermost cells average against real neighbours instead of missing ones. (An adjustable
-`ratio × block` gaussian after `CIPixellate` was built and then removed: it is a second look control
+block, so the outermost cells average against real neighbours instead of missing ones. (An adjustable`ratio × block` gaussian after `CIPixellate` was built and then removed: it is a second look control
 on a tool that already has one, and the sharp lattice is the effect people expect.) Blur mode is
 untouched by any of this.
 

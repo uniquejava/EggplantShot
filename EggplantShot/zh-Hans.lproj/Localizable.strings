@@ -121,6 +121,5 @@
 "Font size" = "字号";
 "Rectangular area" = "矩形区域";
 "Elliptical area" = "椭圆区域";
-"Blur" = "模糊";
-"Pixelate" = "马赛克";
+"Toggle blur / pixelate" = "切换模糊/马赛克";
 "Include annotations" = "包含标注";

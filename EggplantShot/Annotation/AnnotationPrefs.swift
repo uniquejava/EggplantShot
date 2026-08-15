@@ -12,10 +12,13 @@ enum AnnotationPrefs {
     private static let arrowEndCapKey = "annotate.arrow.endCap"
     private static let mosaicBrushWidthKey = "annotate.mosaic.brushWidth"
     private static let mosaicDrawModeKey = "annotate.mosaic.drawMode"
-    private static let mosaicIntensityKey = "annotate.mosaic.intensity"
+    private static let mosaicBlurSigmaKey = "annotate.mosaic.blurSigma"
+    private static let mosaicBlockSizeKey = "annotate.mosaic.blockSize"
     private static let mosaicEffectKey = "annotate.mosaic.effect"
     /// Legacy tip-shape key; migrated into `mosaicDrawModeKey`.
     private static let mosaicBrushKindKey = "annotate.mosaic.brushKind"
+    /// Retired abstract 3…24 strength; read once to seed the physical keys, then cleared.
+    private static let mosaicIntensityKey = "annotate.mosaic.intensity"
     /// Retired pixelate edge-softening ratio; cleared on save so no stale value lingers.
     private static let mosaicSofteningKey = "annotate.mosaic.softening"
 
@@ -73,9 +76,27 @@ enum AnnotationPrefs {
                 CGFloat(defaults.double(forKey: mosaicBrushWidthKey))
             )
         }
-        if defaults.object(forKey: mosaicIntensityKey) != nil {
-            style.intensity = MosaicStyle.clampedIntensity(
-                CGFloat(defaults.double(forKey: mosaicIntensityKey))
+        // Physical strengths; fall back once to the retired abstract intensity so an existing
+        // install keeps roughly the strength it had rather than snapping to the defaults.
+        let legacyIntensity = defaults.object(forKey: mosaicIntensityKey) != nil
+            ? CGFloat(defaults.double(forKey: mosaicIntensityKey))
+            : nil
+        if defaults.object(forKey: mosaicBlurSigmaKey) != nil {
+            style.blurSigma = MosaicStyle.clampedBlurSigma(
+                CGFloat(defaults.double(forKey: mosaicBlurSigmaKey))
+            )
+        } else if let legacyIntensity {
+            style.blurSigma = MosaicStyle.snappedBlurSigma(
+                MosaicStyle.blurSigma(forLegacyIntensity: legacyIntensity)
+            )
+        }
+        if defaults.object(forKey: mosaicBlockSizeKey) != nil {
+            style.blockSize = MosaicStyle.clampedBlockSize(
+                CGFloat(defaults.double(forKey: mosaicBlockSizeKey))
+            )
+        } else if let legacyIntensity {
+            style.blockSize = MosaicStyle.snappedBlockSize(
+                MosaicStyle.blockSize(forLegacyIntensity: legacyIntensity)
             )
         }
         if defaults.object(forKey: mosaicEffectKey) != nil,
@@ -109,8 +130,10 @@ enum AnnotationPrefs {
         clamped.clamp()
         let defaults = UserDefaults.standard
         defaults.set(Double(clamped.brushWidth), forKey: mosaicBrushWidthKey)
-        defaults.set(Double(clamped.intensity), forKey: mosaicIntensityKey)
+        defaults.set(Double(clamped.blurSigma), forKey: mosaicBlurSigmaKey)
+        defaults.set(Double(clamped.blockSize), forKey: mosaicBlockSizeKey)
         defaults.set(clamped.effect.rawValue, forKey: mosaicEffectKey)
+        defaults.removeObject(forKey: mosaicIntensityKey)
         defaults.removeObject(forKey: mosaicSofteningKey)
     }
 

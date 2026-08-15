@@ -107,7 +107,13 @@ enum AnnotationCoding {
 
     struct MosaicStyleDTO: Codable {
         var brushWidth: Double
-        var intensity: Double
+        /// Legacy abstract strength in 3…24; only present in records written before `blurSigma` /
+        /// `blockSize`. Decoded through the old curves when the physical fields are missing.
+        var intensity: Double?
+        /// `CIGaussianBlur` sigma in points; missing → derived from `intensity`, else the default.
+        var blurSigma: Double?
+        /// `CIPixellate` block edge in points; missing → derived from `intensity`, else the default.
+        var blockSize: Double?
         /// Legacy tip shape (0/1); ignored on decode for style (geometry carries region kind).
         var brushKind: Int?
         /// "blur" / "pixelate"; missing → blur (records written before pixelate existed).

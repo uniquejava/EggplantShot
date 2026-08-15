@@ -105,8 +105,6 @@ final class RefineToolbarController: NSObject {
     var mosaicBrushButtons: [NSButton] = []
     var mosaicRectButton: NSButton!
     var mosaicOvalButton: NSButton!
-    var mosaicBlurButton: NSButton!
-    var mosaicPixelateButton: NSButton!
     var mosaicIntensityPreview: MosaicIntensityPreviewView!
     var mosaicIntensitySlider: MosaicIntensitySlider!
     var mosaicIntensityLabel: NSTextField!
