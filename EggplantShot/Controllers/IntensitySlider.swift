@@ -190,9 +190,11 @@ final class MagnifierScalePreviewView: NSView {
     }
 }
 
-/// Intensity chip: soft circle (no rim); interior softens with blur radius.
+/// Intensity chip: soft circle (no rim); interior softens with blur radius, or breaks into
+/// blocks when the Pixelate effect is armed — so the chip says what the slider is driving.
 final class MosaicIntensityPreviewView: NSView {
     var intensity: CGFloat = 10
+    var effect: MosaicEffect = .blur
 
     private static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
     private static let sampleImage: CIImage = {
@@ -228,11 +230,24 @@ final class MosaicIntensityPreviewView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let intensity = MosaicStyle.clampedIntensity(intensity)
-        let radius = MosaicStyle.blurRadiusPoints(forIntensity: intensity)
 
-        let filter = CIFilter(name: "CIGaussianBlur")
-        filter?.setValue(Self.sampleImage.clampedToExtent(), forKey: kCIInputImageKey)
-        filter?.setValue(max(radius * 1.2, 0.35), forKey: kCIInputRadiusKey)
+        // Both scale by the same 1.2 — the chip is a relative indicator, not a 1:1 preview.
+        let filter: CIFilter?
+        switch effect {
+        case .blur:
+            let radius = MosaicStyle.blurRadiusPoints(forIntensity: intensity)
+            filter = CIFilter(name: "CIGaussianBlur")
+            filter?.setValue(Self.sampleImage.clampedToExtent(), forKey: kCIInputImageKey)
+            filter?.setValue(max(radius * 1.2, 0.35), forKey: kCIInputRadiusKey)
+        case .pixelate:
+            let block = max(MosaicStyle.blockSizePoints(forIntensity: intensity) * 1.2, 1)
+            let pixellate = CIFilter(name: "CIPixellate")
+            pixellate?.setValue(Self.sampleImage.clampedToExtent(), forKey: kCIInputImageKey)
+            pixellate?.setValue(block, forKey: kCIInputScaleKey)
+            // Grid centred on the 64pt sample so the chip stays symmetric.
+            pixellate?.setValue(CIVector(x: 32, y: 32), forKey: kCIInputCenterKey)
+            filter = pixellate
+        }
 
         let shapePath = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
 

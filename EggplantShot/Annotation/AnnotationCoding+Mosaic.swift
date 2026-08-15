@@ -29,16 +29,30 @@ extension AnnotationCoding {
         MosaicStyleDTO(
             brushWidth: Double(style.brushWidth),
             intensity: Double(style.intensity),
-            brushKind: nil
+            brushKind: nil,
+            effect: effectString(style.effect)
         )
     }
 
     static func decode(_ dto: MosaicStyleDTO) -> MosaicStyle {
         var style = MosaicStyle(
             brushWidth: CGFloat(dto.brushWidth),
-            intensity: CGFloat(dto.intensity)
+            intensity: CGFloat(dto.intensity),
+            effect: effectFromString(dto.effect)
         )
         style.clamp()
         return style
+    }
+
+    static func effectString(_ effect: MosaicEffect) -> String {
+        switch effect {
+        case .blur: return "blur"
+        case .pixelate: return "pixelate"
+        }
+    }
+
+    /// Unknown / missing → `.blur`, so older records and future values stay loadable.
+    static func effectFromString(_ raw: String?) -> MosaicEffect {
+        raw == "pixelate" ? .pixelate : .blur
     }
 }

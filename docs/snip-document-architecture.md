@@ -127,11 +127,12 @@ final class AnnotationHistory {
 |--------|----------------|
 | Finish drawing a mark | mouse-up if size ≥ minimum |
 | Move / resize mark | endGesture if rect changed |
-| Style / kind on selection | immediate `commit` |
+| Style / kind on selection | immediate `commit` (discrete clicks: color, brush, effect, kind) |
+| Continuous slider on selection (intensity / scale) | **gap:** each tick is a `commit` today; should be one gesture like move/resize |
 | Delete selection | immediate `commit` |
 | Clear marks on re-select | `commit` that empties marks (see below) |
 
-Do **not** push on every mouse-dragged frame.
+Do **not** push on every mouse-dragged frame. The intensity / scale sliders still do — see the deferred note in [`selection-refine.md`](selection-refine.md).
 
 ### `SnipRecord`
 
@@ -369,7 +370,7 @@ Arrow: `.arrow(start:end:style:caps:)` — segment + Snipaste end-caps; Shift �
 
 Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
 
-Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; intensity 3…24 (`CIGaussianBlur` radius **is sigma**, linear ~0.8…3.2 pt; default 10 ≈ 2.8× thickening on a 2 pt stroke); samples freeze/base **+ the marks already under it** at draw time (read back from the `MarksCanvas` hull, so nested mosaics work); disk `mosaicStyle` (+ `kind`/`rect` for regions). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
+Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; two effects on the one tool, `effect: blur | pixelate` (**Blur** = `CIGaussianBlur`, radius **is sigma**, intensity 3…24 → ~0.8…3.2 pt; **Pixelate** = `CIPixellate`, intensity → block edge ~2…16 pt, hard-edged, lattice anchored in image space so overlapping strokes don't seam); samples freeze/base **+ the marks already under it** at draw time (read back from the `MarksCanvas` hull, so nested mosaics work); disk `mosaicStyle` (+ `effect`, and `kind`/`rect` for regions; missing `effect` → blur). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 
 Marker: `.marker(geometry:style:)` — same geometry modes as mosaic; **multiply** color fill (Snipaste highlighter; stamps freeze under the clip on the transparent marks layer so multiply isn’t against clear; near-white → sourceOver wash) instead of blur; region chrome = solid while draw/move/resize, handles-only when idle, dashed on non-selected hover; sub-toolbar swaps intensity slider for color card; disk `markerStyle` (brushWidth / color).
 

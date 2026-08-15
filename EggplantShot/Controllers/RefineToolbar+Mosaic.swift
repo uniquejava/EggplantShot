@@ -52,8 +52,26 @@ extension RefineToolbarController {
         stack.addArrangedSubview(mosaicOvalButton)
         stack.addArrangedSubview(miniDivider())
 
+        // Effect pair sits next to the slider it reinterprets: sigma for Blur, block for Pixelate.
+        mosaicBlurButton = iconButton(
+            image: mosaicEffectIcon(.blur),
+            tooltip: L10n.tr("Blur"),
+            enabled: true,
+            action: #selector(mosaicBlurTapped)
+        )
+        mosaicPixelateButton = iconButton(
+            image: mosaicEffectIcon(.pixelate),
+            tooltip: L10n.tr("Pixelate"),
+            enabled: true,
+            action: #selector(mosaicPixelateTapped)
+        )
+        stack.addArrangedSubview(mosaicBlurButton)
+        stack.addArrangedSubview(mosaicPixelateButton)
+        stack.addArrangedSubview(miniDivider())
+
         mosaicIntensityPreview = MosaicIntensityPreviewView(frame: .zero)
         mosaicIntensityPreview.intensity = mosaicStyle.intensity
+        mosaicIntensityPreview.effect = mosaicStyle.effect
         let intensityControls = appendValueSlider(
             to: stack,
             preview: mosaicIntensityPreview,
@@ -86,9 +104,12 @@ extension RefineToolbarController {
         }
         tintSelected(mosaicRectButton, selected: mosaicDrawMode == .rectangle)
         tintSelected(mosaicOvalButton, selected: mosaicDrawMode == .ellipse)
+        tintSelected(mosaicBlurButton, selected: mosaicStyle.effect == .blur)
+        tintSelected(mosaicPixelateButton, selected: mosaicStyle.effect == .pixelate)
         mosaicIntensitySlider.doubleValue = Double(mosaicStyle.intensity)
         mosaicIntensityLabel.stringValue = "\(Int(mosaicStyle.intensity.rounded()))"
         mosaicIntensityPreview.intensity = mosaicStyle.intensity
+        mosaicIntensityPreview.effect = mosaicStyle.effect
         mosaicIntensityPreview.needsDisplay = true
     }
 
@@ -142,6 +163,50 @@ extension RefineToolbarController {
         return image
     }
 
+    /// Blur = soft halo, Pixelate = uneven block lattice. Both template images, so `tintSelected`
+    /// colours them like the rest of the row; the halo relies on alpha surviving the tint.
+    func mosaicEffectIcon(_ effect: MosaicEffect) -> NSImage {
+        let size = NSSize(width: 16, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            switch effect {
+            case .blur:
+                // Stacked translucent discs: overlap builds a solid core that fades at the rim.
+                let steps = 5
+                let maxRadius: CGFloat = 6
+                NSColor.black.withAlphaComponent(0.22).setFill()
+                for step in 1...steps {
+                    let r = maxRadius * CGFloat(step) / CGFloat(steps)
+                    NSBezierPath(ovalIn: CGRect(
+                        x: rect.midX - r,
+                        y: rect.midY - r,
+                        width: r * 2,
+                        height: r * 2
+                    )).fill()
+                }
+            case .pixelate:
+                let box = rect.insetBy(dx: 2, dy: 2)
+                let gap: CGFloat = 0.8
+                let cell = (box.width - gap * 2) / 3
+                for row in 0..<3 {
+                    for column in 0..<3 {
+                        // Alternating weights read as mosaic tones, not as a plain grid.
+                        let alpha: CGFloat = (row + column).isMultiple(of: 2) ? 1 : 0.32
+                        NSColor.black.withAlphaComponent(alpha).setFill()
+                        NSBezierPath(rect: CGRect(
+                            x: box.minX + CGFloat(column) * (cell + gap),
+                            y: box.minY + CGFloat(row) * (cell + gap),
+                            width: cell,
+                            height: cell
+                        )).fill()
+                    }
+                }
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     @objc func mosaicBrushTapped(_ sender: NSButton) {
         mosaicStyle.brushWidth = MosaicStyle.nearestBrushPreset(CGFloat(sender.tag))
         mosaicDrawMode = .freehand
@@ -170,4 +235,20 @@ extension RefineToolbarController {
         onEvent(.mosaicStyleChanged(mosaicStyle))
     }
 
+    @objc func mosaicBlurTapped() {
+        setMosaicEffect(.blur)
+    }
+
+    @objc func mosaicPixelateTapped() {
+        setMosaicEffect(.pixelate)
+    }
+
+    /// Effect rides on `MosaicStyle`, so this reuses `mosaicStyleChanged` — which also re-styles a
+    /// selected mosaic mark, letting you convert an existing blur to blocks the way intensity does.
+    func setMosaicEffect(_ effect: MosaicEffect) {
+        guard mosaicStyle.effect != effect else { return }
+        mosaicStyle.effect = effect
+        refreshMosaicChrome()
+        onEvent(.mosaicStyleChanged(mosaicStyle))
+    }
 }

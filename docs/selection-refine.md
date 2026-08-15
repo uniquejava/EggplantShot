@@ -103,17 +103,29 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 ### Mosaic
 
-- Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to blur an area) | intensity **3…24** with live blur preview left of the slider.
+- Sub-toolbar: brush **14 / 18 / 24** (three sized dots → freehand smear) | **rect / oval region** (drag to obscure an area) | **Blur / Pixelate** effect pair | intensity **3…24** with live preview left of the slider.
 - Freehand: stroke sampling; Shift → straight; keep translucent brush tip while stroking. No resize chrome / no auto-select after stroke.
-- Region: drag like shape; Shift → square / circle; entire rect/oval is blurred. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
-- Effect: **gaussian blur** of freeze/base **plus whatever marks are already under it** (`CIGaussianBlur`; linear intensity 3…24 → sigma ~0.8…3.2 pt — see *Blur calibration* below). Path: hull crop → read the marks drawn so far out of the `MarksCanvas` (`snapshotCrop`) → composite over the freeze crop → blur → clip to stroke/region. Because the sample is *pixels already rendered*, a mosaic over an earlier mosaic sees that one's blurred output. **Vector** stroke/region data only (P4; never mutates `baseImage`).
-- Hit: under object tools, mosaic marks draw-through (no move hand over blurred areas). Under paint tools, all marks draw-through (Shared rules). Move via **V** (region handles still work when selected).
+- Region: drag like shape; Shift → square / circle; entire rect/oval is obscured. **Edit chrome** (not the thick shape stroke): **1 device-pixel hairline** — black on light freeze, white on dark; **solid while dragging**, **dashed after mouse-up** with **8 resize handles** (auto-select). Hit mark to move; handles resize.
+- Effect: **Blur** = gaussian smear (`CIGaussianBlur`, intensity → sigma ~0.8…3.2 pt) or **Pixelate** = coarse colour squares (`CIPixellate`, intensity → block edge ~2…16 pt) — see *Effect calibration* below. Either way it processes freeze/base **plus whatever marks are already under it**. Path: hull crop → read the marks drawn so far out of the `MarksCanvas` (`snapshotCrop`) → composite over the freeze crop → filter → clip to stroke/region. Because the sample is *pixels already rendered*, a mosaic over an earlier mosaic sees that one's output. **Vector** stroke/region data only (P4; never mutates `baseImage`).
+- Hit: under object tools, mosaic marks draw-through (no move hand over obscured areas). Under paint tools, all marks draw-through (Shared rules). Move via **V** (region handles still work when selected).
 - No color palette.
 
-**Blur calibration.** `CIGaussianBlur.inputRadius` **is sigma**, and a thin stroke smears over
+**Dual-use, one tool.** Blur and Pixelate share geometry, brush presets, sampling, hit-testing,
+chrome and the `.mosaic` payload — only the Core Image filter differs, so a second main-toolbar
+icon would duplicate the whole surface for one filter swap. The effect lives on `MosaicStyle`
+(`effect: blur | pixelate`, disk field `effect`, records without it decode to blur) and rides the
+existing `mosaicStyleChanged` event, which means picking an effect while a mosaic mark is selected
+converts that mark — same as changing its intensity. Last-used effect persists in
+`annotate.mosaic.effect`. The chips sit between the geometry group and the slider because they
+change what the slider *means*; the slider keeps one shared 3…24 value across both modes and the
+label keeps showing that raw number rather than sigma or points.
+
+**Effect calibration.** Both curves are **absolute** — not scaled by brush width — so a given
+intensity means the same thing at 14 pt and 24 pt, matching Photoshop's blur tool.
+
+*Blur.* `CIGaussianBlur.inputRadius` **is sigma**, and a thin stroke smears over
 roughly ±2…3 sigma — so sigma has to stay small or a pencil line turns into a blob. Intensity
-3…24 maps linearly to sigma **0.8…3.2 pt**, absolute (not scaled by brush width, matching
-Photoshop's blur tool). Measured on a 2 pt stroke against a dark freeze:
+3…24 maps linearly to sigma **0.8…3.2 pt**. Measured on a 2 pt stroke against a dark freeze:
 
 | intensity | sigma | thickening | fine detail left |
 |---|---|---|---|
@@ -131,19 +143,48 @@ and a 24 pt brush read as different strengths (5.9× vs 7.8× at the same settin
 already gone by ~1.5 pt, so the old default of ~5 pt was roughly 3× more blur than obscuring
 needs — all of that excess went into fattening strokes.
 
-**Not security-grade redaction at any setting.** Blurred and pixelated text is recoverable
-(Hill et al., *On the (In)effectiveness of Mosaicing and Blurring as Tools for Document
+*Pixelate.* Intensity 3…24 maps linearly to a block edge of **2…16 pt**, rounded to whole device
+pixels so the lattice lands on pixel boundaries. The failure mode is the mirror image of blur bloom:
+blocks *larger* than the brush can't tile it, so a stroke narrower than ~3 blocks reads as a flat
+smudge instead of a mosaic. Drawing wider or switching to region mode is the fix — clamping the
+block to the brush would break the "same intensity, same result at every brush" rule.
+
+| intensity | block | blocks across a 14 pt brush | typical read |
+|---|---|---|---|
+| 3 | 2 pt | 7 | light texture |
+| **10 (default)** | **6.7 pt** | **2** | **chunky; past what body text survives** |
+| 16 | 10.7 pt | 1.3 | region-only |
+| 24 | 16 pt | <1 | coarse enough to bury a face in a large region |
+
+**Blocks are left hard-edged** — Pixelate is the lattice and nothing else. Hull bleed is one whole
+block, so the outermost cells average against real neighbours instead of missing ones. (An adjustable
+`ratio × block` gaussian after `CIPixellate` was built and then removed: it is a second look control
+on a tool that already has one, and the sharp lattice is the effect people expect.) Blur mode is
+untouched by any of this.
+
+**The block lattice is anchored in image space**, not per crop. `CIPixellate` builds its grid
+around `inputCenter`, which is relative to the image handed to it — here a hull crop whose origin
+moves with every stroke — so left at a constant, each mark would quantise to its own offset grid
+and two overlapping pixelate strokes would seam where the lattices disagree (the second stroke
+re-reads the first's pixels out of the marks layer). `pixelateGridAnchor` cancels the crop's
+absolute pixel origin, mod one block, which makes the phase a function of absolute position alone;
+*which* part of a cell `inputCenter` names is deliberately not relied on. Verified headlessly: two
+crops offset by (13, 19) px render bit-identically, against completely different values when the
+anchor is left constant.
+
+**Not security-grade redaction at any setting, in either mode.** Blurred *and* pixelated text is
+recoverable (Hill et al., *On the (In)effectiveness of Mosaicing and Blurring as Tools for Document
 Redaction*, PoPETs 2016 — 24 pt text recovered through a 45 px blur). Solid fill is the only safe
 way to hide sensitive content.
 
 Sampling design (mosaic / magnifier): marks render into a `MarksCanvas` (an owned bitmap), and a
-mosaic reads the hull it is about to blur back out of it — so a mosaic over an earlier mosaic sees
-that one's blurred pixels, and nothing re-derives prior marks from vectors. The overlay caches the
-committed layer so a pencil drag does not re-blur every mosaic per frame. Full write-up, the two
+mosaic reads the hull it is about to process back out of it — so a mosaic over an earlier mosaic
+sees that one's pixels, and nothing re-derives prior marks from vectors. The overlay caches the
+committed layer so a pencil drag does not re-render every mosaic per frame. Full write-up, the two
 rejected approaches, measurements, and the rules that must not be broken:
 [`marks-rendering.md`](marks-rendering.md).
 
-**Still deferred:** eraser concentric-ring brush tip (reuses the mosaic outline).
+**Still deferred:** eraser concentric-ring brush tip (reuses the mosaic outline). Slider-drag undo coalescing: mosaic intensity and magnifier scale fire `commit` on every `mouseDragged` tick (`applyMosaicStyle` / `applyMagnifier`), so 3→24→3 leaves dozens of undo steps. Discrete style clicks stay one `commit`; a continuous slider should be `beginGesture` / `mutateLive` / `endGesture` like mark move/resize (one step if the value changed, zero if it returned). Debouncing ticks is the wrong fix. Same gap is noted under the undo table in [`snip-document-architecture.md`](snip-document-architecture.md).
 
 ### Eraser
 

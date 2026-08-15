@@ -110,6 +110,8 @@ enum AnnotationCoding {
         var intensity: Double
         /// Legacy tip shape (0/1); ignored on decode for style (geometry carries region kind).
         var brushKind: Int?
+        /// "blur" / "pixelate"; missing → blur (records written before pixelate existed).
+        var effect: String?
     }
 
     struct MarkerStyleDTO: Codable {

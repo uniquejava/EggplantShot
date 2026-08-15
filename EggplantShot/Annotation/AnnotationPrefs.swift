@@ -13,8 +13,11 @@ enum AnnotationPrefs {
     private static let mosaicBrushWidthKey = "annotate.mosaic.brushWidth"
     private static let mosaicDrawModeKey = "annotate.mosaic.drawMode"
     private static let mosaicIntensityKey = "annotate.mosaic.intensity"
+    private static let mosaicEffectKey = "annotate.mosaic.effect"
     /// Legacy tip-shape key; migrated into `mosaicDrawModeKey`.
     private static let mosaicBrushKindKey = "annotate.mosaic.brushKind"
+    /// Retired pixelate edge-softening ratio; cleared on save so no stale value lingers.
+    private static let mosaicSofteningKey = "annotate.mosaic.softening"
 
     static func load() -> (style: AnnotationStyle, kind: ShapeKind) {
         let defaults = UserDefaults.standard
@@ -75,6 +78,10 @@ enum AnnotationPrefs {
                 CGFloat(defaults.double(forKey: mosaicIntensityKey))
             )
         }
+        if defaults.object(forKey: mosaicEffectKey) != nil,
+           let effect = MosaicEffect(rawValue: defaults.integer(forKey: mosaicEffectKey)) {
+            style.effect = effect
+        }
         return style
     }
 
@@ -103,6 +110,8 @@ enum AnnotationPrefs {
         let defaults = UserDefaults.standard
         defaults.set(Double(clamped.brushWidth), forKey: mosaicBrushWidthKey)
         defaults.set(Double(clamped.intensity), forKey: mosaicIntensityKey)
+        defaults.set(clamped.effect.rawValue, forKey: mosaicEffectKey)
+        defaults.removeObject(forKey: mosaicSofteningKey)
     }
 
     static func saveMosaicDrawMode(_ mode: MosaicDrawMode) {

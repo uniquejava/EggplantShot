@@ -1,7 +1,7 @@
 import AppKit
 import CoreImage
 
-// Mosaic blur draw.
+// Mosaic draw — gaussian blur smear or pixel-block mosaic, per `style.effect`.
 
 extension AnnotationDrawing {
     static func drawMosaic(
@@ -11,7 +11,7 @@ extension AnnotationDrawing {
         sample: MosaicSampleContext?,
         canvas: MarksCanvas? = nil
     ) {
-        let radius = MosaicStyle.blurRadiusPoints(forIntensity: style.intensity)
+        let bleed = mosaicBleedPoints(for: style)
 
         switch geometry {
         case .stroke(let localPoints):
@@ -22,12 +22,12 @@ extension AnnotationDrawing {
                 drawMosaicFallbackStroke(points: offset, brushWidth: brush)
                 return
             }
-            let pad = brush / 2 + radius * 2
+            let pad = brush / 2 + bleed
             let hull = Annotation.bounds(of: localPoints).insetBy(dx: -pad, dy: -pad)
-            drawBlurredMask(
+            drawSampledMask(
                 localMask: mosaicStrokeMask(localPoints: localPoints, brushWidth: brush),
                 localHull: hull,
-                radius: radius,
+                style: style,
                 drawOrigin: drawOrigin,
                 sample: sample,
                 canvas: canvas
@@ -42,8 +42,7 @@ extension AnnotationDrawing {
                 drawMosaicFallbackRegion(rect: localRect.offsetBy(dx: drawOrigin.x, dy: drawOrigin.y), mode: mode)
                 return
             }
-            let pad = radius * 2
-            let hull = localRect.insetBy(dx: -pad, dy: -pad)
+            let hull = localRect.insetBy(dx: -bleed, dy: -bleed)
             let mask: NSBezierPath
             switch mode {
             case .ellipse:
@@ -51,10 +50,10 @@ extension AnnotationDrawing {
             case .rectangle, .freehand:
                 mask = NSBezierPath(rect: localRect)
             }
-            drawBlurredMask(
+            drawSampledMask(
                 localMask: mask,
                 localHull: hull,
-                radius: radius,
+                style: style,
                 drawOrigin: drawOrigin,
                 sample: sample,
                 canvas: canvas
@@ -67,10 +66,23 @@ extension AnnotationDrawing {
         }
     }
 
-    static func drawBlurredMask(
+    /// Hull padding beyond the mask, so the effect has source pixels to reach for: a gaussian
+    /// needs ±2σ, a block lattice needs one whole block.
+    static func mosaicBleedPoints(for style: MosaicStyle) -> CGFloat {
+        switch style.effect {
+        case .blur:
+            return MosaicStyle.blurRadiusPoints(forIntensity: style.intensity) * 2
+        case .pixelate:
+            // One whole block, so the outermost lattice cell is complete rather than averaging
+            // against missing neighbours.
+            return MosaicStyle.blockSizePoints(forIntensity: style.intensity)
+        }
+    }
+
+    static func drawSampledMask(
         localMask: NSBezierPath,
         localHull: CGRect,
-        radius: CGFloat,
+        style: MosaicStyle,
         drawOrigin: CGPoint,
         sample: MosaicSampleContext,
         canvas: MarksCanvas? = nil,
@@ -89,12 +101,12 @@ extension AnnotationDrawing {
             dx: drawOrigin.x - sample.selectionOriginInImage.x,
             dy: drawOrigin.y - sample.selectionOriginInImage.y
         )
-        // Marks already drawn under this hull — including any earlier mosaic's blurred pixels.
+        // Marks already drawn under this hull — including any earlier mosaic's output.
         let priorPixels = canvas?.snapshotCrop(drawRect)
-        guard let blurred = blurredCrop(
+        guard let processed = processedCrop(
             from: sample.image,
             crop: crop,
-            radius: radius,
+            style: style,
             overlay: priorPixels
         ) else {
             fallback()
@@ -110,7 +122,7 @@ extension AnnotationDrawing {
         mask.transform(using: transform)
         mask.addClip()
 
-        blurred.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
+        processed.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: 1)
     }
 
     static func drawMosaicFallbackStroke(points: [CGPoint], brushWidth: CGFloat) {
@@ -165,11 +177,11 @@ extension AnnotationDrawing {
 
     static let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-    /// Crop → optional composite with the marks already under it → `CIGaussianBlur`.
-    static func blurredCrop(
+    /// Crop → optional composite with the marks already under it → `style.effect`'s filter.
+    static func processedCrop(
         from image: NSImage,
         crop: CGRect,
-        radius: CGFloat,
+        style: MosaicStyle,
         overlay: CGImage? = nil
     ) -> NSImage? {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
@@ -188,19 +200,75 @@ extension AnnotationDrawing {
               let cropped = cgImage.cropping(to: pixelCrop)
         else { return nil }
 
-        // Blur what is actually visible here: freeze under the marks drawn over it.
+        // Process what is actually visible here: freeze under the marks drawn over it.
         let source = overlay.flatMap { compositeUnder(cropped, overlay: $0) } ?? cropped
 
         let ci = CIImage(cgImage: source)
-        let filter = CIFilter(name: "CIGaussianBlur")
-        filter?.setValue(ci.clampedToExtent(), forKey: kCIInputImageKey)
-        filter?.setValue(max(radius * pixelScale, 0.35), forKey: kCIInputRadiusKey)
         let extent = ci.extent
-        guard let blurred = filter?.outputImage?.cropped(to: extent),
-              let outCG = ciContext.createCGImage(blurred, from: extent)
+        let output: CIImage?
+        switch style.effect {
+        case .blur:
+            let radius = MosaicStyle.blurRadiusPoints(forIntensity: style.intensity)
+            let filter = CIFilter(name: "CIGaussianBlur")
+            filter?.setValue(ci.clampedToExtent(), forKey: kCIInputImageKey)
+            filter?.setValue(max(radius * pixelScale, 0.35), forKey: kCIInputRadiusKey)
+            output = filter?.outputImage
+        case .pixelate:
+            // Whole device pixels, so block edges stay crisp instead of landing mid-pixel.
+            let block = max(
+                (MosaicStyle.blockSizePoints(forIntensity: style.intensity) * pixelScale).rounded(),
+                2
+            )
+            let pixellate = CIFilter(name: "CIPixellate")
+            pixellate?.setValue(ci.clampedToExtent(), forKey: kCIInputImageKey)
+            pixellate?.setValue(block, forKey: kCIInputScaleKey)
+            pixellate?.setValue(
+                CIVector(cgPoint: pixelateGridAnchor(
+                    pixelCrop: pixelCrop,
+                    imagePixelHeight: cgImage.height,
+                    block: block
+                )),
+                forKey: kCIInputCenterKey
+            )
+            output = pixellate?.outputImage
+        }
+        guard let processed = output?.cropped(to: extent),
+              let outCG = ciContext.createCGImage(processed, from: extent)
         else { return nil }
 
         return NSImage(cgImage: outCG, size: crop.size)
+    }
+
+    /// Crop-local point that pins the block lattice to one image-wide grid.
+    ///
+    /// `CIPixellate` builds its lattice around `inputCenter`, which is relative to the image it is
+    /// handed — here a crop whose origin moves with every stroke. Left at a constant, each mark
+    /// would quantise to its own offset grid, so two overlapping pixelate strokes (the second one
+    /// re-reading the first's pixels out of the marks layer) would seam where the two lattices
+    /// disagree instead of resolving to the same squares.
+    ///
+    /// Cancelling the crop's absolute origin, mod one block, makes the lattice phase a function of
+    /// absolute image position alone. Which *part* of a cell `inputCenter` names doesn't matter —
+    /// only that every crop derives the same phase. Verified by rendering the same absolute pixels
+    /// through two crops offset by a non-multiple of the block and diffing them.
+    static func pixelateGridAnchor(
+        pixelCrop: CGRect,
+        imagePixelHeight: Int,
+        block: CGFloat
+    ) -> CGPoint {
+        // `pixelCrop` is top-down; the cropped image `CIImage` sees starts at its bottom-left.
+        let originX = pixelCrop.minX
+        let originY = CGFloat(imagePixelHeight) - pixelCrop.maxY
+        return CGPoint(
+            x: nonNegativeRemainder(-originX, block),
+            y: nonNegativeRemainder(-originY, block)
+        )
+    }
+
+    private static func nonNegativeRemainder(_ value: CGFloat, _ modulus: CGFloat) -> CGFloat {
+        guard modulus > 0 else { return 0 }
+        let remainder = value.truncatingRemainder(dividingBy: modulus)
+        return remainder < 0 ? remainder + modulus : remainder
     }
 
     /// `overlay` (marks, with alpha) over `base` (opaque freeze) at `base`'s pixel size.

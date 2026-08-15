@@ -8,6 +8,15 @@ enum MosaicDrawMode: Int, CaseIterable {
     case ellipse = 2
 }
 
+/// What a mosaic mark does to the pixels under it. Geometry, brushes and sampling are shared;
+/// only the Core Image filter differs, which is why both live on the one Mosaic tool.
+enum MosaicEffect: Int, CaseIterable {
+    /// Gaussian smear (`CIGaussianBlur`) — soft blur brush.
+    case blur = 0
+    /// Coarse colour squares (`CIPixellate`) — the block mosaic people mean by “mosaic”.
+    case pixelate = 1
+}
+
 /// Geometry for a mosaic mark (stroke polyline or region rect/oval).
 enum MosaicGeometry: Equatable {
     case stroke(points: [CGPoint])
@@ -57,11 +66,16 @@ enum MosaicGeometry: Equatable {
     }
 }
 
-/// Mosaic stroke style (brush size for freehand + blur intensity). Stored on the mark; prefs mirror last-used.
+/// Mosaic stroke style (brush size for freehand + effect and its strength). Stored on the mark;
+/// prefs mirror last-used.
 struct MosaicStyle: Equatable {
     var brushWidth: CGFloat
-    /// `CIGaussianBlur` radius (Snipaste intensity); clamped to `intensityRange`.
+    /// Strength of `effect`, clamped to `intensityRange`. Read as gaussian sigma when `effect`
+    /// is `.blur` and as block edge when it is `.pixelate` — one slider, two curves.
     var intensity: CGFloat
+    /// Blur smear or pixel blocks. Defaults to `.blur`: the mode that shipped first, and what
+    /// records written before pixelate existed decode to.
+    var effect: MosaicEffect = .blur
 
     static let intensityRange: ClosedRange<CGFloat> = 3...24
     /// Brush diameters in points (≈ cover 14 / 18 / 24 pt glyphs — not Snipaste’s @2x 28/34/42 labels).
@@ -107,5 +121,25 @@ struct MosaicStyle: Equatable {
         let t = (clampedIntensity(intensity) - intensityRange.lowerBound)
             / (intensityRange.upperBound - intensityRange.lowerBound)
         return 0.8 + t * 2.4 // ≈ 0.8 … 3.2
+    }
+
+    /// Maps intensity 3…24 → `CIPixellate` block edge in **points** (linear).
+    ///
+    /// Absolute, like the blur radius — a given intensity means the same block at every brush
+    /// width. The consequence is the mirror image of the blur bloom problem: blocks *larger* than
+    /// the brush can't tile it, so a stroke narrower than ~3 blocks reads as a flat smudge rather
+    /// than a mosaic. Drawing wider, or switching to region mode, is the fix; clamping the block
+    /// to the brush would make intensity mean different things per brush.
+    ///
+    /// 2…16 pt: 2 pt is a light texture, the default (intensity 10) lands at ≈6.7 pt — chunky on a
+    /// region, ~2 blocks across the 14 pt brush, and past what any body text survives — and 16 pt
+    /// is coarse enough to bury a face in a large region.
+    ///
+    /// Like blur, **not** security-grade redaction: pixelated text is recoverable too
+    /// (Hill et al., PoPETs 2016). Solid fill is the only safe way to hide sensitive content.
+    static func blockSizePoints(forIntensity intensity: CGFloat) -> CGFloat {
+        let t = (clampedIntensity(intensity) - intensityRange.lowerBound)
+            / (intensityRange.upperBound - intensityRange.lowerBound)
+        return 2 + t * 14 // ≈ 2 … 16
     }
 }
