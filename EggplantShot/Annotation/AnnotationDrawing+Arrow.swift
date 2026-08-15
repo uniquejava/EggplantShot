@@ -238,14 +238,33 @@ extension AnnotationDrawing {
         max(strokeWidth * 1.6, 4)
     }
 
+    /// Arrowhead apex angle: **60°**, the classic arrowhead. Matched to draw.io's slimmer arrow, which
+    /// measured 58–61° off a screenshot (13–14px of head height over 12px of length); 2·tan(30°) =
+    /// 1.155 sits inside that width:length range, so 60° is the value it was almost certainly built
+    /// from. Snipaste's is blunter — its head measured 71.4° (4.6× the stroke wide) — and read too
+    /// upright here, so this deliberately does not match it.
+    ///
+    /// Only the *angle* is borrowed. draw.io's head is a fixed size regardless of stroke weight, so
+    /// its 6:1 head-to-stroke ratio means nothing here; head length stays tied to stroke width below.
+    /// (Not a "golden" constant — the golden angle is 137.5°.)
+    static let arrowheadApexDegrees: CGFloat = 60
+
+    /// Head width for a given head length at `apexDegrees`. Width is *derived* so the angle survives
+    /// any length tweak — length and width used to be independent constants, which is how the chevron
+    /// drifted to 41° while its own legend drew 64°.
+    static func arrowheadSpan(
+        length: CGFloat,
+        apexDegrees: CGFloat = arrowheadApexDegrees
+    ) -> CGFloat {
+        2 * length * tan(apexDegrees / 2 * .pi / 180)
+    }
+
     static func openArrowLength(strokeWidth: CGFloat, wide: Bool) -> CGFloat {
-        // Match toolbar/menu cap preview: longer tip, narrower span (stroke makes open Vs look wider than fill).
         wide ? max(strokeWidth * 3.8, 10) : max(strokeWidth * 3.6, 9)
     }
 
     static func openArrowWidth(strokeWidth: CGFloat, wide: Bool) -> CGFloat {
-        // ~0.75–0.85 width/length ≈ filled-triangle preview angle (not the old ~1.7 opener).
-        wide ? max(strokeWidth * 3.2, 8) : max(strokeWidth * 2.7, 7)
+        arrowheadSpan(length: openArrowLength(strokeWidth: strokeWidth, wide: wide))
     }
 
     static func arrowheadLength(strokeWidth: CGFloat) -> CGFloat {
@@ -253,7 +272,7 @@ extension AnnotationDrawing {
     }
 
     static func arrowheadWidth(strokeWidth: CGFloat) -> CGFloat {
-        max(strokeWidth * 2.4, 6)
+        arrowheadSpan(length: arrowheadLength(strokeWidth: strokeWidth))
     }
 
     /// Axis-aligned bounds including end caps.
@@ -517,7 +536,12 @@ extension AnnotationDrawing {
         // show 0.00pt spread across all six ornaments, in both directions and both icon sizes.
         let tipSpan = min(rect.height * 0.70, 7.0)
         let halfSpan = tipSpan / 2
-        let tipDepth = min(tipLen * 0.88, 5.6)
+        // Depth follows the same apex as drawn arrowheads, so a legend predicts what you get on
+        // screen. Capped by the tip budget, at 0.95 rather than 0.88 so a 60° head (which needs 6.06pt
+        // of a 6.5pt budget) isn't clamped into looking blunter than what it draws. The bridge shortens
+        // to absorb it; every ornament shares this depth, arrowhead or not, which is what keeps the six
+        // ink boxes identical.
+        let tipDepth = min(halfSpan / tan(arrowheadApexDegrees / 2 * .pi / 180), tipLen * 0.95)
 
         /// Path geometry for a stroked arrowhead whose *ink* fills `tipDepth` × `tipSpan`.
         /// The mitered tip adds `(w/2)/sin α` along the axis and each wing end adds `(w/2)·cos α`
