@@ -69,14 +69,14 @@
 "Close" = "Close";
 
 /* Overlay */
-"Press Esc again to discard" = "Press Esc again to discard";
+"Press again to discard" = "Press again to discard";
 
 /* Toolbar — main */
 "Move (V)" = "Move (V)";
-"Shape (A)" = "Shape (A)";
-"Arrow (S)" = "Arrow (S)";
+"Shape (S)" = "Shape (S)";
+"Arrow (A)" = "Arrow (A)";
 "Pen (D)" = "Pen (D)";
-"Mosaic (M)" = "Mosaic (M)";
+"Blur/Mosaic (M)" = "Blur/Mosaic (M)";
 "Marker (F)" = "Marker (F)";
 "Text (I)" = "Text (I)";
 "Number (N)" = "Number (N)";
@@ -84,8 +84,8 @@
 "Eraser (E)" = "Eraser (E)";
 "Undo (⌘Z)" = "Undo (⌘Z)";
 "Redo (⇧⌘Z)" = "Redo (⇧⌘Z)";
-"OCR (O)" = "OCR (O)";
-"Cancel" = "Cancel";
+"OCR/QR code (O)" = "OCR/QR code (O)";
+"Cancel (Esc)" = "Cancel (Esc)";
 "Pin (P)" = "Pin (P)";
 "Save (⌘S)" = "Save (⌘S)";
 "Copy (⌘C)" = "Copy (⌘C)";

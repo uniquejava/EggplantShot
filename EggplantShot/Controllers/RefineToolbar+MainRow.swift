@@ -10,13 +10,13 @@ extension RefineToolbarController {
         )
         shapeButton = iconButton(
             systemName: "rectangle",
-            tooltip: L10n.tr("Shape (A)"),
+            tooltip: L10n.tr("Shape (S)"),
             enabled: true,
             action: #selector(shapeTapped)
         )
         arrowButton = iconButton(
             systemName: "arrow.up.right",
-            tooltip: L10n.tr("Arrow (S)"),
+            tooltip: L10n.tr("Arrow (A)"),
             enabled: true,
             action: #selector(arrowTapped)
         )
@@ -28,7 +28,7 @@ extension RefineToolbarController {
         )
         mosaicButton = iconButton(
             image: mosaicToolIcon(),
-            tooltip: L10n.tr("Mosaic (M)"),
+            tooltip: L10n.tr("Blur/Mosaic (M)"),
             enabled: true,
             action: #selector(mosaicTapped)
         )
@@ -90,7 +90,7 @@ extension RefineToolbarController {
         let editViews: [NSView] = [
             iconButton(
                 systemName: "doc.text.viewfinder",
-                tooltip: L10n.tr("OCR (O)"),
+                tooltip: L10n.tr("OCR/QR code (O)"),
                 enabled: true,
                 action: #selector(ocrTapped)
             ),
@@ -98,7 +98,7 @@ extension RefineToolbarController {
             redoButton,
         ]
 
-        let cancel = iconButton(systemName: "xmark", tooltip: L10n.tr("Cancel"), enabled: true, action: #selector(cancelTapped))
+        let cancel = iconButton(systemName: "xmark", tooltip: L10n.tr("Cancel (Esc)"), enabled: true, action: #selector(cancelTapped))
         let pin = iconButton(systemName: "pin.fill", tooltip: L10n.tr("Pin (P)"), enabled: true, action: #selector(pinTapped))
         let save = iconButton(systemName: "square.and.arrow.down", tooltip: L10n.tr("Save (⌘S)"), enabled: true, action: #selector(saveTapped))
         let copy = iconButton(systemName: "doc.on.doc", tooltip: L10n.tr("Copy (⌘C)"), enabled: true, action: #selector(copyTapped))

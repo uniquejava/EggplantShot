@@ -67,7 +67,7 @@ EggplantShot/
 1. **Capture (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; scroll wheel ±10% zoom with brief top-left % badge; Esc / double-click closes).
 2. **Capture and copy (⌘F1)** → same freeze + hover/drag select; on window lock or drag mouse-up, crop + copy to clipboard immediately (no refine toolbar / annotate).
 3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
-4. **Esc** during drag/refine: abort gesture → disarm tool → deselect mark; with marks, first Esc shows a tip and second Esc discards (toolbar ✕ always discards). Esc on a pin closes that pin only.
+4. **Esc** during drag/refine: abort gesture → disarm tool → deselect mark; with marks, first Esc / Cancel shows a tip and second confirms discard. Esc on a pin closes that pin only.
 5. Pins use `.statusBar` level (above ordinary windows; below capture overlay).
 6. **Paste (F3)** → clipboard → floating pin (image; HEX/RGB color → swatch; plain/HTML text → text image; image file → image, second paste → path text). Ignored while capture overlay is active.
 7. **Disable hotkeys** pauses the event tap (persisted).
@@ -85,13 +85,18 @@ New annotate tools **must** follow these without being asked. Details: [`docs/sn
 4. Do **not** bake into `baseImage` until Pin / Copy / Save; `,` / `.` always restore unannotated base + vector document.
 5. Disk: new `type` discriminator; unknown types skip on load. Bump `schemaVersion` only when the meta shape itself changes.
 
-## Next (not done yet)
+## Deferred polish (not blocking MVP)
 
-→ Annotate tools in: shape + arrow + pencil + marker + mosaic + text + step + magnifier + eraser + OCR + undo/redo + snip history (`,` / `.`, disk) + `AnnotationPayload`. Login item via Preferences → General. See [`docs/selection-refine.md`](docs/selection-refine.md) (shared refine rules + per-tool notes; split to `annotate-*.md` only when a tool section grows).
+→ Nothing outstanding.
 
-→ Eraser brush tip: concentric-ring (currently reuses mosaic outline). See deferred note under Eraser in `docs/selection-refine.md`.
+Annotate surface is complete for the current tool set (shape + arrow + pencil + marker + mosaic + text + step + magnifier + eraser + OCR + undo/redo + history `,` / `.` + login item). Shared refine rules: [`docs/selection-refine.md`](docs/selection-refine.md). Marks canvas / mosaic sample rules: [`docs/marks-rendering.md`](docs/marks-rendering.md).
 
-→ Marks render into a `MarksCanvas` (owned bitmap) so mosaic / magnifier can read back what is under them; the overlay caches the committed layer so a pencil drag does not re-blur every mosaic. Rules, rejected approaches and measurements: [`docs/marks-rendering.md`](docs/marks-rendering.md).
+## CI / Release
+
+- Push / PR → `.github/workflows/ci.yml` (Release build, ad-hoc sign)
+- Tag `v*` (or workflow_dispatch) → `.github/workflows/release.yml` (archive → DMG → GitHub Release)
+
+Same pattern as EggplantFred. DMGs are **ad-hoc signed, not notarized**.
 
 
 ## Prefer

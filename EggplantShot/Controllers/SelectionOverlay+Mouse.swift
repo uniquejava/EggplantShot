@@ -169,8 +169,8 @@ extension SelectionOverlayController {
                    let ch = chars.first {
                     switch ch {
                     case "v": self.toggleRefineTool(.select); return nil
-                    case "a": self.toggleRefineTool(.rectangle); return nil
-                    case "s": self.toggleRefineTool(.arrow); return nil
+                    case "a": self.toggleRefineTool(.arrow); return nil
+                    case "s": self.toggleRefineTool(.rectangle); return nil
                     case "d": self.toggleRefineTool(.pencil); return nil
                     case "f": self.toggleRefineTool(.marker); return nil
                     case "m": self.toggleRefineTool(.mosaic); return nil
@@ -242,7 +242,7 @@ extension SelectionOverlayController {
     }
 
     /// Esc ladder while capturing: end text → abort drag → disarm tool → deselect mark.
-    /// With marks still present: first Esc shows a tip; second Esc discards (toolbar ✕ still immediate).
+    /// With marks still present: first Esc / Cancel tips; second confirms discard.
     func handleEscapeKey() {
         if editingTextID != nil {
             clearEscapeDiscardHint()
@@ -267,23 +267,31 @@ extension SelectionOverlayController {
                 updateOverlayCursor(at: NSEvent.mouseLocation)
                 return
             }
-            if !annotations.isEmpty {
-                if escapeDiscardArmed {
-                    clearEscapeDiscardHint()
-                    tearDownOverlays()
-                    finish(.cancelled)
-                    return
-                }
-                armEscapeDiscardHint()
+            requestCancelDiscard()
+            return
+        }
+        requestCancelDiscard()
+    }
+
+    /// Discard the refine session. With marks: first call shows a tip; second call exits.
+    /// Toolbar ✕ and the Esc ladder’s final step share this.
+    func requestCancelDiscard() {
+        if phase == .refining, !annotations.isEmpty {
+            if escapeDiscardArmed {
+                clearEscapeDiscardHint()
+                tearDownOverlays()
+                finish(.cancelled)
                 return
             }
+            armEscapeDiscardHint()
+            return
         }
         clearEscapeDiscardHint()
         tearDownOverlays()
         finish(.cancelled)
     }
 
-    /// Light tip: press Esc again to discard. Arms a one-shot second Esc.
+    /// Light tip: confirm discard. Arms a one-shot second Esc / Cancel.
     func armEscapeDiscardHint() {
         escapeDiscardArmed = true
         showEscapeDiscardHint()
@@ -308,7 +316,7 @@ extension SelectionOverlayController {
         escapeHintPanel?.orderOut(nil)
         escapeHintPanel?.close()
 
-        let label = NSTextField(labelWithString: L10n.tr("Press Esc again to discard"))
+        let label = NSTextField(labelWithString: L10n.tr("Press again to discard"))
         label.font = .systemFont(ofSize: 12, weight: .medium)
         label.textColor = NSColor(calibratedWhite: 0.12, alpha: 1)
         label.drawsBackground = false

@@ -50,14 +50,14 @@ Floating image above ordinary windows. Drag to move. Scroll wheel zooms ±10% (b
 
 ## Annotate (during refine)
 
-Toolbar under the selection: shape, arrow, pencil, mosaic (blur), text, **Recognize Text** (OCR), undo/redo, then cancel / pin / save / copy.
+Toolbar under the selection: move, shape, arrow, pencil, marker, mosaic (blur / pixelate), text, step numbers, magnifier, eraser, **Recognize Text** (OCR), undo/redo, then cancel / pin / save / copy.
 
 - Marks work on the **full freeze**, not only inside the blue rect. Pin/Copy/Save still crop to the selection (outside ink is clipped from the baked image).
-- **Recognize Text** runs OCR on the selection, copies text to the clipboard, plays a short success sound, and closes the capture (no result panel).
+- **Recognize Text** prefers **QR / 2D codes** in the selection, otherwise OCR text; on success it copies to the clipboard, plays a short sound, and closes the capture (no result panel).
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
-- Refine hotkeys (after selection is locked; letter keys type while editing text): **V** move · **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
-  - ASDF mnemonics: **A** like ⌘A — box-select with a rectangle; **S** like an S-curve arrow; **D** for Draw; **F** like a brush for highlight. **I** = Insert (text at the cursor). **V** = move / select marks.
-- **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → disarm tool → deselect mark → with marks, first Esc tips “Press Esc again to discard”, second Esc cancels (toolbar **✕** still discards anytime).
+- Refine hotkeys (after selection is locked; letter keys type while editing text): **V** move · **A** arrow · **S** shape · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
+  - ASDF mnemonics: **A**rrow · **S**hape · **D**raw · **F** like a brush for highlight. **I** = Insert (text at the cursor). **V** = move / select marks.
+- **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → disarm tool → deselect mark → with marks, first Esc tips “Press again to discard”, second Esc cancels. Toolbar **✕** uses the same two-step confirm when marks exist.
 
 ### Move (V)
 
@@ -89,3 +89,10 @@ With the overlay up, **`,`** goes to an older capture record and **`.`** to a ne
 ## Preferences
 
 Open from the menu bar item (**Settings…** / Preferences). Do not hunt for a Dock icon — the app is menu-bar only unless Preferences is open.
+
+| Pane | Contents |
+|------|----------|
+| **General** | Launch at login; app language (System / English / Simplified Chinese; language change relaunches the app) |
+| **Permissions** | Accessibility and Screen Recording status + grant buttons |
+| **Hotkeys** | Customize capture / paste shortcuts |
+| **About** | Version and credits |

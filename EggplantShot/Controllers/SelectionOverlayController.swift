@@ -61,7 +61,7 @@ final class SelectionOverlayController {
     var eventMonitors: [Any] = []
     /// After any Esc action, ignore further Esc until key-up (stops hold-repeat ladder walk).
     var suppressEscapeUntilKeyUp = false
-    /// First Esc with marks armed a second-Esc discard; show a light tip until cleared.
+    /// First Esc / Cancel with marks arms a second confirm; show a light tip until cleared.
     var escapeDiscardArmed = false
     var escapeHintPanel: NSPanel?
     var escapeHintHideWork: DispatchWorkItem?

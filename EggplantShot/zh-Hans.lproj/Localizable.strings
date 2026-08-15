@@ -69,14 +69,14 @@
 "Close" = "关闭";
 
 /* Overlay */
-"Press Esc again to discard" = "再按一次 Esc 放弃";
+"Press again to discard" = "再按一次放弃";
 
 /* Toolbar — main */
 "Move (V)" = "移动 (V)";
-"Shape (A)" = "形状 (A)";
-"Arrow (S)" = "箭头 (S)";
+"Shape (S)" = "形状 (S)";
+"Arrow (A)" = "箭头 (A)";
 "Pen (D)" = "画笔 (D)";
-"Mosaic (M)" = "马赛克 (M)";
+"Blur/Mosaic (M)" = "模糊/马赛克 (M)";
 "Marker (F)" = "马克笔 (F)";
 "Text (I)" = "文字 (I)";
 "Number (N)" = "序号 (N)";
@@ -84,8 +84,8 @@
 "Eraser (E)" = "橡皮擦 (E)";
 "Undo (⌘Z)" = "撤销 (⌘Z)";
 "Redo (⇧⌘Z)" = "重做 (⇧⌘Z)";
-"OCR (O)" = "OCR (O)";
-"Cancel" = "取消";
+"OCR/QR code (O)" = "OCR/二维码 (O)";
+"Cancel (Esc)" = "取消 (Esc)";
 "Pin (P)" = "钉住 (P)";
 "Save (⌘S)" = "保存 (⌘S)";
 "Copy (⌘C)" = "复制 (⌘C)";

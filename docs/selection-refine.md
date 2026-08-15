@@ -16,12 +16,12 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
 - Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
 - Confirm composites marks onto the crop, then tears down the overlay.
-- Esc ladder (not editing text): abort in-progress drag → disarm tool → deselect mark → with marks, first Esc shows “Press Esc again to discard”, second Esc discards (toolbar **✕** still immediate).
+- Esc ladder (not editing text): abort in-progress drag → disarm tool → deselect mark → with marks, first Esc / Cancel shows “Press again to discard”, second Esc / Cancel discards.
 - Delete removes the selected mark. Undo / redo: toolbar + ⌘Z / ⇧⌘Z.
 - Refine tool / action hotkeys (armed after selection; ignored while editing text or mid-drag):
-  **V** move · **A** shape · **S** arrow · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy.
+  **V** move · **A** arrow · **S** shape · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy.
   **R** / **G** / **B** → palette red / green / cyan (selected colored mark, else armed tool; no-op for mosaic / eraser).
-  ASDF row mnemonics: **A** ≈ ⌘A “select with a rect” · **S** ≈ S-curve arrow · **D**raw · **F** like a brush (highlight). **I** = Insert (text). **V** = move (Figma-style).
+  ASDF row mnemonics: **A**rrow · **S**hape · **D**raw · **F** like a brush (highlight). **I** = Insert (text). **V** = move (Figma-style).
 - **Hit / move vs draw:** **Move (V)** hits all marks for drag / resize (no draw); empty click deselects. Paint tools (**pencil** / **marker** / **mosaic** / **eraser**) always draw-through existing marks — switch to **V** to move, then back (e.g. **D**) to draw. Selected mark **handles** still resize without switching. **Step** draws through foreign marks so you can stamp on a shape border; existing step badges stay hit-to-move (**⌘** still moves other marks). Other object tools (shape / arrow / text / magnifier) keep hit-to-move on their targets; paint-like marks still draw-through under those tools (move via **V**).
 
 ## Refine shell

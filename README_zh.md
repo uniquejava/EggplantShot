@@ -4,6 +4,8 @@
 
 [English](./README.md)
 
+预编译 DMG（ad-hoc 签名、**未**公证）见 **[Releases](https://github.com/uniquejava/EggplantShot/releases)** — 推送 `v*` 标签即可自动构建。
+
 ![EggplantShot 精修工具栏与标注示意](./docs/screenshot.png)
 
 ## 功能
@@ -14,6 +16,7 @@
 - **OCR** — 从选区识别**二维码或文字** → 写入剪贴板
 - **粘贴（贴图）** — 把剪贴板变成浮动钉图（图片、色卡或文字便签）
 - **钉图** — 置顶、拖动、滚轮缩放、一键隐藏 / 显示全部
+- **偏好设置** — 登录时启动、界面语言（系统 / 英语 / 简体中文）、快捷键、权限
 
 ## 快捷键（默认）
 

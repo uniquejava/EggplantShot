@@ -121,8 +121,7 @@ extension SelectionOverlayController {
                 case .copy: self.confirm(.copy)
                 case .save: self.confirm(.save)
                 case .cancel:
-                    self.tearDownOverlays()
-                    self.finish(.cancelled)
+                    self.requestCancelDiscard()
                 }
             case .selectTool(let tool):
                 self.setAnnotateTool(tool)
