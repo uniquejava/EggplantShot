@@ -153,9 +153,9 @@ final class SelectionOverlayNSView: NSView {
 
         // Legacy path when freeze capture failed: clear the hole to the live desktop.
         if freezeImage == nil {
-            NSGraphicsContext.current?.compositingOperation = .clear
-            selectionRect.fill()
-            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            // `fill(using:)`, not `fill()`: bare NSRectFill always composites `copy`, so it would
+            // stamp the dim color set above into the hole instead of clearing it.
+            selectionRect.fill(using: .clear)
         }
 
         // History playback: paint archived base inside the selection (rest of screen stays freeze).

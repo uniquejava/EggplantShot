@@ -67,10 +67,11 @@ enum AnnotationDrawing {
 
     /// Renders marks onto a transparent layer so eraser `destinationOut` punches annotations only.
     ///
-    /// Mosaic / magnifier (`includeAnnotations`) need to know what sits underneath them. They read
-    /// it back out of the `MarksCanvas` they are drawing into — the marks before them are already
-    /// painted there — instead of re-deriving it from vectors. So a mosaic over an earlier mosaic
-    /// sees that one's blurred pixels, and the cost per mosaic does not grow with the mark count.
+    /// Mosaic / marker / magnifier (`includeAnnotations`) need to know what sits underneath them.
+    /// They read it back out of the `MarksCanvas` they are drawing into — the marks before them are
+    /// already painted there — instead of re-deriving it from vectors. So a mosaic over an earlier
+    /// mosaic sees that one's blurred pixels, a highlight over an arrow multiplies the arrow rather
+    /// than covering it, and the cost per mark does not grow with the mark count.
     /// `hiddenMagnifierSourceIDs`: skip nested source borders (lens still draws) for declutter.
     static func renderMarksLayer(
         _ annotations: [Annotation],
@@ -101,6 +102,16 @@ enum AnnotationDrawing {
                     )
                 case .mosaic(let geometry, let style):
                     drawMosaic(
+                        geometry: geometry,
+                        style: style,
+                        drawOrigin: origin,
+                        sample: sample,
+                        canvas: canvas
+                    )
+                case .marker(let geometry, let style):
+                    // Same reason as mosaic: the marker's result is opaque, so it has to read the
+                    // marks under it back out of the canvas or it would cover them.
+                    drawMarker(
                         geometry: geometry,
                         style: style,
                         drawOrigin: origin,

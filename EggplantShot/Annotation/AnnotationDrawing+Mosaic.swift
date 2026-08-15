@@ -25,7 +25,7 @@ extension AnnotationDrawing {
             let pad = brush / 2 + bleed
             let hull = Annotation.bounds(of: localPoints).insetBy(dx: -pad, dy: -pad)
             drawSampledMask(
-                localMask: mosaicStrokeMask(localPoints: localPoints, brushWidth: brush),
+                localMask: strokeOutlineMask(localPoints: localPoints, brushWidth: brush),
                 localHull: hull,
                 style: style,
                 drawOrigin: drawOrigin,
@@ -156,7 +156,7 @@ extension AnnotationDrawing {
         path.fill()
     }
 
-    static func mosaicStrokeMask(localPoints: [CGPoint], brushWidth: CGFloat) -> NSBezierPath {
+    static func strokeOutlineMask(localPoints: [CGPoint], brushWidth: CGFloat) -> NSBezierPath {
         let path = NSBezierPath()
         guard let first = localPoints.first else { return path }
         if localPoints.count == 1 {
@@ -268,7 +268,8 @@ extension AnnotationDrawing {
     }
 
     /// `overlay` (marks, with alpha) over `base` (opaque freeze) at `base`'s pixel size.
-    private static func compositeUnder(_ base: CGImage, overlay: CGImage) -> CGImage? {
+    /// Shared with the marker, so a highlight multiplies the marks under it instead of covering them.
+    static func compositeUnder(_ base: CGImage, overlay: CGImage) -> CGImage? {
         let w = base.width
         let h = base.height
         guard w > 0, h > 0 else { return nil }
