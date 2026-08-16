@@ -5,7 +5,12 @@ final class PinPanel: NSPanel {
     static let chromePadding: CGFloat = 10
 
     private let itemID: UUID
-    /// What the pin currently shows. Applying annotations swaps this for the baked bitmap.
+    /// The unannotated bitmap. Marks are kept as data beside it, never burned into it, so a pin
+    /// stays editable for as long as it lives (AGENTS.md P4 rule 3).
+    private let baseImage: NSImage
+    /// Marks currently on the pin. Assigning it is the *only* way `image` changes.
+    private var document: AnnotationDocument
+    /// `baseImage` with `document` composited on — what the pin shows and what Copy / Save / OCR use.
     private var image: NSImage
     /// Source string when this pin was rendered from text — `nil` means OCR is the way to get text.
     private let sourceText: String?
@@ -19,12 +24,15 @@ final class PinPanel: NSPanel {
     init(
         itemID: UUID,
         image: NSImage,
+        document: AnnotationDocument = AnnotationDocument(),
         sourceText: String? = nil,
         frame: CGRect,
         onClose: @escaping (UUID) -> Void
     ) {
         self.itemID = itemID
-        self.image = image
+        self.baseImage = image
+        self.document = document
+        self.image = AnnotationCompositor.composite(document.marks, onto: image)
         self.sourceText = sourceText
         self.onClose = onClose
 
@@ -33,7 +41,11 @@ final class PinPanel: NSPanel {
             width: max(frame.width - pad * 2, 1),
             height: max(frame.height - pad * 2, 1)
         )
-        let chrome = PinChromeView(frame: CGRect(origin: .zero, size: frame.size), image: image, imageSize: imageSize)
+        let chrome = PinChromeView(
+            frame: CGRect(origin: .zero, size: frame.size),
+            image: self.image,
+            imageSize: imageSize
+        )
         self.chromeView = chrome
 
         super.init(
@@ -111,13 +123,19 @@ final class PinPanel: NSPanel {
         frame.insetBy(dx: Self.chromePadding, dy: Self.chromePadding)
     }
 
-    /// What the pin shows right now — the base a pin-edit session annotates.
+    /// What a pin-edit session annotates: the unannotated bitmap plus the marks already on it.
+    var annotationBase: NSImage { baseImage }
+    var annotationDocument: AnnotationDocument { document }
+
+    /// Flattened view of the pin — for Copy Image / Save / OCR, never stored back onto `baseImage`.
     var bitmap: NSImage { image }
 
-    /// Applying annotations: same point size, so the panel frame is untouched.
-    func setImage(_ new: NSImage) {
-        image = new
-        chromeView.setImage(new)
+    /// The one place the displayed bitmap is derived. Marks are the same point size as the base, so
+    /// the panel frame is untouched.
+    func apply(document newDocument: AnnotationDocument) {
+        document = newDocument
+        image = AnnotationCompositor.composite(document.marks, onto: baseImage)
+        chromeView.setImage(image)
     }
 
     /// Back to 1:1 before annotating: mark geometry is in image points and nothing in the annotate

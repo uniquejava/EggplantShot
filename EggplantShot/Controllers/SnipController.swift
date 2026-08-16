@@ -59,17 +59,15 @@ final class SnipController {
             let outcome = await pinEditOverlay.beginPinEdit(
                 itemID: id,
                 image: target.image,
-                imageRect: target.rect
+                imageRect: target.rect,
+                document: target.document
             )
             switch outcome {
             case .discarded:
                 break
             case .applied(let document):
-                // Snipaste parity: the marks become part of the pin's bitmap.
-                pinBoard.replaceImage(
-                    id,
-                    with: AnnotationCompositor.composite(document.marks, onto: target.image)
-                )
+                // Marks stay data on the pin, so this session can be re-opened and edited again.
+                pinBoard.applyDocument(document, to: id)
             case .copied(let baked):
                 copyToClipboard(baked)
                 pinBoard.close(id)
@@ -122,7 +120,9 @@ final class SnipController {
                 )
                 switch action {
                 case .pin:
-                    pinBoard.pin(baked, near: rect)
+                    // Hand the pin the base and the marks, not the bake, so Show toolbar can pick
+                    // this capture's annotations back up.
+                    pinBoard.pin(baseImage, near: rect, document: document)
                 case .copy:
                     copyToClipboard(baked)
                 case .save:

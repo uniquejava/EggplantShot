@@ -29,8 +29,16 @@ final class PinBoardController: ObservableObject {
 
     private var panels: [UUID: PinPanel] = [:]
 
-    func pin(_ image: NSImage, near rect: CGRect, sourceText: String? = nil) {
-        let item = PinItem(id: UUID(), image: image, createdAt: Date(), sourceText: sourceText)
+    /// `image` is the **unannotated** bitmap; `document` are the marks to show on it. Keeping them
+    /// apart is what lets the pin be re-annotated later.
+    func pin(
+        _ image: NSImage,
+        near rect: CGRect,
+        document: AnnotationDocument = AnnotationDocument(),
+        sourceText: String? = nil
+    ) {
+        let composited = AnnotationCompositor.composite(document.marks, onto: image)
+        let item = PinItem(id: UUID(), image: composited, createdAt: Date(), sourceText: sourceText)
         items.append(item)
 
         let size = image.size
@@ -48,7 +56,13 @@ final class PinBoardController: ObservableObject {
             frame.origin.y = min(max(frame.origin.y, screen.frame.minY), screen.frame.maxY - frame.height)
         }
 
-        let panel = PinPanel(itemID: item.id, image: image, sourceText: sourceText, frame: frame) { [weak self] id in
+        let panel = PinPanel(
+            itemID: item.id,
+            image: image,
+            document: document,
+            sourceText: sourceText,
+            frame: frame
+        ) { [weak self] id in
             self?.close(id)
         }
         panel.onShowToolbar = { [weak self] id in
@@ -95,23 +109,24 @@ final class PinBoardController: ObservableObject {
         panels[id]?.orderFrontRegardless()
     }
 
-    /// Prepare a pin for annotating and report what a pin-edit session should work on: the bitmap
-    /// it shows, and where that bitmap sits on screen. Snapped to 100% first, because mark geometry
-    /// is in image points.
-    func annotationTarget(_ id: UUID) -> (image: NSImage, rect: CGRect)? {
+    /// Prepare a pin for annotating and report what a pin-edit session should work on: the
+    /// unannotated bitmap, the marks already on it, and where that bitmap sits on screen. Snapped to
+    /// 100% first, because mark geometry is in image points.
+    func annotationTarget(_ id: UUID) -> (image: NSImage, document: AnnotationDocument, rect: CGRect)? {
         guard let panel = panels[id] else { return nil }
         revealAllIfHidden()
         panel.resetZoomToNaturalSize()
         panel.orderFrontRegardless()
-        return (panel.bitmap, panel.imageRectOnScreen)
+        return (panel.annotationBase, panel.annotationDocument, panel.imageRectOnScreen)
     }
 
-    /// A pin-edit session applied its marks: show the baked bitmap from now on.
-    func replaceImage(_ id: UUID, with image: NSImage) {
+    /// A pin-edit session applied its marks. They stay editable: the pin keeps the document and
+    /// re-derives what it shows, so re-opening the toolbar resumes these same marks.
+    func applyDocument(_ document: AnnotationDocument, to id: UUID) {
         guard let panel = panels[id] else { return }
-        panel.setImage(image)
+        panel.apply(document: document)
         if let index = items.firstIndex(where: { $0.id == id }) {
-            items[index].image = image
+            items[index].image = panel.bitmap
         }
         objectWillChange.send()
     }
