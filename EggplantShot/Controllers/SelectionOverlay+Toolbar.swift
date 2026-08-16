@@ -86,6 +86,13 @@ extension SelectionOverlayController {
 
     func updateHighlight(showHandles: Bool) {
         let selected = selectedAnnotationID.flatMap { id in annotations.first(where: { $0.id == id }) }
+        // The option row follows the selection, so it changes here rather than only on tool
+        // switches. `setSelectedMarkFamily` no-ops unless the family really changed — this runs on
+        // every drag frame — and only then is a relayout / reposition worth doing.
+        if let toolbar, toolbar.selectedMarkFamily != selected?.editorTool {
+            toolbar.setSelectedMarkFamily(selected?.editorTool)
+            repositionToolbar()
+        }
         if let hid = hoveredPaintRegionID, hid == selectedAnnotationID {
             hoveredPaintRegionID = nil
         }

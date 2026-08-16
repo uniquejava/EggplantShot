@@ -7,7 +7,6 @@ extension RefineToolbarController {
         if next == .pencil || next == .arrow {
             style.isFilled = false
         }
-        subToolbarContainer.isHidden = (next == .none)
         refreshSelectionChrome()
         if let content = panel.contentView {
             layoutPanel(content: content)
@@ -20,7 +19,19 @@ extension RefineToolbarController {
         if tool == .pencil || tool == .arrow {
             style.isFilled = false
         }
-        subToolbarContainer.isHidden = (tool == .none)
+        refreshSelectionChrome()
+        if let content = panel.contentView {
+            layoutPanel(content: content)
+        }
+    }
+
+    /// Family of the currently selected mark, or `nil` when nothing is selected. Drives which
+    /// option row shows, so a mark can be restyled while a different tool stays armed to draw.
+    /// No-ops unless the family actually changed — the overlay pushes this on every chrome
+    /// refresh, including each drag frame.
+    func setSelectedMarkFamily(_ family: AnnotateTool?) {
+        guard family != selectedMarkFamily else { return }
+        selectedMarkFamily = family
         refreshSelectionChrome()
         if let content = panel.contentView {
             layoutPanel(content: content)

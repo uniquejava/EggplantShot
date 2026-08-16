@@ -53,6 +53,9 @@ final class RefineToolbarController: NSObject {
     var magnifierStyle: MagnifierStyle
     var magnifierKind: ShapeKind
     var tool: AnnotateTool
+    /// Family of the selected mark, when there is one. Takes precedence over `tool` for the
+    /// option row so an earlier mark can be restyled without changing what draws next.
+    var selectedMarkFamily: AnnotateTool?
     var kind: ShapeKind
     var arrowCaps: ArrowCaps
 
@@ -210,7 +213,8 @@ final class RefineToolbarController: NSObject {
         optionsStack.addArrangedSubview(magnifierOptionsRow)
         embed(optionsStack, in: optionsCard)
         subToolbarContainer = optionsCard
-        subToolbarContainer.isHidden = (initialTool == .none)
+        // Visibility is owned by `refreshSelectionChrome()` (called below), which keys it off the
+        // resolved option-row family rather than the armed tool.
 
         rootStack.addArrangedSubview(mainCard)
         rootStack.addArrangedSubview(subToolbarContainer)

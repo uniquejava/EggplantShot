@@ -255,8 +255,10 @@ extension SelectionOverlayController {
         }
     }
 
-    /// Esc ladder while capturing: end text → abort drag → disarm tool → deselect mark.
+    /// Esc ladder while capturing: end text → abort drag → deselect mark → disarm tool.
     /// With marks still present: first Esc / Cancel tips; second confirms discard.
+    /// Deselect comes before disarm so the first press unwinds the most local *visible* state —
+    /// dropping the handles — instead of a tool tint the user isn't looking at.
     func handleEscapeKey() {
         endTextWheelResizeIfNeeded()
         if editingTextID != nil {
@@ -270,16 +272,16 @@ extension SelectionOverlayController {
                 cancelInProgressRefineDrag()
                 return
             }
-            if annotateTool != .none {
-                clearEscapeDiscardHint()
-                setAnnotateTool(.none)
-                return
-            }
             if selectedAnnotationID != nil {
                 clearEscapeDiscardHint()
                 annotationHistory.select(nil)
                 updateHighlight(showHandles: true)
                 updateOverlayCursor(at: NSEvent.mouseLocation)
+                return
+            }
+            if annotateTool != .none {
+                clearEscapeDiscardHint()
+                setAnnotateTool(.none)
                 return
             }
             requestCancelDiscard()
@@ -558,8 +560,10 @@ extension SelectionOverlayController {
             if currentRect.contains(point) {
                 dragKind = .move(startRect: currentRect, startPoint: point)
                 NSCursor.closedHand.set()
-                updateHighlight(showHandles: true)
             }
+            // Outside the crop there is no drag to start, but the deselect above still has to
+            // repaint — otherwise the old handles linger.
+            updateHighlight(showHandles: true)
             return
         }
 
@@ -582,125 +586,127 @@ extension SelectionOverlayController {
             }
         }
 
-        // Annotate tool: handle → resize; stroke/border → move; interior → draw (nested OK).
-        if annotateTool != .none {
-            switch annotationPointerTarget(at: point) {
-            case .textClose(let id):
-                annotationHistory.select(id)
-                deleteSelectedAnnotation()
+        // `.none` is the crop's own mode, so its border band and outside octants win over marks.
+        // Otherwise a mark drawn flush with the crop edge would shadow the whole strip and leave
+        // that edge permanently unresizable; V has no crop grab, so it can still move such a mark.
+        if annotateTool == .none, beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: true) {
+            return
+        }
 
-            case .handle(let id, let handle):
-                guard let ann = annotations.first(where: { $0.id == id }) else { return }
-                annotationHistory.select(id)
-                syncToolbar(from: ann)
-                annotationHistory.beginGesture()
-                // While editing, the live chrome is the resize baseline — same as `.border` below.
-                // Keeping the editor open is what stops a blank mark being dropped and re-placed.
-                textChromeDragStartFrame = id == editingTextID ? textChromeView?.frame : nil
-                let part: MagnifierPart? = ann.isMagnifier
-                    ? (hitTestMagnifierHandle(at: point, annotation: ann)?.part ?? .lens)
-                    : nil
-                dragKind = .annotateResize(
-                    id: id,
-                    handle: handle,
-                    start: ann,
-                    startPoint: point,
-                    magnifierPart: part
-                )
-                resizeCursor(for: handle).set()
-                updateHighlight(showHandles: true)
+        // Marks next, in every mode: handle → resize; stroke/border → move; interior → draw
+        // (nested OK). Neither `.none` nor V creates marks, so their empty space only deselects.
+        switch annotationPointerTarget(at: point) {
+        case .textClose(let id):
+            annotationHistory.select(id)
+            deleteSelectedAnnotation()
 
-            case .arrowEndpoint(let id, let endpoint):
-                guard let ann = annotations.first(where: { $0.id == id }) else { return }
-                annotationHistory.select(id)
-                syncToolbar(from: ann)
-                annotationHistory.beginGesture()
-                dragKind = .annotateEndpoint(id: id, endpoint: endpoint, start: ann)
-                AnnotationCursors.move.set()
-                updateHighlight(showHandles: true)
+        case .handle(let id, let handle):
+            guard let ann = annotations.first(where: { $0.id == id }) else { return }
+            annotationHistory.select(id)
+            syncToolbar(from: ann)
+            annotationHistory.beginGesture()
+            // While editing, the live chrome is the resize baseline — same as `.border` below.
+            // Keeping the editor open is what stops a blank mark being dropped and re-placed.
+            textChromeDragStartFrame = id == editingTextID ? textChromeView?.frame : nil
+            let part: MagnifierPart? = ann.isMagnifier
+                ? (hitTestMagnifierHandle(at: point, annotation: ann)?.part ?? .lens)
+                : nil
+            dragKind = .annotateResize(
+                id: id,
+                handle: handle,
+                start: ann,
+                startPoint: point,
+                magnifierPart: part
+            )
+            resizeCursor(for: handle).set()
+            updateHighlight(showHandles: true)
 
-            case .border(let id):
-                guard var ann = annotations.first(where: { $0.id == id }) else { return }
-                // While editing, use the live chrome geometry as the move baseline.
-                if id == editingTextID, let live = editingTextGlobalRect() {
-                    ann.mapBoundingRect(to: toLocal(live))
-                    textChromeDragStartFrame = textChromeView?.frame
-                } else {
-                    textChromeDragStartFrame = nil
-                }
-                annotationHistory.select(id)
-                syncToolbar(from: ann)
-                annotationHistory.beginGesture()
-                let part: MagnifierPart? = ann.isMagnifier
-                    ? magnifierMovePart(at: point, annotation: ann)
-                    : nil
-                dragKind = .annotateMove(
-                    id: id,
-                    start: ann,
-                    startPoint: point,
-                    magnifierPart: part
-                )
-                AnnotationCursors.move.set()
-                updateHighlight(showHandles: true)
+        case .arrowEndpoint(let id, let endpoint):
+            guard let ann = annotations.first(where: { $0.id == id }) else { return }
+            annotationHistory.select(id)
+            syncToolbar(from: ann)
+            annotationHistory.beginGesture()
+            dragKind = .annotateEndpoint(id: id, endpoint: endpoint, start: ann)
+            AnnotationCursors.move.set()
+            updateHighlight(showHandles: true)
 
-            case .interior(let id):
-                guard let ann = annotations.first(where: { $0.id == id }) else { return }
-                annotationHistory.select(id)
-                syncToolbar(from: ann)
-                // Interior click edits immediately (Snipaste: body is for typing, not moving).
-                if annotateTool == .text, ann.isText {
-                    startTextEditing(id: id)
-                }
-                updateHighlight(showHandles: true)
-
-            case .draw:
-                // Border strip / handles still resize the crop; outside is for annotate (no octant expand).
-                if beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: false) { return }
-                if annotateTool == .select {
-                    annotationHistory.select(nil)
-                    updateHighlight(showHandles: true)
-                    return
-                }
-                if annotateTool == .text || annotateTool == .step {
-                    // Click-to-place resolved on mouse-up (ignore tiny drag).
-                    textClickCandidate = (nil, point, false)
-                    updateHighlight(showHandles: true)
-                    return
-                }
-                annotationHistory.select(nil)
-                let local = toLocal(point)
-                dragKind = .annotateDraw(startLocal: local)
-                draftAnnotation = makeDraftAnnotation(startingAt: local)
-                // Pencil: hide reticle so only the ink shows.
-                // Mosaic / marker: keep the translucent brush tip while stroking; eraser keeps
-                // its ring tip (a fully hidden tip looks like a black blob on macOS).
-                if annotateTool == .pencil {
-                    AnnotationCursors.hidden.set()
-                } else if annotateTool == .mosaic, mosaicDrawMode == .freehand {
-                    AnnotationCursors.mosaicCrosshair(brushWidth: mosaicStyle.brushWidth).set()
-                } else if annotateTool == .marker, markerDrawMode == .freehand {
-                    AnnotationCursors.mosaicCrosshair(brushWidth: markerStyle.brushWidth).set()
-                } else if annotateTool == .eraser, eraserDrawMode == .freehand {
-                    AnnotationCursors.eraserRing(brushWidth: eraserStyle.brushWidth).set()
-                } else {
-                    AnnotationCursors.whitePlus.set()
-                }
-                updateHighlight(showHandles: true)
-
-            case .outside:
-                // Unreachable while a tool is armed (`annotationPointerTarget` returns `.draw`).
-                break
+        case .border(let id):
+            guard var ann = annotations.first(where: { $0.id == id }) else { return }
+            // While editing, use the live chrome geometry as the move baseline.
+            if id == editingTextID, let live = editingTextGlobalRect() {
+                ann.mapBoundingRect(to: toLocal(live))
+                textChromeDragStartFrame = textChromeView?.frame
+            } else {
+                textChromeDragStartFrame = nil
             }
-            return
-        }
+            annotationHistory.select(id)
+            syncToolbar(from: ann)
+            annotationHistory.beginGesture()
+            let part: MagnifierPart? = ann.isMagnifier
+                ? magnifierMovePart(at: point, annotation: ann)
+                : nil
+            dragKind = .annotateMove(
+                id: id,
+                start: ann,
+                startPoint: point,
+                magnifierPart: part
+            )
+            AnnotationCursors.move.set()
+            updateHighlight(showHandles: true)
 
-        // Selection refine (no annotate tool): border / handles resize; outside expands.
-        // Interior does not move the crop — rare, not undoable, and easy to hit by accident
-        // after toggling Move (V) off.
-        annotationHistory.select(nil)
-        if beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: true) {
-            return
+        case .interior(let id):
+            guard let ann = annotations.first(where: { $0.id == id }) else { return }
+            annotationHistory.select(id)
+            syncToolbar(from: ann)
+            // Interior click edits immediately (Snipaste: body is for typing, not moving).
+            if annotateTool == .text, ann.isText {
+                startTextEditing(id: id)
+            }
+            updateHighlight(showHandles: true)
+
+        case .draw:
+            // Border strip / handles still resize the crop; outside is for annotate (no octant expand).
+            if beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: false) { return }
+            // Non-drawing modes never create a mark, whatever the hit-test said — keep that
+            // invariant here rather than relying on `.outside` coming back from another file.
+            if annotateTool.editsMarksOnly {
+                annotationHistory.select(nil)
+                updateHighlight(showHandles: true)
+                return
+            }
+            if annotateTool == .text || annotateTool == .step {
+                // Click-to-place resolved on mouse-up (ignore tiny drag).
+                textClickCandidate = (nil, point, false)
+                updateHighlight(showHandles: true)
+                return
+            }
+            annotationHistory.select(nil)
+            let local = toLocal(point)
+            dragKind = .annotateDraw(startLocal: local)
+            draftAnnotation = makeDraftAnnotation(startingAt: local)
+            // Pencil: hide reticle so only the ink shows.
+            // Mosaic / marker: keep the translucent brush tip while stroking; eraser keeps
+            // its ring tip (a fully hidden tip looks like a black blob on macOS).
+            if annotateTool == .pencil {
+                AnnotationCursors.hidden.set()
+            } else if annotateTool == .mosaic, mosaicDrawMode == .freehand {
+                AnnotationCursors.mosaicCrosshair(brushWidth: mosaicStyle.brushWidth).set()
+            } else if annotateTool == .marker, markerDrawMode == .freehand {
+                AnnotationCursors.mosaicCrosshair(brushWidth: markerStyle.brushWidth).set()
+            } else if annotateTool == .eraser, eraserDrawMode == .freehand {
+                AnnotationCursors.eraserRing(brushWidth: eraserStyle.brushWidth).set()
+            } else {
+                AnnotationCursors.whitePlus.set()
+            }
+            updateHighlight(showHandles: true)
+
+        case .outside:
+            // `.none` missed every mark, and the crop border / octant grab was already tried
+            // above, so this is a plain interior click: just clear the selection.
+            annotationHistory.select(nil)
+            updateHighlight(showHandles: true)
         }
+        return
     }
 
     /// Starts crop resize (border strip) or, when allowed, Snipaste-style expand (outside octant).
@@ -720,6 +726,8 @@ extension SelectionOverlayController {
             repositionToolbar()
         } else {
             dragKind = .resize(handle: handle, startRect: currentRect, startPoint: point)
+            // The deselect above needs a repaint even though the rect hasn't moved yet.
+            updateHighlight(showHandles: true)
         }
         resizeCursor(for: handle).set()
         return true

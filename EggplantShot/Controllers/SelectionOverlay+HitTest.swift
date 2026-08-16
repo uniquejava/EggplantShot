@@ -5,7 +5,8 @@ import AppKit
 @MainActor
 extension SelectionOverlayController {
     func annotationPointerTarget(at point: CGPoint) -> AnnotationPointerTarget {
-        guard annotateTool != .none else { return .outside }
+        // `.none` still hit-tests marks — a mark that exists stays grabbable — but its empty space
+        // belongs to the crop, so the miss case below returns `.outside` instead of `.draw`.
 
         // Live editor chrome wins over the (possibly stale) mark rect.
         if let id = editingTextID, let live = editingTextGlobalRect() {
@@ -91,7 +92,8 @@ extension SelectionOverlayController {
             return .draw
         }
 
-        let isSelectTool = annotateTool == .select
+        // Non-drawing modes — Move (V) and `.none` — grab any mark by its whole body.
+        let editsMarksOnly = annotateTool.editsMarksOnly
 
         for ann in annotations.reversed() {
             if ann.id == editingTextID { continue }
@@ -125,13 +127,13 @@ extension SelectionOverlayController {
                 }
                 continue
             }
-            // Under object tools (not select), paint-like marks always draw-through — move via **V**.
-            if !isSelectTool, ann.isPaintLikeMark {
+            // Under drawing tools, paint-like marks always draw-through — move via **V** / `.none`.
+            if !editsMarksOnly, ann.isPaintLikeMark {
                 continue
             }
-            // Move (V): whole shape body is grabable (not just the stroke ring).
+            // Non-drawing modes: whole shape body is grabable (not just the stroke ring).
             // Shape tool keeps border-only so interior can still nest-draw.
-            if isSelectTool, ann.isShape, isInsideAnnotationShape(ann, at: point) {
+            if editsMarksOnly, ann.isShape, isInsideAnnotationShape(ann, at: point) {
                 return .border(id: ann.id)
             }
             if isOnAnnotationStroke(ann, at: point) {
@@ -139,9 +141,10 @@ extension SelectionOverlayController {
             }
         }
 
-        // Any point on the overlay is a draw target while a tool is active.
-        // Select tool: `.draw` means empty space (deselect; no create) — see mouseDown.
-        return .draw
+        // Any point on the overlay is a draw target while a drawing tool is active.
+        // Select tool (V): `.draw` means empty space (deselect; no create) — see mouseDown.
+        // `.none`: empty space is the crop's — border resize / outside expand.
+        return annotateTool == .none ? .outside : .draw
     }
 
     enum TextFrameHit {
@@ -207,10 +210,10 @@ extension SelectionOverlayController {
 
     /// Non-selected rect / oval paint region (marker / mosaic / eraser) under the pointer.
     func paintRegionID(at point: CGPoint) -> UUID? {
-        // Only advertise a grab the click will honor: Move (V) or a rect / oval paint mode.
-        // Under a brush (or any object tool) the pointer draws through, so a dashed outline there
-        // would promise a move that never happens.
-        guard annotateTool == .select || armedPaintRegionMode != nil else { return nil }
+        // Only advertise a grab the click will honor: a non-drawing mode (V / `.none`) or a
+        // rect / oval paint mode. Under a brush (or any object tool) the pointer draws through, so
+        // a dashed outline there would promise a move that never happens.
+        guard annotateTool.editsMarksOnly || armedPaintRegionMode != nil else { return nil }
         for ann in annotations.reversed() {
             guard ann.isPaintRegionMark else { continue }
             // Selected mark uses handles chrome, not hover dashed.

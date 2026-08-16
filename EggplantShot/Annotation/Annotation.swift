@@ -123,6 +123,23 @@ struct Annotation: Equatable {
         return false
     }
 
+    /// Tool whose sub-toolbar edits this mark. Lets a selected mark drive the option row while a
+    /// different tool stays armed for the next draw. Exhaustive on purpose: a new payload must
+    /// declare which tool owns its options.
+    var editorTool: AnnotateTool {
+        switch payload {
+        case .shape: return .rectangle
+        case .arrow: return .arrow
+        case .pencil: return .pencil
+        case .marker: return .marker
+        case .mosaic: return .mosaic
+        case .eraser: return .eraser
+        case .text: return .text
+        case .step: return .step
+        case .magnifier: return .magnifier
+        }
+    }
+
     /// Shape kind. No-op get/set for non-shape payloads.
     var kind: ShapeKind {
         get {

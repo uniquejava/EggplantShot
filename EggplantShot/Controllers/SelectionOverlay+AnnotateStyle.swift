@@ -14,11 +14,19 @@ extension SelectionOverlayController {
                 updateSpaceCropMoveCursor(at: point)
                 return
             }
-            if annotateTool != .none {
-                updateAnnotateCursor(at: point)
-            } else {
-                updateRefineCursor(at: point)
+            if let toolbar, toolbar.containsGlobalPoint(point) {
+                NSCursor.arrow.set()
+                return
             }
+            // `.none` grabs the crop before marks (see `handleRefineMouseDown`), so ask the crop
+            // first here too — otherwise an edge-hugging mark would show a move cursor for a click
+            // that resizes the crop instead.
+            if annotateTool == .none,
+               let handle = refineResizeHandle(at: point, allowOutsideExpand: true) {
+                resizeCursor(for: handle).set()
+                return
+            }
+            updateAnnotateCursor(at: point)
         }
     }
 
@@ -54,21 +62,10 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// Selection-only refine: resize on border / handles / outside octants (no interior crop move).
-    func updateRefineCursor(at point: CGPoint) {
-        if let toolbar, toolbar.containsGlobalPoint(point) {
-            NSCursor.arrow.set()
-            return
-        }
-        if let handle = refineResizeHandle(at: point, allowOutsideExpand: true) {
-            resizeCursor(for: handle).set()
-        } else {
-            NSCursor.arrow.set()
-        }
-    }
-
+    /// Mark cursors: handles / body / draw tip. Runs in `.none` too — marks stay grabbable there,
+    /// and its `.outside` (no mark, no crop edge) lands on the plain arrow.
     func updateAnnotateCursor(at point: CGPoint) {
-        guard phase == .refining, annotateTool != .none else {
+        guard phase == .refining else {
             NSCursor.arrow.set()
             return
         }
@@ -92,7 +89,7 @@ extension SelectionOverlayController {
             // Border / handles only — outside octants keep the annotate cursor.
             if let handle = refineResizeHandle(at: point, allowOutsideExpand: false) {
                 resizeCursor(for: handle).set()
-            } else if annotateTool == .select {
+            } else if annotateTool.editsMarksOnly {
                 NSCursor.arrow.set()
             } else if annotateTool == .pencil {
                 AnnotationCursors.pencilCrosshair(color: annotationStyle.strokeColor).set()
@@ -150,9 +147,9 @@ extension SelectionOverlayController {
             endTextEditing(commit: true)
         }
         annotateTool = tool
-        if tool == .none {
-            annotationHistory.select(nil)
-        } else if tool == .pencil || tool == .arrow, annotationStyle.isFilled {
+        // Disarming stops drawing; it does not forget what you had picked. `.none` still edits
+        // marks, so the selection stays meaningful there.
+        if tool == .pencil || tool == .arrow, annotationStyle.isFilled {
             // Pencil / arrow have no fill; fall back to last stroke width.
             annotationStyle.isFilled = false
             AnnotationPrefs.save(style: annotationStyle, kind: annotationKind)

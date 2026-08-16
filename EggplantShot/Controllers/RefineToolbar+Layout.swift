@@ -96,14 +96,21 @@ extension RefineToolbarController {
         stepColorPreview.layer?.backgroundColor = stepStyle.color.cgColor
         magnifierColorPreview.layer?.backgroundColor = magnifierStyle.color.cgColor
 
-        let isSelect = (tool == .select)
-        let isText = (tool == .text)
-        let isMosaic = (tool == .mosaic)
-        let isMarker = (tool == .marker)
-        let isStep = (tool == .step)
-        let isMagnifier = (tool == .magnifier)
-        let isEraser = (tool == .eraser)
-        strokeOptionsRow.isHidden = isSelect || isText || isMosaic || isMarker || isStep || isMagnifier
+        // Which mark the option row edits: the selection wins, else the armed tool. That keeps
+        // "what I'm restyling" apart from "what draws next" — the main-row tints above stay keyed
+        // to `tool`, so the lit icon is still the armed one.
+        let rowTool = selectedMarkFamily ?? tool
+        // `.none` / `.select` own no options, so the whole card goes away.
+        let hasRow = !rowTool.editsMarksOnly
+        subToolbarContainer.isHidden = !hasRow
+
+        let isText = (rowTool == .text)
+        let isMosaic = (rowTool == .mosaic)
+        let isMarker = (rowTool == .marker)
+        let isStep = (rowTool == .step)
+        let isMagnifier = (rowTool == .magnifier)
+        let isEraser = (rowTool == .eraser)
+        strokeOptionsRow.isHidden = !hasRow || isText || isMosaic || isMarker || isStep || isMagnifier
             || isEraser
         textOptionsRow.isHidden = !isText
         mosaicOptionsRow.isHidden = !isMosaic
@@ -112,12 +119,12 @@ extension RefineToolbarController {
         stepOptionsRow.isHidden = !isStep
         magnifierOptionsRow.isHidden = !isMagnifier
 
-        let isArrow = (tool == .arrow)
-        let shapeExtrasVisible = (tool == .rectangle)
+        let isArrow = (rowTool == .arrow)
+        let shapeExtrasVisible = (rowTool == .rectangle)
         for view in shapeOnlyViews {
             view.isHidden = !shapeExtrasVisible
         }
-        afterKindDivider.isHidden = isSelect || isArrow || isText || isMosaic || isMarker || isStep
+        afterKindDivider.isHidden = !hasRow || isArrow || isText || isMosaic || isMarker || isStep
             || isMagnifier || isEraser
         for view in arrowOnlyViews {
             view.isHidden = !isArrow
@@ -139,15 +146,15 @@ extension RefineToolbarController {
         magnifierScalePreview.needsDisplay = true
 
         let selectedStroke = StrokeWidthOption.matching(style.strokeWidth)
-        let treatAsStroke = !style.isFilled || tool == .pencil || tool == .arrow
+        let treatAsStroke = !style.isFilled || rowTool == .pencil || rowTool == .arrow
         for button in strokeButtons {
             let option = StrokeWidthOption(rawValue: button.tag) ?? .medium
             let on = treatAsStroke && option == selectedStroke
             button.image = strokeDotImage(diameter: option.previewDiameter, selected: on)
             tintSelected(button, selected: on)
         }
-        fillButton.image = fillSwatchImage(selected: style.isFilled && tool == .rectangle)
-        tintSelected(fillButton, selected: style.isFilled && tool == .rectangle)
+        fillButton.image = fillSwatchImage(selected: style.isFilled && rowTool == .rectangle)
+        tintSelected(fillButton, selected: style.isFilled && rowTool == .rectangle)
 
         tintSelected(rectKindButton, selected: kind == .rectangle)
         tintSelected(ovalKindButton, selected: kind == .ellipse)

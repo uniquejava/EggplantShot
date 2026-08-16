@@ -67,7 +67,7 @@ EggplantShot/
 1. **Capture (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; scroll wheel ±10% zoom with brief top-left % badge; Esc / double-click closes).
 2. **Capture and copy (⌘F1)** → same freeze + hover/drag select; on window lock or drag mouse-up, crop + copy to clipboard immediately (no refine toolbar / annotate).
 3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
-4. **Esc** during drag/refine: abort gesture → disarm tool → deselect mark; with marks, first Esc / Cancel shows a tip and second confirms discard. Esc on a pin closes that pin only.
+4. **Esc** during drag/refine: abort gesture → deselect mark → disarm tool; with marks, first Esc / Cancel shows a tip and second confirms discard. Esc on a pin closes that pin only. Deselect precedes disarm so the first press unwinds visible state (handles), and disarming no longer clears the selection.
 5. Pins use `.statusBar` level (above ordinary windows; below capture overlay).
 6. **Paste (F3)** → clipboard → floating pin (image; HEX/RGB color → swatch; plain/HTML text → text image; image file → image, second paste → path text). Ignored while capture overlay is active.
 7. **Disable hotkeys** pauses the event tap (persisted).

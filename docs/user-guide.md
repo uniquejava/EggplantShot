@@ -57,12 +57,22 @@ Toolbar under the selection: move, shape, arrow, pencil, marker, mosaic (blur / 
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
 - Refine hotkeys (after selection is locked; letter keys type while editing text): **V** move · **A** arrow · **S** shape · **D** pen · **F** marker · **M** mosaic · **I** / **T** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
   - ASDF mnemonics: **A**rrow · **S**hape · **D**raw · **F** like a brush for highlight. **I** = Insert (text at the cursor). **T** = Text. **V** = move / select marks.
-- **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → disarm tool → deselect mark → with marks, first Esc tips “Press again to discard”, second Esc cancels. Toolbar **✕** uses the same two-step confirm when marks exist.
+- **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → deselect mark → put the tool away → with marks, first Esc tips “Press again to discard”, second Esc cancels. Toolbar **✕** uses the same two-step confirm when marks exist. Each press undoes something you can see, and none of them throws away your selected mark's style.
 - **Scroll wheel** over a text mark (or while it is selected / being edited) changes the font size. Corner badges still drag-resize.
+
+### Editing a mark you already drew
+
+Click any mark to select it and the toolbar switches to **that mark's** options — stroke width, colour, fill, rect ↔ oval, font size, blur strength, whatever that kind of mark has. Change them and the existing mark updates. The armed tool does not change, so you can fix an old arrow and carry straight on drawing with the pen.
+
+This works with **no tool armed** too. Turning a tool off stops you creating new marks; it never makes the marks you already drew untouchable.
+
+Pencil and brush strokes are the one kind you cannot grab while a paint tool is armed (the brush paints through them on purpose) — press **V** for those.
 
 ### Move (V)
 
 Press **V** (or the cursor toolbar icon) to enter move mode: click and drag any mark (including **inside** a rectangle / oval), resize with handles. Empty click clears the selection. Switch back with **V** again or another tool. (Toggling **V** off does **not** enable dragging the blue crop.)
+
+**V** is also the way to grab a mark sitting right on the blue crop's edge: with no tool armed that edge belongs to the crop, but **V** never touches the crop.
 
 **Hold Space** and drag to move the **blue crop** (temporary hand cursor). Release Space to return to the current tool. Adjust crop size with handles or by expanding from outside.
 

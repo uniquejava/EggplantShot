@@ -27,4 +27,15 @@ enum AnnotateTool: Equatable {
             return false
         }
     }
+
+    /// Modes that never create marks, so every mark is grabbable by its whole body.
+    /// `.none` also lets a dimmed-area drag expand the crop; `.select` (V) keeps the crop still.
+    var editsMarksOnly: Bool {
+        switch self {
+        case .none, .select:
+            return true
+        case .rectangle, .arrow, .pencil, .marker, .mosaic, .text, .step, .magnifier, .eraser:
+            return false
+        }
+    }
 }
