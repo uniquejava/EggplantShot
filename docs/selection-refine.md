@@ -334,11 +334,35 @@ one that trips people up: **selection is never an undo step**, so `marksDiffer` 
 
 - Soft glow (`CALayer.shadowRadius`); no hard border. Active blue / inactive gray.
 - Drag; Esc / double-click closes. Level `.statusBar` (above apps; below snip overlay).
+- Holds the unannotated base + an `AnnotationDocument`, and shows the composite. Right-click gives
+  Copy image / Save image as… / Copy plain text (or Extract text and copy) / Show toolbar / Stay on
+  Top / Shadow / Close.
+
+## Pin-edit (right-click → Show toolbar)
+
+The same refine surface, re-hosted over a pinned bitmap. Differences from a capture session, all
+gated on `SelectionOverlayController.pinEdit`:
+
+| | Capture | Pin-edit |
+|---|---|---|
+| Host | one full-screen panel per display, freeze backdrop + dim | one transparent lid over the bitmap (+ ~200pt margin for the text editor), margins click-through |
+| Chrome | blue crop rect, 8 crop handles, size badge | none — marks and their own chrome only; ink clipped to the bitmap |
+| Effect sampling | freeze (with playback stamped in) | the pinned bitmap at `.zero` origin, same context `AnnotationCompositor` bakes with |
+| Crop | resize / move / Space-drag / outside-octant expand | all off (`refineResizeHandle` returns nil) |
+| `,` / `.` | history playback | inert (that controller has no `historyStore`) |
+| Zoom | n/a | pin snaps to 100%; the wheel belongs to the tools |
+| Confirm | Pin / Copy / Save create the artefact, Esc ladder ends in discard | ✓ / Esc **apply and keep the pin**; ✕ discards the session; Copy / Save / OCR bake and **close** the pin |
+| Level | `.screenSaver`, toolbar `+1` | lid `.statusBar + 1`, toolbar `.statusBar + 2` |
+| Activation | `NSApp.activate` | never — the lid takes key without pulling the app forward |
+
+Marks stay data on the pin, so a session can be re-opened and the same marks edited again; marks
+made during the original capture come across with it.
 
 ## Code
 
 - Overlay controller: [`SelectionOverlayController.swift`](../EggplantShot/Controllers/SelectionOverlayController.swift)
 - Overlay panels: [`SelectionOverlayPanel.swift`](../EggplantShot/Controllers/SelectionOverlayPanel.swift)
+- Pin-edit session: [`SelectionOverlay+PinEdit.swift`](../EggplantShot/Controllers/SelectionOverlay+PinEdit.swift)
 - Toolbar (+ palette): [`RefineToolbarController.swift`](../EggplantShot/Controllers/RefineToolbarController.swift)
 - Text field editor: [`TextAnnotationEditor.swift`](../EggplantShot/Controllers/TextAnnotationEditor.swift)
 - Model / bake / history: [`Annotation/`](../EggplantShot/Annotation/)
@@ -354,4 +378,6 @@ one that trips people up: **selection is never an undo step**, so `marksDiffer` 
 - [x] Pin soft glow + drag
 - [x] Shape / arrow / pencil / marker / mosaic / text / step / magnifier / eraser: draw·edit on full overlay; bake clips outside marks; document keeps them
 - [x] OCR: recognize selection → clipboard + bubble-pop; dismiss overlay; no result UI
+- [x] Pin-edit: Show toolbar docks the toolbar at the pin; draw / edit / undo in place; ✓ / Esc keep
+      the pin, ✕ discards, Copy / Save / OCR close it; re-opening resumes the same marks
 - [x] Undo / redo; debug build succeeds

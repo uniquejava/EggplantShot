@@ -48,6 +48,20 @@ Pin appears near the mouse. Works from the menu bar **Paste** item too. Ignored 
 
 Floating image above ordinary windows. Drag to move. Scroll wheel zooms ±10% (brief % badge in the top-left). **Esc** or double-click closes that pin only. **Hide/Show all images** (`⇧F3`) hides or restores every pin.
 
+Right-click a pin for: **Copy image**, **Save image as…**, **Copy plain text** (pins made by `F3` from text / HTML / a colour / file paths hand the original string back — HTML gives the readable text, not the markup), **Show toolbar**, **Stay on Top**, **Shadow**, **Close**. A screenshot pin has no original string, so it offers **Extract text and copy** instead: same QR-then-OCR pass as refine, straight to the clipboard.
+
+### Annotating a pin (Show toolbar)
+
+Right-click → **Show toolbar** annotates the pinned image where it sits — no full-screen freeze, no dimming, and other windows stay clickable. The pin snaps back to 100% first (mark geometry is in image points) and the wheel belongs to the annotate tools while the toolbar is open, so the pin cannot be zoomed or dragged mid-session.
+
+Every refine tool, its options, the hover / handles chrome and **⌘Z** / **⇧⌘Z** work exactly as they do during a capture; `,` / `.` history playback does not (there is no capture to step through). Ink is clipped to the bitmap — a mark running past the edge is cropped when it bakes, so it looks cropped while you draw.
+
+- **✓** (the Pin button becomes a checkmark) or **Esc** applies the marks and closes the toolbar. The pin stays.
+- **✕** discards what this session drew and leaves the pin as it was (with marks on screen, the first press tips "Press again to discard").
+- **Copy** / **Save** bake the pin as it looks and then **close** it, exactly like confirming a capture. **OCR** reads the baked pin, copies the text and closes it too.
+- Marks stay editable: re-open **Show toolbar** and the same marks are still there, selectable and movable. Annotations made during the original capture come across too.
+- `F1` / `F3` / `⇧F3` / closing the pin while the toolbar is open resolve the session first — hiding all pins keeps your marks, closing the pin discards them.
+
 ## Annotate (during refine)
 
 Toolbar under the selection: move, shape, arrow, pencil, marker, mosaic (blur / pixelate), text, step numbers, magnifier, eraser, **Recognize Text** (OCR), undo/redo, then cancel / pin / save / copy.

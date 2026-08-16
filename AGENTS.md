@@ -49,7 +49,7 @@ EggplantShot/
   Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift + ClipboardPaster.swift
   Services/LaunchAtLogin.swift
   Controllers/SnipController.swift
-  Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (mouse / draft / hit-test / style / text / geometry / history / toolbar)
+  Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (mouse / draft / hit-test / style / text / geometry / history / toolbar / pin-edit)
   Controllers/RefineToolbarController.swift + RefineToolbar+*.swift + RefineToolbarViews.swift + Tooltip / HoverChromeCard / PaletteSwatch / IntensitySlider
   Controllers/TextAnnotationEditor.swift
   Controllers/SelectionOverlayPanel.swift + SelectionOverlayNSView.swift
@@ -68,12 +68,21 @@ EggplantShot/
 2. **Capture and copy (⌘F1)** → same freeze + hover/drag select; on window lock or drag mouse-up, crop + copy to clipboard immediately (no refine toolbar / annotate).
 3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
 4. **Esc** during drag/refine: abort gesture → deselect mark → disarm tool; with marks, first Esc / Cancel shows a tip and second confirms discard. Esc on a pin closes that pin only. Deselect precedes disarm so the first press unwinds visible state (handles), and disarming no longer clears the selection.
-5. Pins use `.statusBar` level (above ordinary windows; below capture overlay).
-6. **Paste (F3)** → clipboard → floating pin (image; HEX/RGB color → swatch; plain/HTML text → text image; image file → image, second paste → path text). Ignored while capture overlay is active.
-7. **Disable hotkeys** pauses the event tap (persisted).
-8. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
-9. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
-10. During an active **Capture** (refine), **`,`** / **`.`** step through prior capture records (older / newer).
+5. Pins use `.statusBar` level (above ordinary windows; below capture overlay). A pin keeps its
+   **unannotated base + `AnnotationDocument`** and shows the composite — marks on a pin stay data,
+   never baked into the base.
+6. **Paste (F3)** → clipboard → floating pin (image; HEX/RGB color → swatch; plain/HTML text → text image; image file → image, second paste → path text). Ignored while capture overlay is active. `ClipboardPaster` also returns the **source string**, which the pin's **Copy plain text** hands back; a pin without one offers **Extract text and copy** (QR-then-OCR on the bitmap) instead.
+7. **Pin → right-click → Show toolbar** annotates that pin **in place**: a transparent lid panel over
+   the bitmap (no freeze, no dim, margins click-through) running the *same* `SelectionOverlayController`
+   surface, with the refine toolbar docked at the pin. Owned by a second controller instance in
+   `SnipController`, with no `historyStore` (so `,` / `.` stay inert). Pin snaps to 100% — nothing in
+   the annotate stack threads a content-zoom factor. ✓ / Esc apply and keep the pin; ✕ discards the
+   session; Copy / Save / OCR bake and **close** the pin like confirming a capture. Details:
+   [`SelectionOverlay+PinEdit.swift`](EggplantShot/Controllers/SelectionOverlay+PinEdit.swift).
+8. **Disable hotkeys** pauses the event tap (persisted).
+9. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
+10. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
+11. During an active **Capture** (refine), **`,`** / **`.`** step through prior capture records (older / newer).
 
 ## Annotate extensibility (P4 — always)
 
