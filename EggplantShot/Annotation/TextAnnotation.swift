@@ -18,14 +18,21 @@ struct TextStyle: Equatable {
         hasBackground: false
     )
 
-    static let fontSizeChoices: [CGFloat] = [8, 10, 12, 14, 16, 18, 24, 28, 36]
-    /// Wheel / corner-resize / prefs range. Sized for a screenshot annotation, not a poster:
-    /// 6 pt is the smallest still-legible label (1 pt was invisible, and a caret-wide box is what
-    /// made corner-drag leverage hair-trigger), 72 pt is 2× the largest deliberate toolbar choice —
-    /// a big callout on a 5K grab is ~4% of frame height. Applies to **input** paths only; decode
-    /// keeps a saved snip's stored size verbatim so old snips render identically.
+    /// Spans the whole clamp range on purpose — this used to stop at 36, half of `fontSizeMax`, so the
+    /// menu could not reach sizes the wheel could. It is also the fast path to the big end: the wheel's
+    /// 2 pt notch would need ~65 of them to climb from the 14 pt default to the ceiling.
+    static let fontSizeChoices: [CGFloat] = [8, 10, 12, 14, 16, 18, 24, 28, 36, 48, 64, 96, 144]
+    /// Wheel / corner-resize / prefs range, in **points**. `AnnotationCompositor` composites in point
+    /// space at the capture's pixel density, so a mark covers the same fraction of the frame on screen
+    /// as in the exported PNG — the number here is a true point size, not a scaled index.
+    /// 6 pt is the smallest still-legible label (1 pt was invisible, and a caret-wide box is what made
+    /// corner-drag leverage hair-trigger). 144 pt is a headline callout — ~10% of frame height on a
+    /// 1440 pt display, ~15% on a laptop — big enough to survive the downscaling a screenshot gets when
+    /// pasted into chat; the previous 72 pt ceiling was only ~5%, about a quarter of Snipaste's reach.
+    /// Applies to **input** paths only; decode keeps a saved snip's stored size verbatim so old snips
+    /// render identically.
     static let fontSizeMin: CGFloat = 6
-    static let fontSizeMax: CGFloat = 72
+    static let fontSizeMax: CGFloat = 144
     /// Thinnest the caret ever draws — 1px hairline at 2x, the floor for very small type.
     static let caretWidthFloor: CGFloat = 0.5
 
