@@ -113,6 +113,14 @@ extension SelectionOverlayController {
                 }
                 continue
             }
+            // Text tool pierces every *foreign* mark: you can start typing anywhere, including on
+            // top of an arrow or a step badge, instead of the pointer turning into a move cursor.
+            // Same rule the step tool has above, with text and step swapped. Text marks are handled
+            // just above and keep their border / interior / badges — piercing those too would stack
+            // a new box under the pointer instead of editing the one already there. Foreign marks
+            // move via **V** / `.none`; a *selected* mark's handles were checked before the loop and
+            // stay live, the same trade the paint tools make.
+            if annotateTool == .text { continue }
             if ann.isStep {
                 // Entire badge is a move target (no interior edit / no resize).
                 if toGlobal(ann.boundingRect).insetBy(dx: -2, dy: -2).contains(point) {
@@ -145,6 +153,28 @@ extension SelectionOverlayController {
         // Select tool (V): `.draw` means empty space (deselect; no create) — see mouseDown.
         // `.none`: empty space is the crop's — border resize / outside expand.
         return annotateTool == .none ? .outside : .draw
+    }
+
+    /// Text mark a double-click should open for typing, or `nil` for anything else under the pointer.
+    ///
+    /// Body hits only. Corner badges (`.handle` / `.textClose`) keep their resize / close jobs — a
+    /// fast second press on a badge must not turn into an edit. The mark already being edited is
+    /// excluded too: double-clicks inside it belong to the field editor, which uses them to select a
+    /// word (they never reach `handleRefineMouseDown` anyway — `shouldPassThroughToTextEditor` hands
+    /// them straight to `NSTextView` — but the guard keeps this honest on its own).
+    ///
+    /// Nothing here is reachable under a paint tool: those return `.draw` before any mark is
+    /// consulted, so a double-click there stays two brush dabs.
+    func doubleClickTextTarget(at point: CGPoint) -> UUID? {
+        switch annotationPointerTarget(at: point) {
+        case .border(let id), .interior(let id):
+            guard id != editingTextID,
+                  annotations.first(where: { $0.id == id })?.isText == true
+            else { return nil }
+            return id
+        case .handle, .textClose, .arrowEndpoint, .draw, .outside:
+            return nil
+        }
     }
 
     enum TextFrameHit {

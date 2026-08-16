@@ -188,7 +188,7 @@ extension SelectionOverlayController {
                     case "d": self.toggleRefineTool(.pencil); return nil
                     case "f": self.toggleRefineTool(.marker); return nil
                     case "m": self.toggleRefineTool(.mosaic); return nil
-                    case "i", "t": self.armTextToolFromHotkey(); return nil
+                    case "i", "t": self.toggleRefineTool(.text); return nil
                     case "n": self.toggleRefineTool(.step); return nil
                     case "e": self.toggleRefineTool(.eraser); return nil
                     case "p": self.confirm(.pin); return nil
@@ -456,7 +456,7 @@ extension SelectionOverlayController {
         case .mouseMoved:
             handleMouseMoved(at: point)
         case .leftMouseDown:
-            handleMouseDown(at: point)
+            handleMouseDown(at: point, clickCount: event.clickCount)
         case .leftMouseDragged:
             handleMouseDragged(at: point)
         case .leftMouseUp:
@@ -525,7 +525,7 @@ extension SelectionOverlayController {
         setOverlayCursorMode(.selectingPlus)
     }
 
-    func handleMouseDown(at point: CGPoint) {
+    func handleMouseDown(at point: CGPoint, clickCount: Int = 1) {
         clearEscapeDiscardHint()
         switch phase {
         case .idle:
@@ -544,11 +544,11 @@ extension SelectionOverlayController {
             updateHighlight(showHandles: false)
 
         case .refining:
-            handleRefineMouseDown(at: point)
+            handleRefineMouseDown(at: point, clickCount: clickCount)
         }
     }
 
-    func handleRefineMouseDown(at point: CGPoint) {
+    func handleRefineMouseDown(at point: CGPoint, clickCount: Int = 1) {
         endTextWheelResizeIfNeeded()
         // Hold Space: drag the blue crop (temporary; ignores annotate hits).
         if spaceHeldForCropMove {
@@ -590,6 +590,24 @@ extension SelectionOverlayController {
         // Otherwise a mark drawn flush with the crop edge would shadow the whole strip and leave
         // that edge permanently unresizable; V has no crop grab, so it can still move such a mark.
         if annotateTool == .none, beginSelectionEdgeDragIfNeeded(at: point, allowOutsideExpand: true) {
+            return
+        }
+
+        // Double-click a text mark → open it for typing, whatever tool is armed. "Open" can only
+        // mean edit-the-content, and text is the only mark kind with content, so this deliberately
+        // arms *nothing*: the editor is already tool-independent (typing and interior clicks route
+        // on `editingTextID`, not on `annotateTool`), and the toolbar already shows the selected
+        // mark's option row via `setSelectedMarkFamily`. Arming would only cost — in `.none` you'd
+        // silently leave crop mode, and the next click on empty space would place a second box.
+        // Deliberately after the crop-edge grab above, so a mark flush with the crop edge keeps
+        // giving `.none` its resize strip (same precedence single clicks already have).
+        if clickCount >= 2, let id = doubleClickTextTarget(at: point) {
+            annotationHistory.select(id)
+            if let ann = annotations.first(where: { $0.id == id }) {
+                syncToolbar(from: ann)
+            }
+            updateHighlight(showHandles: true)
+            startTextEditing(id: id)
             return
         }
 
