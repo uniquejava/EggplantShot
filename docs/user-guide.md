@@ -55,9 +55,10 @@ Toolbar under the selection: move, shape, arrow, pencil, marker, mosaic (blur / 
 - Marks work on the **full freeze**, not only inside the blue rect. Pin/Copy/Save still crop to the selection (outside ink is clipped from the baked image).
 - **Recognize Text** prefers **QR / 2D codes** in the selection, otherwise OCR text; on success it copies to the clipboard, plays a short sound, and closes the capture (no result panel).
 - **⌘Z** / **⇧⌘Z** (or **⌘Y**) undo / redo. **Delete** removes the selected mark.
-- Refine hotkeys (after selection is locked; letter keys type while editing text): **V** move · **A** arrow · **S** shape · **D** pen · **F** marker · **M** mosaic · **I** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
-  - ASDF mnemonics: **A**rrow · **S**hape · **D**raw · **F** like a brush for highlight. **I** = Insert (text at the cursor). **V** = move / select marks.
+- Refine hotkeys (after selection is locked; letter keys type while editing text): **V** move · **A** arrow · **S** shape · **D** pen · **F** marker · **M** mosaic · **I** / **T** text · **N** number · **E** eraser · **P** pin · **O** OCR · **⌘S** save · **⌘C** copy. **R** / **G** / **B** set red / green / cyan on the selected mark or armed tool.
+  - ASDF mnemonics: **A**rrow · **S**hape · **D**raw · **F** like a brush for highlight. **I** = Insert (text at the cursor). **T** = Text. **V** = move / select marks.
 - **Esc** while editing text ends the editor only. Otherwise Esc walks down: abort drag → disarm tool → deselect mark → with marks, first Esc tips “Press again to discard”, second Esc cancels. Toolbar **✕** uses the same two-step confirm when marks exist.
+- **Scroll wheel** over a text mark (or while it is selected / being edited) changes the font size. Corner badges still drag-resize.
 
 ### Move (V)
 
@@ -80,6 +81,7 @@ Under object tools (shape / arrow / text / …), paint-like marks still draw-thr
 | Context | Modifier | Effect |
 |---------|----------|--------|
 | Refine (any tool) | **Space** (hold) | Drag blue crop |
+| Text mark (hover / selected / editing) | **Scroll wheel** | Resize font |
 | Shape / mosaic region | **Shift** | Square / circle |
 | Arrow / pencil / freehand mosaic | **Shift** | Straight line (arrow also 45° snap) |
 | Step tool over non-step marks | **⌘** | Temporary move |

@@ -9,6 +9,15 @@ extension SelectionOverlayController {
 
         // Live editor chrome wins over the (possibly stale) mark rect.
         if let id = editingTextID, let live = editingTextGlobalRect() {
+            // Corner badges (incl. close) sit on / outside the frame — check first.
+            if let corner = hitTestTextCornerBadge(at: point, globalRect: live) {
+                switch corner {
+                case .close:
+                    return .textClose(id: id)
+                case .resize(let handle):
+                    return .handle(id: id, handle: handle)
+                }
+            }
             switch textFrameHit(at: point, globalRect: live) {
             case .border:
                 return .border(id: id)
@@ -16,6 +25,20 @@ extension SelectionOverlayController {
                 return .interior(id: id)
             case .none:
                 break
+            }
+        }
+
+        // Text corner badges (Snipaste): visible on hover/selection; grab before body hit.
+        // Under paint draw-through, only the selected mark’s badges stay live (same as shapes).
+        if let textHit = hitTestTextCornerBadge(at: point) {
+            let allowUnselected = !annotateTool.drawsThroughMarks
+            if allowUnselected || textHit.id == selectedAnnotationID {
+                switch textHit.corner {
+                case .close:
+                    return .textClose(id: textHit.id)
+                case .resize(let handle):
+                    return .handle(id: textHit.id, handle: handle)
+                }
             }
         }
 
@@ -143,10 +166,25 @@ extension SelectionOverlayController {
     }
 
     func textMarkID(at point: CGPoint) -> UUID? {
+        if let id = editingTextID, let live = editingTextGlobalRect() {
+            let c = AnnotationDrawing.textCornerBadgeCenters(in: live)
+            let pad = AnnotationDrawing.textCornerBadgeSize / 2 + 2
+            let hoverBounds = live
+                .union(CGRect(x: c.topLeft.x - pad, y: c.topLeft.y - pad, width: pad * 2, height: pad * 2))
+                .union(CGRect(x: c.topRight.x - pad, y: c.topRight.y - pad, width: pad * 2, height: pad * 2))
+                .union(CGRect(x: c.bottomLeft.x - pad, y: c.bottomLeft.y - pad, width: pad * 2, height: pad * 2))
+                .union(CGRect(x: c.bottomRight.x - pad, y: c.bottomRight.y - pad, width: pad * 2, height: pad * 2))
+            if hoverBounds.contains(point) {
+                return id
+            }
+        }
         for ann in annotations.reversed() {
             if ann.id == editingTextID { continue }
             guard ann.isText else { continue }
-            if toGlobal(ann.boundingRect).contains(point) {
+            let global = toGlobal(ann.boundingRect)
+            if global.contains(point) { return ann.id }
+            // Corner badges sit outside the glyph box — still count as hover.
+            if hitTestTextCornerBadge(at: point, globalRect: global) != nil {
                 return ann.id
             }
         }
@@ -155,9 +193,16 @@ extension SelectionOverlayController {
 
     func updateHoveredText(at point: CGPoint) {
         let id = textMarkID(at: point)
-        guard id != hoveredTextID else { return }
-        hoveredTextID = id
-        updateHighlight(showHandles: true)
+        let changed = id != hoveredTextID
+        if changed {
+            hoveredTextID = id
+            updateHighlight(showHandles: true)
+        }
+        // Editing chrome draws its own badges above the field editor — hide only after a real drag.
+        let showEditBadges = !suppressTextCornerBadges && editingTextID != nil && id == editingTextID
+        if textChromeView?.showsCornerBadges != showEditBadges {
+            textChromeView?.showsCornerBadges = showEditBadges
+        }
     }
 
     /// Non-selected rect / oval paint region (marker / mosaic / eraser) under the pointer.
@@ -397,6 +442,7 @@ extension SelectionOverlayController {
 
     func hitTestAnnotationHandle(at point: CGPoint, annotation: Annotation) -> Handle? {
         // Pencil / freehand mosaic / marker / eraser / text / arrow / step: no 8-handle resize chrome.
+        // Text uses dedicated 4-corner badges (`hitTestTextCornerBadge`).
         // Magnifier uses dedicated dual-frame handle hit-testing.
         // Mosaic / marker / eraser region (rect/oval) uses the same 8 handles as shapes.
         guard !annotation.isPencil, !annotation.isMosaicStroke, !annotation.isMarkerStroke,
@@ -409,6 +455,45 @@ extension SelectionOverlayController {
             if handleHitRect(handle, in: global).contains(point) {
                 return handle
             }
+        }
+        return nil
+    }
+
+    /// Snipaste text corner: top-right = close; other three = aspect-locked resize.
+    enum TextCornerBadgeHit {
+        case resize(Handle)
+        case close
+    }
+
+    /// Snipaste text badges on any non-editing text mark.
+    func hitTestTextCornerBadge(at point: CGPoint) -> (id: UUID, corner: TextCornerBadgeHit)? {
+        for ann in annotations.reversed() {
+            if ann.id == editingTextID { continue }
+            guard ann.isText else { continue }
+            if let corner = hitTestTextCornerBadge(at: point, globalRect: toGlobal(ann.boundingRect)) {
+                return (ann.id, corner)
+            }
+        }
+        return nil
+    }
+
+    func hitTestTextCornerBadge(at point: CGPoint, globalRect: CGRect) -> TextCornerBadgeHit? {
+        let hit = max(handleHitSize, AnnotationDrawing.textCornerBadgeSize + 4)
+        let c = AnnotationDrawing.textCornerBadgeCenters(in: globalRect)
+        let corners: [(TextCornerBadgeHit, CGPoint)] = [
+            (.resize(.topLeft), c.topLeft),
+            (.close, c.topRight),
+            (.resize(.bottomLeft), c.bottomLeft),
+            (.resize(.bottomRight), c.bottomRight),
+        ]
+        for (corner, center) in corners {
+            let r = CGRect(
+                x: center.x - hit / 2,
+                y: center.y - hit / 2,
+                width: hit,
+                height: hit
+            )
+            if r.contains(point) { return corner }
         }
         return nil
     }

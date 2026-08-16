@@ -5,7 +5,9 @@ extension SelectionOverlayController {
     func installMonitors() {
         removeMonitors()
 
-        let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved]
+        let mouseMask: NSEvent.EventTypeMask = [
+            .leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved, .scrollWheel,
+        ]
         if let mon = NSEvent.addLocalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             guard let self else { return event }
             let point = NSEvent.mouseLocation
@@ -14,8 +16,12 @@ extension SelectionOverlayController {
             // easy; swallowing that mouse-up used to strand `dragKind` and leave the history gesture
             // open, which fused the abandoned edit into the next drag's step.
             if self.dragKind == nil, let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
+                self.endTextWheelResizeIfNeeded()
                 NSCursor.arrow.set()
                 return event
+            }
+            if event.type == .scrollWheel {
+                return self.handleTextScrollWheel(event) ? nil : event
             }
             // Always drive the cursor ourselves (incl. over the text editor).
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
@@ -43,7 +49,12 @@ extension SelectionOverlayController {
             guard let self else { return }
             let point = NSEvent.mouseLocation
             if self.dragKind == nil, let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
+                self.endTextWheelResizeIfNeeded()
                 NSCursor.arrow.set()
+                return
+            }
+            if event.type == .scrollWheel {
+                _ = self.handleTextScrollWheel(event)
                 return
             }
             if event.type == .mouseMoved, self.phase == .refining, self.dragKind == nil {
@@ -102,6 +113,9 @@ extension SelectionOverlayController {
                 }
                 return event
             }
+            // Close a wheel-size run before the open-gesture key gate — otherwise Delete / hotkeys
+            // stay swallowed until the idle timer fires.
+            self.endTextWheelResizeIfNeeded()
             // Hold Space: temporary crop move (not while typing in a text mark).
             if self.phase == .refining,
                event.keyCode == 49,
@@ -174,7 +188,7 @@ extension SelectionOverlayController {
                     case "d": self.toggleRefineTool(.pencil); return nil
                     case "f": self.toggleRefineTool(.marker); return nil
                     case "m": self.toggleRefineTool(.mosaic); return nil
-                    case "i": self.armTextToolFromHotkey(); return nil
+                    case "i", "t": self.armTextToolFromHotkey(); return nil
                     case "n": self.toggleRefineTool(.step); return nil
                     case "e": self.toggleRefineTool(.eraser); return nil
                     case "p": self.confirm(.pin); return nil
@@ -244,6 +258,7 @@ extension SelectionOverlayController {
     /// Esc ladder while capturing: end text → abort drag → disarm tool → deselect mark.
     /// With marks still present: first Esc / Cancel tips; second confirms discard.
     func handleEscapeKey() {
+        endTextWheelResizeIfNeeded()
         if editingTextID != nil {
             clearEscapeDiscardHint()
             endTextEditing(commit: true)
@@ -425,6 +440,7 @@ extension SelectionOverlayController {
 
     func removeMonitors() {
         spaceHeldForCropMove = false
+        endTextWheelResizeIfNeeded()
         for m in eventMonitors {
             NSEvent.removeMonitor(m)
         }
@@ -531,6 +547,7 @@ extension SelectionOverlayController {
     }
 
     func handleRefineMouseDown(at point: CGPoint) {
+        endTextWheelResizeIfNeeded()
         // Hold Space: drag the blue crop (temporary; ignores annotate hits).
         if spaceHeldForCropMove {
             if editingTextID != nil {
@@ -546,11 +563,17 @@ extension SelectionOverlayController {
             return
         }
 
-        // Finish any open text editor before starting a new gesture — except live-move on its border.
+        // Finish any open text editor before starting a new gesture — except live-move /
+        // resize / close on its own chrome.
         if let editingID = editingTextID {
             switch annotationPointerTarget(at: point) {
             case .border(let id) where id == editingID:
                 break // fall through → annotateMove, stay editing
+            case .handle(let id, _) where id == editingID:
+                break // fall through → annotateResize, stay editing (live font resize)
+            case .textClose(let id) where id == editingID:
+                deleteSelectedAnnotation()
+                return
             case .interior(let id) where id == editingID:
                 // Monitor should pass this through; ignore if it still arrives.
                 return
@@ -562,11 +585,18 @@ extension SelectionOverlayController {
         // Annotate tool: handle → resize; stroke/border → move; interior → draw (nested OK).
         if annotateTool != .none {
             switch annotationPointerTarget(at: point) {
+            case .textClose(let id):
+                annotationHistory.select(id)
+                deleteSelectedAnnotation()
+
             case .handle(let id, let handle):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
                 annotationHistory.select(id)
                 syncToolbar(from: ann)
                 annotationHistory.beginGesture()
+                // While editing, the live chrome is the resize baseline — same as `.border` below.
+                // Keeping the editor open is what stops a blank mark being dropped and re-placed.
+                textChromeDragStartFrame = id == editingTextID ? textChromeView?.frame : nil
                 let part: MagnifierPart? = ann.isMagnifier
                     ? (hitTestMagnifierHandle(at: point, annotation: ann)?.part ?? .lens)
                     : nil
@@ -578,6 +608,7 @@ extension SelectionOverlayController {
                     magnifierPart: part
                 )
                 resizeCursor(for: handle).set()
+                updateHighlight(showHandles: true)
 
             case .arrowEndpoint(let id, let endpoint):
                 guard let ann = annotations.first(where: { $0.id == id }) else { return }
@@ -742,6 +773,10 @@ extension SelectionOverlayController {
         case .annotateMove(let id, let start, let startPoint, let magnifierPart):
             let dx = point.x - startPoint.x
             let dy = point.y - startPoint.y
+            if start.isText, !suppressTextCornerBadges,
+               hypot(dx, dy) >= textClickDragThreshold {
+                suppressTextCornerBadges = true
+            }
             var next = start
             if let magnifierPart, next.isMagnifier {
                 next.translateMagnifierPart(magnifierPart, by: CGSize(width: dx, height: dy))
@@ -757,6 +792,10 @@ extension SelectionOverlayController {
             updateHighlight(showHandles: true)
 
         case .annotateResize(let id, let handle, let start, let startPoint, let magnifierPart):
+            if start.isText, !suppressTextCornerBadges,
+               hypot(point.x - startPoint.x, point.y - startPoint.y) >= textClickDragThreshold {
+                suppressTextCornerBadges = true
+            }
             var next = start
             if magnifierPart != nil, start.isMagnifier {
                 // Lens handles only: resize selection area; source syncs at fixed scale.
@@ -769,6 +808,34 @@ extension SelectionOverlayController {
                     minSize: minAnnotation
                 )
                 next.resizeMagnifierLens(to: toLocal(resizedGlobal))
+            } else if start.isText {
+                // Editing: the live chrome owns the box, so drive `fontSize` and let the field editor
+                // re-fit — the same path the scroll wheel uses. Going through `mapBoundingRect` here
+                // would write a rect the visible editor never picks up.
+                if id == editingTextID,
+                   let startFrame = textChromeDragStartFrame,
+                   let startGlobal = globalRect(forChromeFrame: startFrame) {
+                    resizeEditingTextByDrag(
+                        handle: handle,
+                        startRect: startGlobal,
+                        startPoint: startPoint,
+                        point: point,
+                        startStyle: start.textStyle
+                    )
+                    updateHighlight(showHandles: true)
+                    return
+                }
+                let startGlobal = toGlobal(start.boundingRect)
+                let resizedGlobal = resizedRectKeepingAspect(
+                    handle: handle,
+                    startRect: startGlobal,
+                    startPoint: startPoint,
+                    point: point,
+                    minSize: minAnnotation
+                )
+                next.mapBoundingRect(to: toLocal(resizedGlobal))
+                textStyle = next.textStyle
+                toolbar?.syncTextStyle(textStyle)
             } else {
                 let startGlobal = toGlobal(start.boundingRect)
                 let resizedGlobal = resizedRect(
@@ -841,6 +908,7 @@ extension SelectionOverlayController {
             enterRefineOrAutoConfirm()
 
         case .refining:
+            var blinkBadgesAfterRestore = false
             switch dragKind {
             case .annotateDraw:
                 if let draft = draftAnnotation {
@@ -859,6 +927,18 @@ extension SelectionOverlayController {
                 }
             case .annotateMove, .annotateResize, .annotateEndpoint:
                 annotationHistory.endGesture()
+                if case .annotateResize(let id, _, _, let resizeStart, _) = dragKind,
+                   let ann = annotations.first(where: { $0.id == id }),
+                   ann.isText {
+                    syncToolbar(from: ann)
+                    TextAnnotationPrefs.save(ann.textStyle)
+                    // A badge press that never moved changed nothing (`endGesture` already dropped
+                    // the empty step) — blink so the press is still acknowledged. Deferred below:
+                    // the badge-restore further down would otherwise cancel it immediately.
+                    if hypot(point.x - resizeStart.x, point.y - resizeStart.y) < textClickDragThreshold {
+                        blinkBadgesAfterRestore = true
+                    }
+                }
                 refreshHistoryChrome()
             default:
                 break
@@ -881,9 +961,15 @@ extension SelectionOverlayController {
                 }
             }
 
+            // Clear before highlight — defer would run too late and leave badges hidden.
+            suppressTextCornerBadges = false
+            updateHoveredText(at: point)
             updateHighlight(showHandles: true)
             repositionToolbar()
             updateOverlayCursor(at: point)
+            if blinkBadgesAfterRestore {
+                blinkTextCornerBadges()
+            }
         }
     }
 }

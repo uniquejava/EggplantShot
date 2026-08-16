@@ -15,13 +15,15 @@ extension SelectionOverlayController {
 
     /// Live chrome frame in Cocoa global coordinates while editing.
     func editingTextGlobalRect() -> CGRect? {
-        guard let chrome = textChromeView, let host = textEditorHost else { return nil }
-        return CGRect(
-            x: chrome.frame.minX + host.screenFrame.minX,
-            y: chrome.frame.minY + host.screenFrame.minY,
-            width: chrome.frame.width,
-            height: chrome.frame.height
-        )
+        guard let chrome = textChromeView else { return nil }
+        return globalRect(forChromeFrame: chrome.frame)
+    }
+
+    /// A chrome frame (host-panel space) in Cocoa global coordinates — the two differ by a pure
+    /// translation. Used to read the gesture-start frame back out of `textChromeDragStartFrame`.
+    func globalRect(forChromeFrame frame: CGRect) -> CGRect? {
+        guard let host = textEditorHost else { return nil }
+        return frame.offsetBy(dx: host.screenFrame.minX, dy: host.screenFrame.minY)
     }
 
     /// Pass mouse events to `NSTextView` only for interior typing/selection — not border move.
@@ -45,8 +47,29 @@ extension SelectionOverlayController {
         }
     }
 
-    func repositionEditingChrome(dragDelta: CGSize) {
+    /// Re-place the live edit chrome so the corner *opposite* the dragged handle keeps its pre-drag
+    /// position. `resizeTextEditorToFit` grows top-anchored, which is right for the toolbar and the
+    /// wheel but wrong mid-resize — the corner you are not dragging has to stay put. Anchors use the
+    /// same convention as `resizedRectKeepingAspect`, i.e. `handle.drivenEdges` inverted.
+    func anchorEditingChrome(anchorX: RectEdgeAnchor, anchorY: RectEdgeAnchor) {
         guard let chrome = textChromeView,
+              let host = textEditorHost,
+              let startFrame = textChromeDragStartFrame
+        else { return }
+        var frame = chrome.frame
+        frame.origin.x = anchorX.origin(min: startFrame.minX, max: startFrame.maxX, extent: frame.width)
+        frame.origin.y = anchorY.origin(min: startFrame.minY, max: startFrame.maxY, extent: frame.height)
+        // Clamp once, here — `resizeTextEditorToFit` already clamped its own top-anchored guess, and
+        // clamping twice around a moving anchor fights itself at a screen edge.
+        let screen = host.screenFrame
+        frame.origin.x = min(max(frame.origin.x, 0), max(0, screen.width - frame.width))
+        frame.origin.y = min(max(frame.origin.y, 0), max(0, screen.height - frame.height))
+        chrome.frame = frame
+        textEditor?.frame = chrome.bounds
+        chrome.needsDisplay = true
+    }
+
+    func repositionEditingChrome(dragDelta: CGSize) {        guard let chrome = textChromeView,
               let host = textEditorHost,
               let startFrame = textChromeDragStartFrame
         else { return }
@@ -74,6 +97,10 @@ extension SelectionOverlayController {
                 return false
             }
         }()
+        let hideTextCornerBadges = suppressTextCornerBadges
+        if hideTextCornerBadges {
+            textChromeView?.showsCornerBadges = false
+        }
         for panel in panels {
             panel.setSelection(
                 currentRect,
@@ -89,6 +116,7 @@ extension SelectionOverlayController {
                 hoveredTextID: hoveredTextID,
                 hoveredPaintRegionID: hoveredPaintRegionID,
                 showSolidMarkerRegionBorder: movingOrResizingMarkerRegion,
+                hideTextCornerBadges: hideTextCornerBadges,
                 hiddenMagnifierSourceIDs: hiddenMagnifierSourceIDs()
             )
         }

@@ -132,8 +132,23 @@ final class SelectionOverlayController {
     /// Chrome frame at the start of a live-move while editing (panel-local).
     var textChromeDragStartFrame: CGRect?
     let textClickDragThreshold: CGFloat = 4
+    /// Hide text corner badges only after the pointer has actually moved (not on mouse-down alone).
+    var suppressTextCornerBadges = false
     /// Extra hit outside the text hairline so the border is easy to grab.
     let textBorderOutwardSlop: CGFloat = 2
+    /// Scroll-wheel font-size gesture (coalesced like a slider drag).
+    var isTextWheelGesture = false
+    var textWheelScrollAccum: CGFloat = 0
+    var textWheelResizeWork: DispatchWorkItem?
+    /// Trackpad: ~2 pt of finger travel → one size step (pin zoom uses 12 because each
+    /// step is already ±10%; 1–2 pt of type needs a much shorter flick).
+    let textWheelPreciseThreshold: CGFloat = 2
+    /// Points of `fontSize` per wheel notch / accumulated trackpad step.
+    let textWheelPointsPerStep: Int = 2
+    /// Ceiling on steps one scroll event may apply. Bounds a fast flick (which arrives as a single
+    /// large-delta event) without discarding travel — the remainder carries to the next event.
+    let textWheelMaxStepsPerEvent: Int = 2
+    let textWheelGestureIdle: TimeInterval = 0.35
 
     /// Hold **Space** to temporarily drag-move the blue crop (open hand → closed hand while dragging).
     var spaceHeldForCropMove = false
@@ -159,6 +174,8 @@ final class SelectionOverlayController {
     /// Where the pointer sits relative to annotations while an annotate tool is active.
     enum AnnotationPointerTarget {
         case handle(id: UUID, handle: Handle)
+        /// Top-right close badge on a text mark (Snipaste).
+        case textClose(id: UUID)
         case arrowEndpoint(id: UUID, endpoint: ArrowEndpoint)
         case border(id: UUID)
         /// Interior of a text mark (text tool): click to edit, not move.

@@ -400,7 +400,7 @@ Pencil: `.pencil(points:style:)` — freehand polyline (mouse-drag ~2pt samples;
 
 Arrow: `.arrow(start:end:style:caps:)` — segment + Snipaste end-caps; Shift → 45°; endpoint handles; disk `startCap` / `endCap`.
 
-Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; Esc ends edit without cancelling snip.
+Text: `.text(string:rect:style:)` — click-to-place + inline edit; Bold / Italic / background / font size / color; move + resize handles; **scroll wheel** steps `fontSize` (coalesced gesture); Esc ends edit without cancelling snip.
 
 Mosaic: `.mosaic(geometry:style:)` — freehand stroke or rect/oval region; sizes 14/18/24; two effects on the one tool, `effect: blur | pixelate` (switched by clicking the intensity preview chip, Snipaste-style; slider knob draws circle for Blur, square for Pixelate) (**Blur** = `CIGaussianBlur`, radius **is sigma**, `blurSigma` 0.8…3.2 pt step 0.4 default 1.6; **Pixelate** = `CIPixellate`, `blockSize` 2…16 pt step 1 default 6, hard-edged, lattice anchored in image space so overlapping strokes don't seam); samples freeze/base **+ the marks already under it** at draw time (read back from the `MarksCanvas` hull, so nested mosaics work); disk `mosaicStyle` (`blurSigma` / `blockSize` / `effect`, and `kind`/`rect` for regions; missing `effect` → blur, missing physical fields → derived from the retired abstract `intensity` via the old curves so old snips render identically). Region marks auto-select with 1px contrast hairline (solid→dashed) + 8 resize handles; freehand strokes do not.
 

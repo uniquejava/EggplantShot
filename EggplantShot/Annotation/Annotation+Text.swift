@@ -18,6 +18,19 @@ extension Annotation {
         }
     }
 
+    /// Apply `style` and re-fit the box from the current top-left (scroll-wheel / toolbar size).
+    mutating func setTextStyleKeepingTopLeft(_ style: TextStyle, string: String? = nil) {
+        guard case .text(let existing, let rect, _) = payload else { return }
+        let text = string ?? existing
+        let fitted = Annotation.fittedTextRect(
+            string: text,
+            style: style,
+            origin: CGPoint(x: rect.minX, y: rect.maxY),
+            anchor: .topLeft
+        )
+        payload = .text(string: text, rect: fitted, style: style)
+    }
+
     /// How `origin` maps onto the fitted text box (selection-local Cocoa points).
     enum TextRectAnchor {
         /// `origin` is the top-left (grow downward while editing).
@@ -53,9 +66,10 @@ extension Annotation {
         maxWidth: CGFloat = 10_000
     ) -> CGSize {
         let pad = style.textPadding
-        let minH = ceil(style.makeFont().boundingRectForFont.height) + pad * 2
+        let vpad = style.textVerticalPadding
+        let minH = ceil(style.makeFont().boundingRectForFont.height) + vpad * 2
         if string.isEmpty {
-            return CGSize(width: pad * 2 + TextStyle.caretWidth, height: minH)
+            return CGSize(width: style.emptyBoxWidth, height: minH)
         }
         let attributed = NSAttributedString(string: string, attributes: style.attributes())
         let natural = attributed.boundingRect(
@@ -63,7 +77,7 @@ extension Annotation {
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         )
         let naturalW = ceil(natural.width) + pad * 2
-        let naturalH = max(ceil(natural.height) + pad * 2, minH)
+        let naturalH = max(ceil(natural.height) + vpad * 2, minH)
         if naturalW <= maxWidth {
             return CGSize(width: naturalW, height: naturalH)
         }
@@ -74,7 +88,7 @@ extension Annotation {
         )
         return CGSize(
             width: maxWidth,
-            height: max(ceil(wrapped.height) + pad * 2, minH)
+            height: max(ceil(wrapped.height) + vpad * 2, minH)
         )
     }
 }

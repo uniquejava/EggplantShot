@@ -19,13 +19,15 @@ final class SelectionOverlayNSView: NSView {
     var playbackImage: NSImage?
     /// Skip drawing this mark while the inline editor is showing it.
     var editingAnnotationID: UUID?
-    /// Snipaste-style hover: dashed outline while the pointer is over a text mark.
+    /// Snipaste-style hover: text corner badges while the pointer is over a text mark.
     var hoveredTextID: UUID?
     /// Snipaste-style hover: dashed outline over a non-selected rect / oval paint region
     /// (marker / mosaic / eraser).
     var hoveredPaintRegionID: UUID?
     /// While moving / resizing a selected marker region: solid hairline (Snipaste).
     var showSolidMarkerRegionBorder = false
+    /// Hide Snipaste text corner badges while the text mark is being moved / resized.
+    var hideTextCornerBadges = false
     /// Magnifier nested source frames to skip while decluttering (≥2 magnifiers, tool inactive).
     var hiddenMagnifierSourceIDs: Set<UUID> = []
     var onCursorUpdate: (() -> Void)?
@@ -312,12 +314,11 @@ final class SelectionOverlayNSView: NSView {
             drawStepSelectionOutline(in: r)
         }
 
-        if let hid = hoveredTextID,
-           hid != editingAnnotationID,
-           let hovered = annotations.first(where: { $0.id == hid }),
-           hovered.isText {
-            let r = hovered.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
-            drawTextHoverOutline(in: r, style: hovered.textStyle)
+        // Snipaste text: white frame + 4 blue corner badges on hover or selection (not editing).
+        if let textChrome = textResizeChromeAnnotation() {
+            let r = textChrome.boundingRect.offsetBy(dx: origin.x, dy: origin.y)
+            let scale = window?.backingScaleFactor ?? 2
+            AnnotationDrawing.drawTextResizeChrome(in: r, lineWidth: 1 / max(scale, 1))
         }
 
         if let hid = hoveredPaintRegionID,
@@ -327,6 +328,24 @@ final class SelectionOverlayNSView: NSView {
             let r = region.rect.offsetBy(dx: origin.x, dy: origin.y)
             drawRegionChrome(in: r, mode: region.mode, dashed: true)
         }
+    }
+
+    /// Hover or selection (not editing) → Snipaste 4-corner text chrome.
+    /// Hidden while that text mark is mid move / resize.
+    private func textResizeChromeAnnotation() -> Annotation? {
+        guard !hideTextCornerBadges else { return nil }
+        if let selected = selectedAnnotation,
+           selected.isText,
+           selected.id != editingAnnotationID {
+            return selected
+        }
+        if let hid = hoveredTextID,
+           hid != editingAnnotationID,
+           let hovered = annotations.first(where: { $0.id == hid }),
+           hovered.isText {
+            return hovered
+        }
+        return nil
     }
 
     /// Snipaste mosaic / marker / eraser region: 1 device-pixel hairline; black on light / white on dark.

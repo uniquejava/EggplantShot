@@ -27,8 +27,8 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    /// **I** (Insert): arm text tool; if arming (not disarming) and the pointer is
-    /// not over the toolbar, place + edit at the cursor (toolbar tap stays click-to-place).
+    /// **I** (Insert) / **T** (Text): arm text tool; if arming (not disarming) and the
+    /// pointer is not over the toolbar, place + edit at the cursor (toolbar tap stays click-to-place).
     func armTextToolFromHotkey() {
         if annotateTool == .text {
             toggleRefineTool(.text)
@@ -113,7 +113,7 @@ extension SelectionOverlayController {
         tv.textContainer?.containerSize = CGSize(width: 10_000, height: 10_000)
         tv.textContainerInset = NSSize(
             width: ann.textStyle.textPadding,
-            height: ann.textStyle.textPadding
+            height: ann.textStyle.textVerticalPadding
         )
         tv.delegate = TextEditingBridge.shared
         TextEditingBridge.shared.owner = self
@@ -134,6 +134,8 @@ extension SelectionOverlayController {
         )
         resizeTextEditorToFit()
         updateHighlight(showHandles: true)
+        updateHoveredText(at: NSEvent.mouseLocation)
+        updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
     func endTextEditing(commit: Bool) {
@@ -243,11 +245,11 @@ extension SelectionOverlayController {
         if style.hasBackground {
             tv.drawsBackground = true
             tv.backgroundColor = ContrastChrome.textPlate(behind: style.color)
-            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textPadding)
+            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textVerticalPadding)
         } else {
             tv.drawsBackground = false
             tv.backgroundColor = .clear
-            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textPadding)
+            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textVerticalPadding)
         }
         let sample: CGPoint
         if let chrome = textChromeView, let host = textEditorHost {
@@ -273,10 +275,12 @@ extension SelectionOverlayController {
         }()
         // Grow with glyphs (including IME marked / preedit); wrap only near the trailing screen edge.
         let maxW = max(40, host.screenFrame.width - chrome.frame.minX - 4)
-        let minH = ceil(style.makeFont().boundingRectForFont.height) + style.textPadding * 2
+        let minH = ceil(style.makeFont().boundingRectForFont.height) + style.textVerticalPadding * 2
         let size = tv.fittingSize(
             padding: style.textPadding,
-            caretWidth: TextStyle.caretWidth,
+            verticalPadding: style.textVerticalPadding,
+            caretWidth: style.caretWidth,
+            emptyWidth: style.emptyBoxWidth,
             minHeight: minH,
             maxWidth: maxW
         )
@@ -312,6 +316,164 @@ extension SelectionOverlayController {
         )
         textChromeView?.strokeColor = color
         textEditor?.insertionPointColor = color
+    }
+
+    /// One quick blink of the corner badges, acknowledging a badge press that changed nothing.
+    /// Reuses the drag-suppression flag, so it touches no marks, no history, and not the field
+    /// editor's first-responder status.
+    func blinkTextCornerBadges() {
+        guard textChromeView?.showsCornerBadges == true else { return }
+        suppressTextCornerBadges = true
+        textChromeView?.showsCornerBadges = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self, self.editingTextID != nil else { return }
+            self.suppressTextCornerBadges = false
+            self.updateHoveredText(at: NSEvent.mouseLocation)
+        }
+    }
+
+    /// Corner-drag resize of the mark currently being edited. Drives `fontSize` and lets the field
+    /// editor re-fit (as the wheel does), anchored on the corner opposite `handle` so the un-dragged
+    /// corner stays put. The editor is never closed — closing it is what used to delete a blank mark
+    /// and leave a click-to-place behind, so the mark appeared to jump to the badge.
+    ///
+    /// One press stays live across the whole range: drag inward past the anchor and the scale crosses
+    /// zero and grows again, so a single gesture sweeps max → min → max (Snipaste-style).
+    func resizeEditingTextByDrag(
+        handle: Handle,
+        startRect: CGRect,
+        startPoint: CGPoint,
+        point: CGPoint,
+        startStyle: TextStyle
+    ) {
+        let edges = handle.drivenEdges
+        // Scale comes straight from the drag, deliberately *not* via `resizedRectKeepingAspect`: its
+        // rect floors (`minAnnotation` = 4) pin a blank mark's 4.5pt-wide box the moment scale drops
+        // below 0.889, which freezes the aspect-locked height and caps one whole drag at ~11% shrink
+        // (72 → 64, release, 64 → 57, release …). Here the box is derived from `fontSize`, so
+        // `fontSize` is the only thing that needs bounding.
+        let anchorX = edges.x.opposite.coordinate(min: startRect.minX, max: startRect.maxX)
+        let anchorY = edges.y.opposite.coordinate(min: startRect.minY, max: startRect.maxY)
+        let cornerX = edges.x.coordinate(min: startRect.minX, max: startRect.maxX)
+        let cornerY = edges.y.coordinate(min: startRect.minY, max: startRect.maxY)
+        let baseX = cornerX - anchorX
+        let baseY = cornerY - anchorY
+        let baseLengthSquared = baseX * baseX + baseY * baseY
+        guard baseLengthSquared > 0.0001 else { return }
+        let dragX = baseX + (point.x - startPoint.x)
+        let dragY = baseY + (point.y - startPoint.y)
+        // `abs` is what lets the gesture continue past the minimum instead of dead-ending there:
+        // crossing the anchor flips the projection's sign, and the magnitude grows again.
+        let scale = abs((dragX * baseX + dragY * baseY) / baseLengthSquared)
+
+        var style = startStyle
+        style.fontSize = TextStyle.clampFontSize(startStyle.fontSize * scale)
+        let current = annotations.first(where: { $0.id == editingTextID })?.textStyle.fontSize
+        guard abs(style.fontSize - (current ?? startStyle.fontSize)) > 0.01 else { return }
+
+        applyTextStyle(
+            style,
+            persist: false,
+            editingAnchor: (x: edges.x.opposite, y: edges.y.opposite)
+        )
+        toolbar?.syncTextStyle(style)
+    }
+
+    // MARK: - Scroll-wheel font size
+
+    /// Editing mark, else the text under the pointer, else the selected text.
+    func textWheelResizeTarget(at point: CGPoint) -> UUID? {
+        if let id = editingTextID { return id }
+        if let id = textMarkID(at: point) { return id }
+        if let id = selectedAnnotationID,
+           annotations.first(where: { $0.id == id })?.isText == true {
+            return id
+        }
+        return nil
+    }
+
+    /// `true` when the event was consumed (including a trackpad tick that only accumulated).
+    @discardableResult
+    func handleTextScrollWheel(_ event: NSEvent) -> Bool {
+        guard phase == .refining, dragKind == nil else { return false }
+        guard let id = textWheelResizeTarget(at: NSEvent.mouseLocation) else { return false }
+        if annotationHistory.isGestureOpen, !isTextWheelGesture { return false }
+
+        let steps = textFontSizeWheelSteps(from: event)
+        guard steps != 0 else { return true }
+
+        if selectedAnnotationID != id {
+            annotationHistory.select(id)
+            if let ann = annotations.first(where: { $0.id == id }) {
+                syncToolbar(from: ann)
+            }
+        }
+
+        var style = annotations.first(where: { $0.id == id })?.textStyle ?? textStyle
+        let before = style.fontSize
+        style.nudgeFontSize(by: steps * textWheelPointsPerStep)
+        guard abs(style.fontSize - before) > 0.01 else { return true }
+        beginTextWheelResizeIfNeeded()
+        applyTextStyle(style)
+        toolbar?.syncTextStyle(style)
+        return true
+    }
+
+    func textFontSizeWheelSteps(from event: NSEvent) -> Int {
+        // Inertia after a flick would keep resizing on its own — only real finger / wheel motion counts.
+        guard event.momentumPhase == [] else { return 0 }
+        let dy = event.scrollingDeltaY
+        guard dy != 0 else { return 0 }
+        guard event.hasPreciseScrollingDeltas else { return dy > 0 ? 1 : -1 }
+
+        textWheelScrollAccum += dy
+        // Spend the accumulated travel, but no more than `textWheelMaxStepsPerEvent` per event: a
+        // fast flick arrives as one large-delta event, and draining it whole jumped ~20 pt (40 → 60).
+        // Keeping the remainder is what makes normal scrolling responsive — an earlier version zeroed
+        // it, which silently threw away most of a Magic Mouse / trackpad gesture's travel.
+        var steps = 0
+        var applied = 0
+        while applied < textWheelMaxStepsPerEvent,
+              abs(textWheelScrollAccum) >= textWheelPreciseThreshold {
+            if textWheelScrollAccum > 0 {
+                textWheelScrollAccum -= textWheelPreciseThreshold
+                steps += 1
+            } else {
+                textWheelScrollAccum += textWheelPreciseThreshold
+                steps -= 1
+            }
+            applied += 1
+        }
+        // Never bank a backlog past one step's worth, or a flick that outran the cap would keep
+        // stepping on later events after the fingers stopped.
+        textWheelScrollAccum = min(
+            textWheelPreciseThreshold,
+            max(-textWheelPreciseThreshold, textWheelScrollAccum)
+        )
+        return steps
+    }
+
+    func beginTextWheelResizeIfNeeded() {
+        if !isTextWheelGesture {
+            annotationHistory.beginGesture()
+            isTextWheelGesture = true
+        }
+        textWheelResizeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.endTextWheelResizeIfNeeded()
+        }
+        textWheelResizeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + textWheelGestureIdle, execute: work)
+    }
+
+    func endTextWheelResizeIfNeeded() {
+        textWheelResizeWork?.cancel()
+        textWheelResizeWork = nil
+        textWheelScrollAccum = 0
+        guard isTextWheelGesture else { return }
+        isTextWheelGesture = false
+        annotationHistory.endGesture()
+        refreshHistoryChrome()
     }
 
     func freezeLuminance(at globalPoint: CGPoint) -> CGFloat {

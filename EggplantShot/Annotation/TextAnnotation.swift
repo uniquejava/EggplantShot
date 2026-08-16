@@ -19,11 +19,56 @@ struct TextStyle: Equatable {
     )
 
     static let fontSizeChoices: [CGFloat] = [8, 10, 12, 14, 16, 18, 24, 28, 36]
-    /// Insertion-point width used only when the string is empty (matches 1px hairline at 2x).
-    static let caretWidth: CGFloat = 0.5
+    /// Wheel / corner-resize / prefs range. Sized for a screenshot annotation, not a poster:
+    /// 6 pt is the smallest still-legible label (1 pt was invisible, and a caret-wide box is what
+    /// made corner-drag leverage hair-trigger), 72 pt is 2× the largest deliberate toolbar choice —
+    /// a big callout on a 5K grab is ~4% of frame height. Applies to **input** paths only; decode
+    /// keeps a saved snip's stored size verbatim so old snips render identically.
+    static let fontSizeMin: CGFloat = 6
+    static let fontSizeMax: CGFloat = 72
+    /// Thinnest the caret ever draws — 1px hairline at 2x, the floor for very small type.
+    static let caretWidthFloor: CGFloat = 0.5
+
+    /// Caret thickness that reads like the text's own stem, so an empty box previews the weight
+    /// you are about to type at rather than showing a hairline at every size. Divisors are fitted to
+    /// the system font's measured stem ink (`l` rasterised at 4x): ~size/11 regular, ~size/7 bold.
+    /// Static so the field editor can derive the same value straight from its own `NSFont`.
+    static func caretWidth(forFontSize size: CGFloat, isBold: Bool) -> CGFloat {
+        max(caretWidthFloor, size / (isBold ? 7 : 11))
+    }
+
+    var caretWidth: CGFloat { Self.caretWidth(forFontSize: fontSize, isBold: isBold) }
+
+    /// Clamp into the supported range, dropping NaN / infinity to the default.
+    /// Every path that can produce a `fontSize` — wheel, corner resize, prefs — goes through this.
+    static func clampFontSize(_ value: CGFloat) -> CGFloat {
+        guard value.isFinite else { return TextStyle.default.fontSize }
+        return min(fontSizeMax, max(fontSizeMin, value))
+    }
+
+    /// Snap to a whole point, then step. Used by scroll-wheel resize.
+    mutating func nudgeFontSize(by steps: Int) {
+        guard steps != 0 else { return }
+        let base = fontSize.rounded()
+        fontSize = Self.clampFontSize(base + CGFloat(steps))
+    }
 
     /// Tight wrap around glyphs (and the caret when empty).
     var textPadding: CGFloat { hasBackground ? 3 : 2 }
+
+    /// Breathing room either side of the caret in an *empty* box. The caret thickens with `fontSize`,
+    /// so a fixed 2pt would leave a 72pt caret almost touching the frame — scale the padding with it
+    /// and the caret always occupies the middle third of the box.
+    var emptyCaretPadding: CGFloat { max(textPadding, caretWidth) }
+
+    /// Width of an empty text box: the caret plus its own padding, so the caret can sit centred.
+    var emptyBoxWidth: CGFloat { caretWidth + emptyCaretPadding * 2 }
+
+    /// Vertical breathing room. `textPadding`'s 2pt reads cramped — glyphs and the caret sit almost
+    /// on the frame — so the box gets more room top and bottom, scaled gently with the font.
+    /// Only the *fitting* uses this; `drawText` centres the glyph block in whatever rect it is given,
+    /// so marks saved before this existed still fit (they shift down by ≤2pt — see `drawText`).
+    var textVerticalPadding: CGFloat { max(textPadding * 2, fontSize * 0.12) }
 
     /// System UI font with bold / italic traits.
     func makeFont() -> NSFont {
@@ -60,7 +105,9 @@ enum TextAnnotationPrefs {
             style.color = swatch.color
         }
         if defaults.object(forKey: fontSizeKey) != nil {
-            style.fontSize = CGFloat(defaults.double(forKey: fontSizeKey))
+            // Clamp on read: a stored value can predate the 1…128 range (an unbounded corner
+            // resize once persisted sizes in the hundreds) or be hand-edited in the plist.
+            style.fontSize = TextStyle.clampFontSize(CGFloat(defaults.double(forKey: fontSizeKey)))
         }
         style.isBold = defaults.bool(forKey: boldKey)
         style.isItalic = defaults.bool(forKey: italicKey)

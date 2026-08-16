@@ -25,13 +25,47 @@ private func textHairlineWidth(in view: NSView) -> CGFloat {
 
 /// Transparent host that paints a Snipaste-style hairline edit frame (no fill).
 /// Stroke is white on dark backdrops, black on light — matches the insertion point.
+/// When `showsCornerBadges` is set (pointer over the field), an overlay draws the white
+/// frame + 4 corner badges **above** the field editor.
 final class TextEditChromeView: NSView {
     var strokeColor: NSColor = .white {
         didSet { needsDisplay = true }
     }
 
+    /// Hover chrome while editing: solid white frame + 3 resize badges + close (X).
+    var showsCornerBadges = false {
+        didSet {
+            guard showsCornerBadges != oldValue else { return }
+            badgesOverlay.isHidden = !showsCornerBadges
+            needsDisplay = true
+        }
+    }
+
+    private let badgesOverlay = TextCornerBadgesOverlay()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        badgesOverlay.frame = bounds
+        badgesOverlay.autoresizingMask = [.width, .height]
+        badgesOverlay.isHidden = true
+        addSubview(badgesOverlay)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
     override var isOpaque: Bool { false }
     override var wantsDefaultClipping: Bool { false }
+
+    override func didAddSubview(_ subview: NSView) {
+        super.didAddSubview(subview)
+        // Field editor is added after init — keep badges painted on top.
+        if subview !== badgesOverlay {
+            addSubview(badgesOverlay, positioned: .above, relativeTo: nil)
+        }
+    }
 
     override func resetCursorRects() {}
     override func cursorUpdate(with event: NSEvent) {
@@ -39,11 +73,24 @@ final class TextEditChromeView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard !showsCornerBadges else { return } // overlay owns the frame while hovered
         let w = textHairlineWidth(in: self)
         strokeColor.setStroke()
         let border = NSBezierPath(rect: bounds.insetBy(dx: w / 2, dy: w / 2))
         border.lineWidth = w
         border.stroke()
+    }
+}
+
+/// Draws Snipaste text corner chrome above the field editor; ignores hits (monitor owns them).
+private final class TextCornerBadgesOverlay: NSView {
+    override var isOpaque: Bool { false }
+    override var wantsDefaultClipping: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let w = textHairlineWidth(in: self)
+        AnnotationDrawing.drawTextResizeChrome(in: bounds, lineWidth: w)
     }
 }
 
@@ -70,6 +117,17 @@ final class AnnotationTextView: NSTextView {
     private var caretBlinkTimer: Timer?
     private var caretOn = true
     private var lastCaretRect: NSRect = .zero
+    /// Caret thickness from the view's **own** font, so it is correct on the very first frame and can
+    /// never drift from what is being typed. This was a stored property fed by `applyTextStyleToEditor`,
+    /// which `startTextEditing` does not call — so a fresh box drew the hairline floor until some
+    /// later resize happened to re-apply the style.
+    private var caretThickness: CGFloat {
+        guard let font else { return TextStyle.caretWidthFloor }
+        return TextStyle.caretWidth(
+            forFontSize: font.pointSize,
+            isBold: font.fontDescriptor.symbolicTraits.contains(.bold)
+        )
+    }
     /// Live-fit the chrome; IME marked text does not post `textDidChange` until commit.
     var onNeedsFit: (() -> Void)?
 
@@ -193,13 +251,27 @@ final class AnnotationTextView: NSTextView {
     }
 
     private func placeHairlineCaret(in rect: NSRect) {
-        let w = textHairlineWidth(in: self)
+        // Thickness tracks `fontSize` (see `TextStyle.caretWidth`) so the caret previews the weight
+        // of the text about to be typed; never thinner than one device pixel.
+        let w = max(textHairlineWidth(in: self), caretThickness)
         let scale = max(window?.backingScaleFactor ?? 2, 1)
-        // System indicator is a narrow bar (use midX). Line-fragment fallbacks are wide (use minX).
-        let caretX = rect.width <= 4 ? rect.midX - w / 2 : rect.minX
+        let caretX: CGFloat
+        if isEmptyForCaret {
+            // An empty box exists only to host the caret, so centre it in the box. TextKit reports the
+            // caret at the *text origin* (x ≈ padding); centring a thick caret on that put its left
+            // half outside the frame and left dead space on the right.
+            caretX = bounds.midX - w / 2
+        } else if rect.width <= 4 {
+            caretX = rect.midX - w / 2  // system indicator is a narrow bar
+        } else {
+            caretX = rect.minX  // line-fragment fallbacks are wide
+        }
         let x = (caretX * scale).rounded() / scale
         hairlineCaret.frame = NSRect(x: x, y: rect.minY, width: w, height: max(rect.height, 1))
     }
+
+    /// No committed text and no IME preedit — the caret-only state.
+    private var isEmptyForCaret: Bool { string.isEmpty && markedRange().length == 0 }
 
     /// Prefer the last system caret rect (captured before hiding the indicator).
     private func insertionCaretRect() -> NSRect? {
@@ -266,6 +338,14 @@ final class AnnotationTextView: NSTextView {
         stopCaretBlink()
     }
 
+    /// Overlay monitor owns wheel-resize; don't let TextKit scroll the field.
+    override func scrollWheel(with event: NSEvent) {
+        if TextEditingBridge.shared.owner?.handleTextScrollWheel(event) == true {
+            return
+        }
+        super.scrollWheel(with: event)
+    }
+
     override func didChangeText() {
         super.didChangeText()
         onNeedsFit?()
@@ -284,13 +364,17 @@ final class AnnotationTextView: NSTextView {
     /// Size from laid-out glyphs (includes IME preedit). Width is glyphs + padding only.
     func fittingSize(
         padding: CGFloat,
+        verticalPadding: CGFloat,
         caretWidth: CGFloat,
+        emptyWidth: CGFloat,
         minHeight: CGFloat,
         maxWidth: CGFloat
     ) -> CGSize {
-        if string.isEmpty, markedRange().length == 0 {
-            let caret = textHairlineWidth(in: self)
-            return CGSize(width: padding * 2 + caret, height: minHeight)
+        if isEmptyForCaret {
+            // Caret-only: `emptyWidth` already carries the caret's own padding either side, so the
+            // caret can sit centred (see `TextStyle.emptyBoxWidth`).
+            let floorWidth = padding * 2 + textHairlineWidth(in: self)
+            return CGSize(width: max(emptyWidth, floorWidth), height: minHeight)
         }
         guard let lm = layoutManager, let tc = textContainer else {
             return CGSize(width: padding * 2 + caretWidth, height: minHeight)
@@ -301,14 +385,14 @@ final class AnnotationTextView: NSTextView {
         var used = lm.usedRect(for: tc)
         let glyphW = max(ceil(used.maxX), caretWidth)
         var width = glyphW + padding * 2
-        var height = ceil(used.height) + padding * 2
+        var height = ceil(used.height) + verticalPadding * 2
         if width > maxWidth {
             let inner = max(maxWidth - padding * 2, 12)
             tc.containerSize = CGSize(width: inner, height: 10_000)
             lm.ensureLayout(for: tc)
             used = lm.usedRect(for: tc)
             width = maxWidth
-            height = ceil(used.height) + padding * 2
+            height = ceil(used.height) + verticalPadding * 2
         }
         tc.containerSize = saved
         return CGSize(

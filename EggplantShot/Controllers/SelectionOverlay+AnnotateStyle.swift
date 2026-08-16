@@ -80,6 +80,8 @@ extension SelectionOverlayController {
         switch annotationPointerTarget(at: point) {
         case .handle(_, let handle):
             resizeCursor(for: handle).set()
+        case .textClose:
+            NSCursor.arrow.set()
         case .arrowEndpoint:
             AnnotationCursors.move.set()
         case .border:
@@ -291,18 +293,54 @@ extension SelectionOverlayController {
         updateOverlayCursor(at: NSEvent.mouseLocation)
     }
 
-    func applyTextStyle(_ style: TextStyle) {
+    /// Push `style` into the open field editor and sync the mark's rect back from the resulting
+    /// chrome frame. `anchor` is `nil` for the toolbar / wheel (keep `resizeTextEditorToFit`'s
+    /// top-anchored growth) and set mid-corner-resize so the un-dragged corner stays put.
+    func syncEditingTextStyle(
+        _ style: TextStyle,
+        anchor: (x: RectEdgeAnchor, y: RectEdgeAnchor)? = nil
+    ) {
+        guard let id = editingTextID else { return }
+        applyTextStyleToEditor(style)
+        if let anchor {
+            anchorEditingChrome(anchorX: anchor.x, anchorY: anchor.y)
+        }
+        guard let live = editingTextGlobalRect() else { return }
+        let local = toLocal(live)
+        annotationHistory.commit { doc in
+            guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
+            doc.marks[idx].rect = local
+        }
+        textEditBaselineRect = local
+    }
+
+    /// `persist: false` while a drag is in flight — mouse-up saves once. Writing prefs per tick is
+    /// how a runaway corner-resize once persisted an out-of-range `fontSize` as the new default.
+    /// `editingAnchor` is set only by corner-resize, to keep the un-dragged corner fixed.
+    func applyTextStyle(
+        _ style: TextStyle,
+        persist: Bool = true,
+        editingAnchor: (x: RectEdgeAnchor, y: RectEdgeAnchor)? = nil
+    ) {
         textStyle = style
-        TextAnnotationPrefs.save(style)
+        if persist {
+            TextAnnotationPrefs.save(style)
+        }
         if let id = selectedAnnotationID,
            let selected = annotations.first(where: { $0.id == id }),
            selected.isText {
+            let editing = editingTextID == id
             annotationHistory.commit { doc in
                 guard let idx = doc.marks.firstIndex(where: { $0.id == id }) else { return }
-                doc.marks[idx].textStyle = style
+                if editing {
+                    // Live editor owns the box; style only here, rect synced after fit.
+                    doc.marks[idx].textStyle = style
+                } else {
+                    doc.marks[idx].setTextStyleKeepingTopLeft(style)
+                }
             }
-            if editingTextID == id {
-                applyTextStyleToEditor(style)
+            if editing {
+                syncEditingTextStyle(style, anchor: editingAnchor)
             }
             updateHighlight(showHandles: true)
             refreshHistoryChrome()

@@ -2,6 +2,90 @@ import AppKit
 
 // Shared mark geometry: bounds, translate, resize-map.
 
+/// Which edge of a rect stays put on one axis when the rect is re-laid-out.
+///
+/// One fact, two derivations. A resize handle knows its anchor outright
+/// (`SelectionOverlayController.Handle.drivenEdges`, inverted via `opposite`); `mapBoundingRect` has
+/// only the before / after rects and recovers it with `init(minFixed:maxFixed:)`. Both then place
+/// through `Annotation.placed`, so the layout arithmetic exists in exactly one spot.
+enum RectEdgeAnchor {
+    case min, mid, max
+
+    /// The anchor on the far side — a handle drives one edge and pivots on this one.
+    var opposite: RectEdgeAnchor {
+        switch self {
+        case .min: return .max
+        case .mid: return .mid
+        case .max: return .min
+        }
+    }
+
+    /// Recovers the anchor when only the before / after rects are known: exactly one fixed edge
+    /// anchors that axis, both or neither centers it.
+    init(minFixed: Bool, maxFixed: Bool) {
+        if minFixed && !maxFixed {
+            self = .min
+        } else if maxFixed && !minFixed {
+            self = .max
+        } else {
+            self = .mid
+        }
+    }
+
+    /// The coordinate this anchor names between `lo` and `hi`.
+    func coordinate(min lo: CGFloat, max hi: CGFloat) -> CGFloat {
+        switch self {
+        case .min: return lo
+        case .mid: return (lo + hi) / 2
+        case .max: return hi
+        }
+    }
+
+    /// Origin for a span of `extent` laid between `lo` and `hi` with this edge anchored.
+    func origin(min lo: CGFloat, max hi: CGFloat, extent: CGFloat) -> CGFloat {
+        switch self {
+        case .min: return lo
+        case .mid: return (lo + hi) / 2 - extent / 2
+        case .max: return hi - extent
+        }
+    }
+
+    /// Moves whichever edge this anchor names by `delta`; `.mid` leaves the axis alone.
+    func shift(min lo: inout CGFloat, max hi: inout CGFloat, by delta: CGFloat) {
+        switch self {
+        case .min: lo += delta
+        case .mid: break
+        case .max: hi += delta
+        }
+    }
+
+    /// Snaps whichever edge this anchor names onto `value`; `.mid` leaves the axis alone.
+    func snap(min lo: inout CGFloat, max hi: inout CGFloat, to value: CGFloat) {
+        switch self {
+        case .min: lo = value
+        case .mid: break
+        case .max: hi = value
+        }
+    }
+}
+
+extension Annotation {
+    /// Lays `size` into `bounds` keeping the anchored edge on each axis put.
+    static func placed(
+        size: CGSize,
+        in bounds: CGRect,
+        anchorX: RectEdgeAnchor,
+        anchorY: RectEdgeAnchor
+    ) -> CGRect {
+        CGRect(
+            x: anchorX.origin(min: bounds.minX, max: bounds.maxX, extent: size.width),
+            y: anchorY.origin(min: bounds.minY, max: bounds.maxY, extent: size.height),
+            width: size.width,
+            height: size.height
+        )
+    }
+}
+
 extension Annotation {
     /// Rect / oval region of a paint mark (marker / mosaic / eraser). `nil` for freehand strokes
     /// and every other payload — those have no body to grab.
@@ -117,8 +201,23 @@ extension Annotation {
         case .eraser(let geometry, let style):
             guard let mapped = geometry.mapped(from: old, to: newBounds, brushWidth: style.brushWidth) else { return }
             payload = .eraser(mapped, style: style)
-        case .text(let string, _, let style):
-            payload = .text(string: string, rect: newBounds, style: style)
+        case .text(let string, let oldRect, var style):
+            // Uniform font scale (aspect-locked resize so sx ≈ sy).
+            let scaleW = old.width > 0.001 ? newBounds.width / old.width : 1
+            let scaleH = old.height > 0.001 ? newBounds.height / old.height : 1
+            let scale = (scaleW + scaleH) / 2
+            // Clamp to the same 1…128 the wheel and prefs use. Only the floor was applied here, and
+            // the aspect scale grows as 1/|diagonal|² — so a long corner drag on a short box (an
+            // *empty* mark is caret-wide, ~4.5 pt) reached fontSize in the hundreds.
+            style.fontSize = TextStyle.clampFontSize(style.fontSize * scale)
+            // Re-fit to glyphs — a purely scaled frame can be ~1pt short and clip the last character.
+            let fitted = Annotation.fittingTextSize(string: string, style: style)
+            let rect = Self.anchoredTextRect(
+                fittedSize: fitted,
+                newBounds: newBounds,
+                oldBounds: oldRect
+            )
+            payload = .text(string: string, rect: rect, style: style)
         case .step(let number, _, let style):
             // Steps keep aspect via center; resize chrome is disabled — keep center of newBounds.
             payload = .step(
@@ -156,5 +255,27 @@ extension Annotation {
             maxY = max(maxY, p.y)
         }
         return CGRect(x: minX, y: minY, width: max(maxX - minX, 1), height: max(maxY - minY, 1))
+    }
+
+    /// Place a re-fitted text box so the resize-fixed edges of `oldBounds` stay put in `newBounds`.
+    private static func anchoredTextRect(
+        fittedSize: CGSize,
+        newBounds: CGRect,
+        oldBounds: CGRect
+    ) -> CGRect {
+        // No `Handle` reaches this far, so recover the anchor by comparing the two rects.
+        let tol: CGFloat = 1
+        return placed(
+            size: fittedSize,
+            in: newBounds,
+            anchorX: RectEdgeAnchor(
+                minFixed: abs(newBounds.minX - oldBounds.minX) < tol,
+                maxFixed: abs(newBounds.maxX - oldBounds.maxX) < tol
+            ),
+            anchorY: RectEdgeAnchor(
+                minFixed: abs(newBounds.minY - oldBounds.minY) < tol,
+                maxFixed: abs(newBounds.maxY - oldBounds.maxY) < tol
+            )
+        )
     }
 }

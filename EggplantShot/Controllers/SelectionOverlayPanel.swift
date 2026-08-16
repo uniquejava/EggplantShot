@@ -76,6 +76,7 @@ final class SelectionPanel: NSPanel {
         hoveredTextID: UUID?,
         hoveredPaintRegionID: UUID? = nil,
         showSolidMarkerRegionBorder: Bool = false,
+        hideTextCornerBadges: Bool = false,
         hiddenMagnifierSourceIDs: Set<UUID> = []
     ) {
         let local: CGRect
@@ -101,6 +102,7 @@ final class SelectionPanel: NSPanel {
         overlayView.hoveredTextID = hoveredTextID
         overlayView.hoveredPaintRegionID = hoveredPaintRegionID
         overlayView.showSolidMarkerRegionBorder = showSolidMarkerRegionBorder
+        overlayView.hideTextCornerBadges = hideTextCornerBadges
         overlayView.hiddenMagnifierSourceIDs = hiddenMagnifierSourceIDs
         overlayView.needsDisplay = true
     }

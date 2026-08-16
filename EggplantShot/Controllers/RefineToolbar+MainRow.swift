@@ -40,7 +40,7 @@ extension RefineToolbarController {
         )
         textButton = iconButton(
             image: textToolIcon(),
-            tooltip: L10n.tr("Text (I)"),
+            tooltip: L10n.tr("Text (I / T)"),
             enabled: true,
             action: #selector(textTapped)
         )
