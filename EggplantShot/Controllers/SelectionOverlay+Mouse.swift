@@ -632,9 +632,17 @@ extension SelectionOverlayController {
 
         case .border(let id):
             guard var ann = annotations.first(where: { $0.id == id }) else { return }
-            // While editing, use the live chrome geometry as the move baseline.
+            // While editing, use the live chrome geometry as the move baseline. Assign the rect
+            // rather than `mapBoundingRect`: that reads any box change as a *resize* and rescales
+            // `fontSize` by it, and the model rect here is stale by construction — typing only
+            // re-fits the chrome (`resizeTextEditorToFit`), so the mark still holds the box from
+            // the last commit. Grabbing the border after typing a few words therefore multiplied
+            // the font by the width ratio (a sentence pinned it at `fontSizeMax`), silently: the
+            // field editor keeps its own font, so nothing looked wrong until the editor closed and
+            // the mark redrew at the inflated size. Same rect the fit path commits — see
+            // `syncEditingTextStyle`.
             if id == editingTextID, let live = editingTextGlobalRect() {
-                ann.mapBoundingRect(to: toLocal(live))
+                ann.rect = toLocal(live)
                 textChromeDragStartFrame = textChromeView?.frame
             } else {
                 textChromeDragStartFrame = nil
