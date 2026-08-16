@@ -64,7 +64,7 @@ final class SnipController {
             )
             switch outcome {
             case .discarded:
-                break
+                pinBoard.endAnnotating(id)
             case .applied(let document):
                 // Marks stay data on the pin, so this session can be re-opened and edited again.
                 pinBoard.applyDocument(document, to: id)

@@ -117,7 +117,14 @@ final class PinBoardController: ObservableObject {
         revealAllIfHidden()
         panel.resetZoomToNaturalSize()
         panel.orderFrontRegardless()
+        // The lid owns the marks for the duration; the pin shows only its base so they don't double.
+        panel.setShowsBaseOnly(true)
         return (panel.annotationBase, panel.annotationDocument, panel.imageRectOnScreen)
+    }
+
+    /// Session ended without applying: put the pin's existing marks back on screen.
+    func endAnnotating(_ id: UUID) {
+        panels[id]?.setShowsBaseOnly(false)
     }
 
     /// A pin-edit session applied its marks. They stay editable: the pin keeps the document and

@@ -138,6 +138,13 @@ final class PinPanel: NSPanel {
         chromeView.setImage(image)
     }
 
+    /// While a pin-edit session is open the lid draws the marks, so the pin itself must show the
+    /// bare base. Otherwise every mark renders twice — once baked in here, once live on the lid —
+    /// and dragging the live one looks like it spawned a copy.
+    func setShowsBaseOnly(_ showsBaseOnly: Bool) {
+        chromeView.setImage(showsBaseOnly ? baseImage : image)
+    }
+
     /// Back to 1:1 before annotating: mark geometry is in image points and nothing in the annotate
     /// stack threads a zoom factor, so editing a zoomed pin would place marks at the wrong scale.
     func resetZoomToNaturalSize() {
