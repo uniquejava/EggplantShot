@@ -67,11 +67,17 @@ final class SelectionOverlayController {
     var escapeHintHideWork: DispatchWorkItem?
 
     /// Shared snip history for `,` / `.` playback (owned by `SnipController`).
+    /// Left unset on a pin-edit controller, which is what makes `,` / `.` inert there.
     var historyStore: SnipHistoryStore?
     /// Index into `historyStore.records` while browsing; `nil` = not browsing.
     var historyCursor: Int?
     /// When set, refine/confirm uses this unannotated base instead of cropping the live freeze.
     var playbackBaseImage: NSImage?
+
+    /// Set for a pin-edit session: annotate an existing pinned bitmap in place, with no freeze,
+    /// no dim and no crop. The one flag every capture-only path is gated on.
+    var pinEdit: PinEditContext?
+    var pinEditContinuation: CheckedContinuation<PinEditOutcome, Never>?
 
     /// Snapshot of app windows taken before overlays cover the screen.
     var windowHitTester = WindowHitTester.snapshot()
@@ -184,7 +190,7 @@ final class SelectionOverlayController {
         case outside
     }
 
-    var isActive: Bool { continuation != nil }
+    var isActive: Bool { continuation != nil || pinEditContinuation != nil }
 
     func beginSelection(
         primaryAction: ConfirmAction = .pin,
@@ -224,6 +230,11 @@ final class SelectionOverlayController {
     }
 
     func confirm(_ action: ConfirmAction) {
+        // A pin already exists: Apply keeps it with the marks on it, Copy / Save bake and close it.
+        if pinEdit != nil {
+            confirmPinEdit(action)
+            return
+        }
         endTextEditing(commit: true)
         guard !currentRect.isNull,
               currentRect.width >= minSelection,
@@ -254,6 +265,10 @@ final class SelectionOverlayController {
 
     /// Crop selection → dismiss overlay → QR / OCR → hand text to `SnipController` (clipboard + sound).
     func performOCR() {
+        if pinEdit != nil {
+            performPinEditOCR()
+            return
+        }
         endTextEditing(commit: true)
         guard !currentRect.isNull,
               currentRect.width >= minSelection,
@@ -375,6 +390,7 @@ final class SelectionOverlayController {
         discardTextEditor()
         historyCursor = nil
         playbackBaseImage = nil
+        pinEdit = nil
         phase = .idle
         // Don't NSCursor.arrow.set() — previous app restores its own cursor when it becomes key.
     }

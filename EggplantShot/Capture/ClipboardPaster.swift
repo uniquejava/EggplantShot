@@ -4,6 +4,13 @@ import UniformTypeIdentifiers
 
 /// Converts clipboard content into a pin-ready bitmap (Snipaste-style Paste).
 enum ClipboardPaster {
+    /// A pin-ready bitmap plus the string it was rendered *from*, when there was one — that is what
+    /// the pin’s “Copy plain text” gives back. `nil` for real bitmaps (those OCR instead).
+    struct PasteResult {
+        let image: NSImage
+        let sourceText: String?
+    }
+
     private static let imageExtensions: Set<String> = [
         "png", "jpg", "jpeg", "bmp", "tga", "ico", "tif", "tiff", "gif", "heic", "webp",
     ]
@@ -12,7 +19,7 @@ enum ClipboardPaster {
     private static var lastPastedImageFileURLs: [URL]?
 
     /// Best-effort conversion. Returns `nil` when the pasteboard has nothing we can pin.
-    static func imageFromPasteboard(_ pasteboard: NSPasteboard = .general) -> NSImage? {
+    static func imageFromPasteboard(_ pasteboard: NSPasteboard = .general) -> PasteResult? {
         // File URLs first so Finder copies keep Snipaste’s “paste again → path text” behaviour
         // even when the pasteboard also carries an image preview.
         if let urls = readFileURLs(from: pasteboard), !urls.isEmpty {
@@ -21,25 +28,27 @@ enum ClipboardPaster {
 
         if let image = readImage(from: pasteboard) {
             lastPastedImageFileURLs = nil
-            return image
+            return PasteResult(image: image, sourceText: nil)
         }
 
         if let colorText = readPlainString(from: pasteboard),
            let color = parseColor(from: colorText) {
             lastPastedImageFileURLs = nil
-            return renderColorCard(color, label: colorText.trimmingCharacters(in: .whitespacesAndNewlines))
+            let label = colorText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return PasteResult(image: renderColorCard(color, label: label), sourceText: label)
         }
 
         if let html = readHTML(from: pasteboard),
-           let image = renderHTML(html) {
+           let rendered = renderHTML(html) {
             lastPastedImageFileURLs = nil
-            return image
+            // The readable text, not the markup — that is what pasting the pin back should yield.
+            return PasteResult(image: rendered.image, sourceText: rendered.plainText)
         }
 
         if let text = readPlainString(from: pasteboard),
            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             lastPastedImageFileURLs = nil
-            return renderText(text)
+            return PasteResult(image: renderText(text), sourceText: text)
         }
 
         return nil
@@ -100,14 +109,14 @@ enum ClipboardPaster {
         return nil
     }
 
-    private static func imageFromFileURLs(_ urls: [URL]) -> NSImage? {
+    private static func imageFromFileURLs(_ urls: [URL]) -> PasteResult? {
         let normalized = urls.map { $0.standardizedFileURL }
         if let last = lastPastedImageFileURLs,
            last == normalized {
             // Second paste of the same image file(s) → path text (Snipaste parity).
             lastPastedImageFileURLs = nil
             let paths = normalized.map(\.path).joined(separator: "\n")
-            return renderText(paths)
+            return PasteResult(image: renderText(paths), sourceText: paths)
         }
 
         let imageURLs = normalized.filter { isImageFile($0) }
@@ -115,13 +124,13 @@ enum ClipboardPaster {
            let image = NSImage(contentsOf: first),
            image.size.width > 0, image.size.height > 0 {
             lastPastedImageFileURLs = normalized
-            return image
+            return PasteResult(image: image, sourceText: nil)
         }
 
         // Non-image file(s) → path as text image.
         lastPastedImageFileURLs = nil
         let paths = normalized.map(\.path).joined(separator: "\n")
-        return renderText(paths)
+        return PasteResult(image: renderText(paths), sourceText: paths)
     }
 
     private static func isImageFile(_ url: URL) -> Bool {
@@ -282,7 +291,7 @@ enum ClipboardPaster {
         return renderAttributedText(NSAttributedString(string: text, attributes: attrs))
     }
 
-    private static func renderHTML(_ html: String) -> NSImage? {
+    private static func renderHTML(_ html: String) -> (image: NSImage, plainText: String)? {
         let data = Data(html.utf8)
         let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
             .documentType: NSAttributedString.DocumentType.html,
@@ -294,7 +303,7 @@ enum ClipboardPaster {
         // If HTML is empty of visible text, skip so plain-text / files can try.
         let plain = attributed.string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !plain.isEmpty else { return nil }
-        return renderAttributedText(attributed)
+        return (renderAttributedText(attributed), plain)
     }
 
     private static func renderAttributedText(_ attributed: NSAttributedString) -> NSImage {

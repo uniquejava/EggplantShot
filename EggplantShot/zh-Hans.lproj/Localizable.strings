@@ -64,6 +64,9 @@
 "Image %@" = "贴图 %@";
 "Copy Image" = "复制图片";
 "Save Image As…" = "图片另存为…";
+"Copy plain text" = "复制纯文本";
+"Extract text and copy" = "提取文字并复制";
+"Show toolbar" = "显示工具栏";
 "Stay on Top" = "保持置顶";
 "Shadow" = "阴影";
 "Close" = "关闭";
@@ -86,6 +89,7 @@
 "Redo (⇧⌘Z)" = "重做 (⇧⌘Z)";
 "OCR/QR code (O)" = "OCR/二维码 (O)";
 "Cancel (Esc)" = "取消 (Esc)";
+"Apply (Return)" = "应用 (Return)";
 "Pin (P)" = "钉住 (P)";
 "Save (⌘S)" = "保存 (⌘S)";
 "Copy (⌘C)" = "复制 (⌘C)";

@@ -64,6 +64,9 @@
 "Image %@" = "Image %@";
 "Copy Image" = "Copy Image";
 "Save Image As…" = "Save Image As…";
+"Copy plain text" = "Copy plain text";
+"Extract text and copy" = "Extract text and copy";
+"Show toolbar" = "Show toolbar";
 "Stay on Top" = "Stay on Top";
 "Shadow" = "Shadow";
 "Close" = "Close";
@@ -86,6 +89,7 @@
 "Redo (⇧⌘Z)" = "Redo (⇧⌘Z)";
 "OCR/QR code (O)" = "OCR/QR code (O)";
 "Cancel (Esc)" = "Cancel (Esc)";
+"Apply (Return)" = "Apply (Return)";
 "Pin (P)" = "Pin (P)";
 "Save (⌘S)" = "Save (⌘S)";
 "Copy (⌘C)" = "Copy (⌘C)";

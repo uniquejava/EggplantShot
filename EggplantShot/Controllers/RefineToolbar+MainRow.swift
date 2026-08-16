@@ -1,7 +1,10 @@
 import AppKit
 
 extension RefineToolbarController {
-    func buildMainRow(primaryAction: SelectionOverlayController.ConfirmAction) -> NSView {
+    func buildMainRow(
+        primaryAction: SelectionOverlayController.ConfirmAction,
+        appliesInPlace: Bool = false
+    ) -> NSView {
         selectButton = iconButton(
             systemName: "cursorarrow",
             tooltip: L10n.tr("Move (V)"),
@@ -99,7 +102,11 @@ extension RefineToolbarController {
         ]
 
         let cancel = iconButton(systemName: "xmark", tooltip: L10n.tr("Cancel (Esc)"), enabled: true, action: #selector(cancelTapped))
-        let pin = iconButton(systemName: "pin.fill", tooltip: L10n.tr("Pin (P)"), enabled: true, action: #selector(pinTapped))
+        // Editing a pin in place: the same button applies the marks to the pin that already exists,
+        // so it reads as a checkmark rather than “make a pin”.
+        let pin = appliesInPlace
+            ? iconButton(systemName: "checkmark", tooltip: L10n.tr("Apply (Return)"), enabled: true, action: #selector(pinTapped))
+            : iconButton(systemName: "pin.fill", tooltip: L10n.tr("Pin (P)"), enabled: true, action: #selector(pinTapped))
         let save = iconButton(systemName: "square.and.arrow.down", tooltip: L10n.tr("Save (⌘S)"), enabled: true, action: #selector(saveTapped))
         let copy = iconButton(systemName: "doc.on.doc", tooltip: L10n.tr("Copy (⌘C)"), enabled: true, action: #selector(copyTapped))
         let more = iconButton(systemName: "ellipsis", tooltip: L10n.tr("More"), enabled: false, action: nil)

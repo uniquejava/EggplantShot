@@ -30,6 +30,10 @@ final class SelectionOverlayNSView: NSView {
     var hideTextCornerBadges = false
     /// Magnifier nested source frames to skip while decluttering (≥2 magnifiers, tool inactive).
     var hiddenMagnifierSourceIDs: Set<UUID> = []
+    /// Pin-edit: annotate a pinned bitmap in place. Set to that bitmap and this view becomes a bare
+    /// marks layer over the pin panel showing through — no freeze backdrop, dim, crop chrome or size
+    /// badge — and effect tools sample the bitmap instead of the freeze.
+    var pinEditImage: NSImage?
     var onCursorUpdate: (() -> Void)?
     var cursorMode: CursorMode = .selectingPlus {
         didSet {
@@ -41,6 +45,12 @@ final class SelectionOverlayNSView: NSView {
     private let freezeImage: NSImage?
     private let accent = NSColor.systemBlue
     private var cursorTrackingArea: NSTrackingArea?
+
+    private var isPinEdit: Bool { pinEditImage != nil }
+
+    /// Extra reach outside the bitmap for handles / badges that straddle its edge. Shared with the
+    /// controller's event routing so clicks and hit-tests agree on what a pin-edit session owns.
+    static let pinEditHitSlop: CGFloat = 8
 
     /// Rendered committed-marks layer, reused while only the draft changes.
     /// A pencil drag would otherwise re-blur every mosaic on every mouse-move.
@@ -133,7 +143,25 @@ final class SelectionOverlayNSView: NSView {
         window?.makeKeyAndOrderFront(nil)
     }
 
+    /// Pin-edit: only the bitmap (plus handle slop) and any live text editor are ours. Everything
+    /// else in the lid's margins falls through, so other apps stay clickable while a pin is edited.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard isPinEdit else { return super.hitTest(point) }
+        if let hit = super.hitTest(point), hit !== self {
+            return hit
+        }
+        let reachable = selectionRect.insetBy(dx: -Self.pinEditHitSlop, dy: -Self.pinEditHitSlop)
+        return reachable.contains(point) ? self : nil
+    }
+
     override func draw(_ dirtyRect: NSRect) {
+        // Pin-edit: the pin panel underneath is the backdrop, so draw marks and nothing else.
+        if isPinEdit {
+            guard !selectionRect.isNull, selectionRect.width > 0, selectionRect.height > 0 else { return }
+            drawAnnotations()
+            return
+        }
+
         // Freeze backdrop (Snipaste-style). Without it, fall back to punch-through dim.
         if let freezeImage {
             freezeImage.draw(
@@ -239,16 +267,18 @@ final class SelectionOverlayNSView: NSView {
                 sample: sample
             )
         }
-        if let layer {
-            layer.draw(
-                in: bounds,
-                from: .zero,
-                operation: .sourceOver,
-                fraction: 1
-            )
-        }
-        if let draft = draftAnnotation, !draftNeedsLayer {
-            AnnotationDrawing.draw(draft, origin: origin, sample: sample)
+        withInkClip {
+            if let layer {
+                layer.draw(
+                    in: bounds,
+                    from: .zero,
+                    operation: .sourceOver,
+                    fraction: 1
+                )
+            }
+            if let draft = draftAnnotation, !draftNeedsLayer {
+                AnnotationDrawing.draw(draft, origin: origin, sample: sample)
+            }
         }
 
         if let draft = draftAnnotation {
@@ -330,6 +360,20 @@ final class SelectionOverlayNSView: NSView {
         }
     }
 
+    /// Pin-edit ink is clipped to the bitmap: a mark running past the edge is cropped when it bakes,
+    /// so it has to look cropped while drawing too. Chrome (handles / badges) stays unclipped so the
+    /// grips on an edge-hugging mark are still reachable.
+    private func withInkClip(_ body: () -> Void) {
+        guard isPinEdit else {
+            body()
+            return
+        }
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: selectionRect).addClip()
+        body()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
     /// Hover or selection (not editing) → Snipaste 4-corner text chrome.
     /// Hidden while that text mark is mid move / resize.
     private func textResizeChromeAnnotation() -> Annotation? {
@@ -374,6 +418,16 @@ final class SelectionOverlayNSView: NSView {
 
     /// Sample freeze under `point` (view / image space); fall back to white on unknown dark.
     private func contrastChromeColor(around point: CGPoint) -> NSColor {
+        // Pin-edit samples the pinned bitmap, whose image space starts at the bitmap's origin, and
+        // skips the outside-selection dimming factor — there is no dim layer over a pin.
+        if let pinEditImage {
+            let inImage = CGPoint(x: point.x - selectionRect.minX, y: point.y - selectionRect.minY)
+            let sampled = ContrastChrome.averageLuminance(
+                in: pinEditImage,
+                aroundPointInImageSpace: inImage
+            ) ?? 0.2
+            return ContrastChrome.hairline(onLuminance: sampled)
+        }
         let sampled = freezeImage.flatMap {
             ContrastChrome.averageLuminance(in: $0, aroundPointInImageSpace: point)
         } ?? 0.2
@@ -474,6 +528,14 @@ final class SelectionOverlayNSView: NSView {
 
     /// Freeze backdrop, with history playback stamped into the selection when present.
     private func mosaicSampleContext() -> AnnotationDrawing.MosaicSampleContext? {
+        // Pin-edit: the pinned bitmap *is* the backdrop, and mark geometry is already relative to
+        // its bottom-left — same shape `AnnotationCompositor` builds when it bakes.
+        if let pinEditImage {
+            return AnnotationDrawing.MosaicSampleContext(
+                image: pinEditImage,
+                selectionOriginInImage: .zero
+            )
+        }
         guard let freezeImage else { return nil }
         let origin = selectionRect.origin
         guard let playbackImage,

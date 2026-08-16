@@ -28,6 +28,9 @@ extension SelectionOverlayController {
     /// When `allowOutsideExpand` is true, the whole outside octant map also returns a handle
     /// (click-outside expand). When false (annotate tool armed), only the border band hits.
     func refineResizeHandle(at point: CGPoint, allowOutsideExpand: Bool) -> Handle? {
+        // A pin's bitmap is not a crop: it has no resizable edge and no outside to expand into.
+        // Refusing here is what keeps every caller (mouse-down, cursor) crop-free in pin-edit.
+        guard pinEdit == nil else { return nil }
         guard !currentRect.isNull, currentRect.width > 0, currentRect.height > 0 else { return nil }
         let r = currentRect
         let t = selectionEdgeHit

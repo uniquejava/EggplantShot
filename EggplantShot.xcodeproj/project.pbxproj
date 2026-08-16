@@ -46,6 +46,7 @@
 		B1F00000000000000000000C /* SelectionOverlay+Text.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000C /* SelectionOverlay+Text.swift */; };
 		B1F00000000000000000000D /* SelectionOverlay+Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000D /* SelectionOverlay+Geometry.swift */; };
 		B1F00000000000000000000E /* SelectionOverlay+History.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000E /* SelectionOverlay+History.swift */; };
+		B1F0000000000000000000001B /* SelectionOverlay+PinEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F0000000000000000000001B /* SelectionOverlay+PinEdit.swift */; };
 		B1F00000000000000000000F /* SelectionOverlay+Toolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F00000000000000000000F /* SelectionOverlay+Toolbar.swift */; };
 		B10000000000000000000001 /* EggplantShotApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000001 /* EggplantShotApp.swift */; };
 		B10000000000000000000002 /* HotkeyMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000002 /* HotkeyMonitor.swift */; };
@@ -150,6 +151,7 @@
 		C1F00000000000000000000C /* SelectionOverlay+Text.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+Text.swift"; sourceTree = "<group>"; };
 		C1F00000000000000000000D /* SelectionOverlay+Geometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+Geometry.swift"; sourceTree = "<group>"; };
 		C1F00000000000000000000E /* SelectionOverlay+History.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+History.swift"; sourceTree = "<group>"; };
+		C1F0000000000000000000001B /* SelectionOverlay+PinEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+PinEdit.swift"; sourceTree = "<group>"; };
 		C1F00000000000000000000F /* SelectionOverlay+Toolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SelectionOverlay+Toolbar.swift"; sourceTree = "<group>"; };
 		A30000000000000000000001 /* EggplantShot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EggplantShot.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C10000000000000000000001 /* EggplantShotApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EggplantShotApp.swift; sourceTree = "<group>"; };
@@ -323,6 +325,7 @@
 				C1F00000000000000000000C /* SelectionOverlay+Text.swift */,
 				C1F00000000000000000000D /* SelectionOverlay+Geometry.swift */,
 				C1F00000000000000000000E /* SelectionOverlay+History.swift */,
+				C1F0000000000000000000001B /* SelectionOverlay+PinEdit.swift */,
 				C1F00000000000000000000F /* SelectionOverlay+Toolbar.swift */,
 				C1F00000000000000000000010 /* RefineToolbar+MainRow.swift */,
 				C1F00000000000000000000011 /* RefineToolbar+Shape.swift */,
@@ -558,6 +561,7 @@
 				B1F00000000000000000000C /* SelectionOverlay+Text.swift in Sources */,
 				B1F00000000000000000000D /* SelectionOverlay+Geometry.swift in Sources */,
 				B1F00000000000000000000E /* SelectionOverlay+History.swift in Sources */,
+				B1F0000000000000000000001B /* SelectionOverlay+PinEdit.swift in Sources */,
 				B1F00000000000000000000F /* SelectionOverlay+Toolbar.swift in Sources */,
 				B1F00000000000000000000010 /* RefineToolbar+MainRow.swift in Sources */,
 				B1F00000000000000000000011 /* RefineToolbar+Shape.swift in Sources */,

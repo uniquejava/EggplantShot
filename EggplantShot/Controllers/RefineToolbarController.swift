@@ -150,6 +150,8 @@ final class RefineToolbarController: NSObject {
         initialStepStyle: StepStyle = .default,
         initialMagnifierKind: ShapeKind = .rectangle,
         initialMagnifierStyle: MagnifierStyle = .default,
+        hostLevel: NSWindow.Level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1),
+        appliesInPlace: Bool = false,
         onEvent: @escaping (Event) -> Void
     ) {
         self.onEvent = onEvent
@@ -189,7 +191,7 @@ final class RefineToolbarController: NSObject {
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
         let mainCard = makeChromeCard()
-        let mainRow = buildMainRow(primaryAction: primaryAction)
+        let mainRow = buildMainRow(primaryAction: primaryAction, appliesInPlace: appliesInPlace)
         embed(mainRow, in: mainCard)
 
         let optionsCard = makeChromeCard()
@@ -230,7 +232,7 @@ final class RefineToolbarController: NSObject {
         refreshSelectionChrome()
         layoutPanel(content: content)
 
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+        panel.level = hostLevel
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false

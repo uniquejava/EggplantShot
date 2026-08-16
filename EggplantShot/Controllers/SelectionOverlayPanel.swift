@@ -34,10 +34,44 @@ final class SelectionPanel: NSPanel {
         )
 
         level = .screenSaver
-        becomesKeyOnlyIfNeeded = false
         // Opaque when frozen so live desktop cannot show through.
         isOpaque = freezeImage != nil
         backgroundColor = freezeImage != nil ? .black : .clear
+        applySharedChrome()
+    }
+
+    /// Pin-edit lid: a transparent panel over a pinned bitmap that draws marks and nothing else.
+    /// `frame` is Cocoa global and plays the part `screenFrame` plays for a capture panel — the
+    /// panel's own rect in global space, which is all `setSelection` and the text editor need. It is
+    /// deliberately larger than the bitmap so a text mark's field editor can grow past the edge, the
+    /// way it can over the freeze; `SelectionOverlayNSView.hitTest` passes those margins through.
+    /// `.nonactivatingPanel` because editing a pin must not pull focus off the frontmost app.
+    init(pinEditFrame frame: CGRect, image: NSImage) {
+        self.screenFrame = frame
+        self.overlayView = SelectionOverlayNSView(
+            frame: CGRect(origin: .zero, size: frame.size),
+            freezeImage: nil
+        )
+
+        super.init(
+            contentRect: frame,
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+
+        // Above pins (`.statusBar`), below the toolbar this session shows.
+        level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        isOpaque = false
+        backgroundColor = .clear
+        overlayView.pinEditImage = image
+        overlayView.cursorMode = .controllerDriven
+        applySharedChrome()
+    }
+
+    private func applySharedChrome() {
+        // Must be able to become key so cursor rects apply (Terminal otherwise keeps I-beam).
+        becomesKeyOnlyIfNeeded = false
         hasShadow = false
         ignoresMouseEvents = false
         acceptsMouseMovedEvents = true

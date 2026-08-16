@@ -131,6 +131,7 @@ extension SelectionOverlayController {
 
     func showToolbar() {
         toolbar?.close()
+        let inPlace = pinEdit != nil
         let bar = RefineToolbarController(
             primaryAction: primaryAction,
             initialTool: annotateTool,
@@ -146,7 +147,12 @@ extension SelectionOverlayController {
             initialEraserDrawMode: eraserDrawMode,
             initialStepStyle: stepStyle,
             initialMagnifierKind: magnifierKind,
-            initialMagnifierStyle: magnifierStyle
+            initialMagnifierStyle: magnifierStyle,
+            // Pin-edit sits above pins, not above the capture overlay.
+            hostLevel: inPlace
+                ? NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
+                : NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1),
+            appliesInPlace: inPlace
         ) { [weak self] event in
             guard let self else { return }
             switch event {

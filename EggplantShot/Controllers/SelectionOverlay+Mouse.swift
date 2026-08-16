@@ -20,6 +20,10 @@ extension SelectionOverlayController {
                 NSCursor.arrow.set()
                 return event
             }
+            // Pin-edit: hand back anything outside the pinned bitmap so the app underneath gets it.
+            if !self.pinEditOwnsPoint(point) {
+                return event
+            }
             if event.type == .scrollWheel {
                 return self.handleTextScrollWheel(event) ? nil : event
             }
@@ -51,6 +55,9 @@ extension SelectionOverlayController {
             if self.dragKind == nil, let toolbar = self.toolbar, toolbar.containsGlobalPoint(point) {
                 self.endTextWheelResizeIfNeeded()
                 NSCursor.arrow.set()
+                return
+            }
+            if !self.pinEditOwnsPoint(point) {
                 return
             }
             if event.type == .scrollWheel {
@@ -284,6 +291,14 @@ extension SelectionOverlayController {
                 setAnnotateTool(.none)
                 return
             }
+            // Pin-edit bottoms out by *keeping* the marks: there is no snip to throw away, the pin is
+            // already on screen, and losing an annotation run to a stray Esc would be the worse trade.
+            // The toolbar's ✕ stays the discard path.
+            if pinEdit != nil {
+                clearEscapeDiscardHint()
+                applyPinEdit()
+                return
+            }
             requestCancelDiscard()
             return
         }
@@ -293,6 +308,16 @@ extension SelectionOverlayController {
     /// Discard the refine session. With marks: first call shows a tip; second call exits.
     /// Toolbar ✕ and the Esc ladder’s final step share this.
     func requestCancelDiscard() {
+        // Pin-edit ✕: drop only what this session drew, and warn first if that is something.
+        if let pinEdit {
+            if annotationHistory.document == pinEdit.startDocument || escapeDiscardArmed {
+                clearEscapeDiscardHint()
+                discardPinEdit()
+                return
+            }
+            armEscapeDiscardHint()
+            return
+        }
         if phase == .refining, !annotations.isEmpty {
             if escapeDiscardArmed {
                 clearEscapeDiscardHint()
@@ -426,6 +451,8 @@ extension SelectionOverlayController {
 
     /// Hold **Space** → temporary blue-crop drag (cursor updates on key alone).
     func setSpaceHeldForCropMove(_ held: Bool) {
+        // No crop to drag while annotating a pin — the pin is moved by dragging the pin itself.
+        guard pinEdit == nil else { return }
         guard spaceHeldForCropMove != held else { return }
         spaceHeldForCropMove = held
         // Keep closed-hand while an in-flight crop drag finishes after Space release.

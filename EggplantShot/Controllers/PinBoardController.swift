@@ -3,8 +3,10 @@ import SwiftUI
 
 struct PinItem: Identifiable, Equatable {
     let id: UUID
-    let image: NSImage
+    var image: NSImage
     let createdAt: Date
+    /// Text this pin was rendered from (F3 paste of text / HTML / colour / paths); `nil` for bitmaps.
+    let sourceText: String?
     var title: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
@@ -18,10 +20,17 @@ final class PinBoardController: ObservableObject {
     @Published private(set) var items: [PinItem] = []
     @Published private(set) var imagesHidden = false
 
+    /// Right-click → Show toolbar on a pin. Set by `SnipController`, which owns the pin-edit
+    /// overlay; the board itself has no annotate machinery.
+    var onShowToolbarRequested: ((UUID) -> Void)?
+    /// Called just before a pin is torn down, so an open pin-edit session on it can be resolved
+    /// instead of being left floating over a panel that no longer exists.
+    var onWillClosePin: ((UUID) -> Void)?
+
     private var panels: [UUID: PinPanel] = [:]
 
-    func pin(_ image: NSImage, near rect: CGRect) {
-        let item = PinItem(id: UUID(), image: image, createdAt: Date())
+    func pin(_ image: NSImage, near rect: CGRect, sourceText: String? = nil) {
+        let item = PinItem(id: UUID(), image: image, createdAt: Date(), sourceText: sourceText)
         items.append(item)
 
         let size = image.size
@@ -39,8 +48,11 @@ final class PinBoardController: ObservableObject {
             frame.origin.y = min(max(frame.origin.y, screen.frame.minY), screen.frame.maxY - frame.height)
         }
 
-        let panel = PinPanel(itemID: item.id, image: image, frame: frame) { [weak self] id in
+        let panel = PinPanel(itemID: item.id, image: image, sourceText: sourceText, frame: frame) { [weak self] id in
             self?.close(id)
+        }
+        panel.onShowToolbar = { [weak self] id in
+            self?.onShowToolbarRequested?(id)
         }
         panels[item.id] = panel
         // New pin means the user wants pins on screen again (incl. after ⇧F3 hide-all).
@@ -51,6 +63,7 @@ final class PinBoardController: ObservableObject {
     }
 
     func close(_ id: UUID) {
+        onWillClosePin?(id)
         if let panel = panels.removeValue(forKey: id) {
             panel.orderOut(nil)
             panel.close()
@@ -80,6 +93,31 @@ final class PinBoardController: ObservableObject {
     func bringToFront(_ id: UUID) {
         revealAllIfHidden()
         panels[id]?.orderFrontRegardless()
+    }
+
+    /// Prepare a pin for annotating and report what a pin-edit session should work on: the bitmap
+    /// it shows, and where that bitmap sits on screen. Snapped to 100% first, because mark geometry
+    /// is in image points.
+    func annotationTarget(_ id: UUID) -> (image: NSImage, rect: CGRect)? {
+        guard let panel = panels[id] else { return nil }
+        revealAllIfHidden()
+        panel.resetZoomToNaturalSize()
+        panel.orderFrontRegardless()
+        return (panel.bitmap, panel.imageRectOnScreen)
+    }
+
+    /// A pin-edit session applied its marks: show the baked bitmap from now on.
+    func replaceImage(_ id: UUID, with image: NSImage) {
+        guard let panel = panels[id] else { return }
+        panel.setImage(image)
+        if let index = items.firstIndex(where: { $0.id == id }) {
+            items[index].image = image
+        }
+        objectWillChange.send()
+    }
+
+    func isPinned(_ id: UUID) -> Bool {
+        panels[id] != nil
     }
 
     /// Clears hide-all so every pin (and any newly created one) is visible again.

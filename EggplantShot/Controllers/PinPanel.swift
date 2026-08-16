@@ -5,15 +5,27 @@ final class PinPanel: NSPanel {
     static let chromePadding: CGFloat = 10
 
     private let itemID: UUID
-    private let image: NSImage
+    /// What the pin currently shows. Applying annotations swaps this for the baked bitmap.
+    private var image: NSImage
+    /// Source string when this pin was rendered from text — `nil` means OCR is the way to get text.
+    private let sourceText: String?
     private let onClose: (UUID) -> Void
+    /// Right-click → Show toolbar: hand the pin to a pin-edit session (set by `PinBoardController`).
+    var onShowToolbar: ((UUID) -> Void)?
     private let chromeView: PinChromeView
     private var keyObservers: [NSObjectProtocol] = []
     private var staysOnTop = true
 
-    init(itemID: UUID, image: NSImage, frame: CGRect, onClose: @escaping (UUID) -> Void) {
+    init(
+        itemID: UUID,
+        image: NSImage,
+        sourceText: String? = nil,
+        frame: CGRect,
+        onClose: @escaping (UUID) -> Void
+    ) {
         self.itemID = itemID
         self.image = image
+        self.sourceText = sourceText
         self.onClose = onClose
 
         let pad = Self.chromePadding
@@ -93,6 +105,28 @@ final class PinPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
+    /// The bitmap itself in Cocoa global coordinates — the glow padding is not part of it.
+    /// A pin-edit session annotates exactly this rect.
+    var imageRectOnScreen: CGRect {
+        frame.insetBy(dx: Self.chromePadding, dy: Self.chromePadding)
+    }
+
+    /// What the pin shows right now — the base a pin-edit session annotates.
+    var bitmap: NSImage { image }
+
+    /// Applying annotations: same point size, so the panel frame is untouched.
+    func setImage(_ new: NSImage) {
+        image = new
+        chromeView.setImage(new)
+    }
+
+    /// Back to 1:1 before annotating: mark geometry is in image points and nothing in the annotate
+    /// stack threads a zoom factor, so editing a zoomed pin would place marks at the wrong scale.
+    func resetZoomToNaturalSize() {
+        chromeView.resetZoom()
+        applyScale(1)
+    }
+
     private func makeContextMenu() -> NSMenu {
         let menu = NSMenu()
 
@@ -102,6 +136,29 @@ final class PinPanel: NSPanel {
             .target = self
 
         menu.addItem(.separator())
+
+        // Text pins hand back what they were rendered from; bitmaps have to be read with OCR.
+        if sourceText != nil {
+            menu.addItem(
+                withTitle: L10n.tr("Copy plain text"),
+                action: #selector(copyPlainText),
+                keyEquivalent: ""
+            ).target = self
+        } else {
+            menu.addItem(
+                withTitle: L10n.tr("Extract text and copy"),
+                action: #selector(extractTextAndCopy),
+                keyEquivalent: ""
+            ).target = self
+        }
+
+        menu.addItem(.separator())
+
+        menu.addItem(
+            withTitle: L10n.tr("Show toolbar"),
+            action: #selector(showToolbar),
+            keyEquivalent: ""
+        ).target = self
 
         let stay = menu.addItem(withTitle: L10n.tr("Stay on Top"), action: #selector(toggleStayOnTop), keyEquivalent: "")
         stay.target = self
@@ -139,6 +196,32 @@ final class PinPanel: NSPanel {
 
     @objc private func saveImageAs() {
         ImageFileSaver.saveInteractive(image)
+    }
+
+    /// The string this pin was rendered from (F3 paste of text / HTML / colour / paths).
+    @objc private func copyPlainText() {
+        guard let sourceText else { return }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(sourceText, forType: .string)
+    }
+
+    /// No source string to give back, so read the bitmap instead (same QR-then-text pass as refine OCR).
+    @objc private func extractTextAndCopy() {
+        let bitmap = image
+        Task { @MainActor in
+            let text = await TextRecognizer.recognize(bitmap)
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+            FeedbackSound.playOCRSuccess()
+        }
+    }
+
+    /// Right-click → Show toolbar: annotate this pin in place.
+    @objc private func showToolbar() {
+        onShowToolbar?(itemID)
     }
 
     @objc private func toggleStayOnTop() {
@@ -274,6 +357,16 @@ private final class PinChromeView: NSView {
 
     func setActive(_ active: Bool) {
         applyGlow(active: active)
+    }
+
+    /// Back to 100%: the badge is not shown, this is not a user zoom step.
+    func resetZoom() {
+        scale = 1
+        scrollAccum = 0
+    }
+
+    func setImage(_ new: NSImage) {
+        imageView.image = new
     }
 
     /// Direct CALayer mapping of CSS `box-shadow: 0 0 <radius> <color>` (no `border`).

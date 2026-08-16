@@ -14,14 +14,81 @@ final class SnipController {
     /// Editable snip history (memory + disk). Inspect `newest` / `records` after confirm.
     let historyStore = SnipHistoryStore()
 
+    /// Its own controller so annotating a pin never disturbs a capture's state (or its undo stack).
+    /// Deliberately without a `historyStore`, which is what leaves `,` / `.` inert while pin-editing.
+    private let pinEditOverlay = SelectionOverlayController()
+
     private var isSnipping = false
 
     init() {
         overlay.historyStore = historyStore
+        pinBoard.onShowToolbarRequested = { [weak self] id in
+            self?.beginPinEdit(id)
+        }
+        // A pin being closed under an open session: drop the session, not just its lid.
+        pinBoard.onWillClosePin = { [weak self] id in
+            self?.endPinEdit(on: id, keepingMarks: false)
+        }
+    }
+
+    func toggleHideShowImages() {
+        // Hiding the pin being annotated would leave a toolbar floating over nothing; finish the
+        // session first, keeping the work.
+        endPinEdit(on: nil, keepingMarks: true)
+        pinBoard.toggleHideShow()
+    }
+
+    /// Resolve an open pin-edit session before something else disturbs its pin. `id` limits this to
+    /// a session on that specific pin; `nil` means any session.
+    private func endPinEdit(on id: UUID?, keepingMarks: Bool) {
+        guard pinEditOverlay.isActive else { return }
+        if let id, pinEditOverlay.pinEdit?.itemID != id { return }
+        if keepingMarks {
+            pinEditOverlay.applyPinEdit()
+        } else {
+            pinEditOverlay.discardPinEdit()
+        }
+    }
+
+    /// Right-click a pin → Show toolbar: annotate that pin where it sits.
+    func beginPinEdit(_ id: UUID) {
+        guard !overlay.isActive, !pinEditOverlay.isActive else { return }
+        guard let target = pinBoard.annotationTarget(id) else { return }
+
+        Task { @MainActor in
+            let outcome = await pinEditOverlay.beginPinEdit(
+                itemID: id,
+                image: target.image,
+                imageRect: target.rect
+            )
+            switch outcome {
+            case .discarded:
+                break
+            case .applied(let document):
+                // Snipaste parity: the marks become part of the pin's bitmap.
+                pinBoard.replaceImage(
+                    id,
+                    with: AnnotationCompositor.composite(document.marks, onto: target.image)
+                )
+            case .copied(let baked):
+                copyToClipboard(baked)
+                pinBoard.close(id)
+            case .saved(let baked):
+                // Close first: the save panel must not open behind the pin (or the lid we just tore
+                // down), which is the same reason `ImageFileSaver` lowers pin levels.
+                pinBoard.close(id)
+                ImageFileSaver.saveInteractive(baked)
+            case .ocr(let text):
+                pinBoard.close(id)
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                copyTextToClipboard(text)
+                FeedbackSound.playOCRSuccess()
+            }
+        }
     }
 
     func snip(mode: SnipMode) {
-        guard !isSnipping, !overlay.isActive else { return }
+        guard !isSnipping, !overlay.isActive, !pinEditOverlay.isActive else { return }
         isSnipping = true
 
         Task { @MainActor in
@@ -65,17 +132,13 @@ final class SnipController {
         }
     }
 
-    func toggleHideShowImages() {
-        pinBoard.toggleHideShow()
-    }
-
     /// Snipaste-style Paste: clipboard → floating pin (image / color card / text / image file).
     func pasteFromClipboard() {
-        guard !overlay.isActive else { return }
-        guard let image = ClipboardPaster.imageFromPasteboard() else { return }
+        guard !overlay.isActive, !pinEditOverlay.isActive else { return }
+        guard let paste = ClipboardPaster.imageFromPasteboard() else { return }
         let mouse = NSEvent.mouseLocation
         let anchor = CGRect(x: mouse.x - 1, y: mouse.y - 1, width: 2, height: 2)
-        pinBoard.pin(image, near: anchor)
+        pinBoard.pin(paste.image, near: anchor, sourceText: paste.sourceText)
     }
 
     private func copyToClipboard(_ image: NSImage) {
