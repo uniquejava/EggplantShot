@@ -35,13 +35,19 @@ struct TextStyle: Equatable {
     static let fontSizeMax: CGFloat = 144
     /// Thinnest the caret ever draws — 1px hairline at 2x, the floor for very small type.
     static let caretWidthFloor: CGFloat = 0.5
+    /// Thickest it ever draws. Past this a caret stops reading as a caret and starts looking like a
+    /// selection block; 8 pt is the true stem of ~88 pt regular type, so the preview stays exact
+    /// across most of the range and is merely "thick" above it. Aesthetic only — `textHorizontalPadding`
+    /// is what reserves room inside the box and `placeHairlineCaret` clamps as a backstop, so no
+    /// correctness rests on this number.
+    static let caretWidthMax: CGFloat = 8
 
     /// Caret thickness that reads like the text's own stem, so an empty box previews the weight
     /// you are about to type at rather than showing a hairline at every size. Divisors are fitted to
     /// the system font's measured stem ink (`l` rasterised at 4x): ~size/11 regular, ~size/7 bold.
     /// Static so the field editor can derive the same value straight from its own `NSFont`.
     static func caretWidth(forFontSize size: CGFloat, isBold: Bool) -> CGFloat {
-        max(caretWidthFloor, size / (isBold ? 7 : 11))
+        min(caretWidthMax, max(caretWidthFloor, size / (isBold ? 7 : 11)))
     }
 
     var caretWidth: CGFloat { Self.caretWidth(forFontSize: fontSize, isBold: isBold) }
@@ -60,21 +66,24 @@ struct TextStyle: Equatable {
         fontSize = Self.clampFontSize(base + CGFloat(steps))
     }
 
-    /// Tight wrap around glyphs (and the caret when empty).
+    /// Tight wrap around glyphs. Font-independent, and the inset `drawText` actually uses.
     var textPadding: CGFloat { hasBackground ? 3 : 2 }
 
-    /// Breathing room either side of the caret in an *empty* box. The caret thickens with `fontSize`,
-    /// so a fixed 2pt would leave a 72pt caret almost touching the frame — scale the padding with it
-    /// and the caret always occupies the middle third of the box.
-    var emptyCaretPadding: CGFloat { max(textPadding, caretWidth) }
+    /// Horizontal breathing room at *fitting* time, scaled with the caret for the same reason
+    /// `textVerticalPadding` scales with the font. The caret is drawn **after** the last glyph, so the
+    /// only room it has is the trailing padding: a flat 2 pt left a 144 pt caret hanging ~11 pt past
+    /// the right border. Reserving `caretWidth` on each side also means the caret in an *empty* box
+    /// occupies the middle third, which is what `emptyBoxWidth` wants.
+    var textHorizontalPadding: CGFloat { max(textPadding, caretWidth) }
 
     /// Width of an empty text box: the caret plus its own padding, so the caret can sit centred.
-    var emptyBoxWidth: CGFloat { caretWidth + emptyCaretPadding * 2 }
+    var emptyBoxWidth: CGFloat { caretWidth + textHorizontalPadding * 2 }
 
     /// Vertical breathing room. `textPadding`'s 2pt reads cramped — glyphs and the caret sit almost
     /// on the frame — so the box gets more room top and bottom, scaled gently with the font.
-    /// Only the *fitting* uses this; `drawText` centres the glyph block in whatever rect it is given,
-    /// so marks saved before this existed still fit (they shift down by ≤2pt — see `drawText`).
+    /// Only the *fitting* uses this (and `textHorizontalPadding`); `drawText` **centres** the glyph
+    /// block in whatever rect it is given, so marks saved before either padding existed still fit
+    /// rather than clipping or re-wrapping (they shift down by ≤2pt — see `drawText`).
     var textVerticalPadding: CGFloat { max(textPadding * 2, fontSize * 0.12) }
 
     /// System UI font with bold / italic traits.

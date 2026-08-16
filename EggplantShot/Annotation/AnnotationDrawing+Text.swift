@@ -42,24 +42,26 @@ extension AnnotationDrawing {
             NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
         }
 
-        // Horizontal padding is an inset; vertical placement **centres** the glyph block in whatever
-        // rect it is handed, which keeps `textVerticalPadding` a fitting-time concern.
+        // Padding is a **fitting-time** concern; this **centres** the glyph block in whatever rect it
+        // is handed, on both axes. Centring rather than insetting by `textHorizontalPadding` /
+        // `textVerticalPadding` is what keeps marks saved before those grew renderable: their rect was
+        // fitted with the flat 2 pt, so insetting by the larger value now would shrink the wrap width
+        // (re-wrapping a caption onto a line the rect has no room for) and push descenders out of the
+        // box. Centring can do neither — the rect is always at least as wide and tall as the block, so
+        // the slack is 0 for an old mark and exactly the new padding for a new one.
         //
-        // Centring rather than top-insetting by `textVerticalPadding` is the safer of the two for
-        // marks saved before that padding grew: their rect is `max(glyphHeight, fontBoundingHeight)`
-        // plus the old 2pt, so top-insetting by the larger value would push descenders out of the
-        // box, whereas centring can never clip (the rect is always taller than the glyph block).
-        // It is not pixel-identical though — a pre-existing mark's text shifts **down by up to 2pt**
-        // (half the slack between the font's bounding box and its rendered line height), most at
-        // large sizes. Accepted as the smallest-impact option; re-fitting rects on load would
-        // change the stored geometry instead.
+        // It is not pixel-identical vertically though: a pre-existing mark's text shifts **down by up
+        // to 2pt** (half the slack between the font's bounding box and its rendered line height), most
+        // at large sizes. Accepted as the smallest-impact option; re-fitting rects on load would change
+        // the stored geometry instead.
         var textRect = rect.insetBy(dx: pad, dy: 0)
         let natural = attributed.boundingRect(
             with: CGSize(width: textRect.width, height: 10_000),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         )
-        let slack = max(0, textRect.height - ceil(natural.height))
-        textRect = textRect.insetBy(dx: 0, dy: slack / 2)
+        let hslack = max(0, textRect.width - ceil(natural.width))
+        let vslack = max(0, textRect.height - ceil(natural.height))
+        textRect = textRect.insetBy(dx: hslack / 2, dy: vslack / 2)
         // Wrap to the mark’s width (must match the field editor / commit sizing).
         attributed.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading])
     }
@@ -67,10 +69,10 @@ extension AnnotationDrawing {
     /// Snipaste text chrome: solid white frame + 3 blue resize corner badges + top-right close (X).
     static func drawTextResizeChrome(in rect: CGRect, lineWidth: CGFloat = 1) {
         guard rect.width >= 1, rect.height >= 1 else { return }
-        NSColor.white.setStroke()
-        let frame = NSBezierPath(rect: rect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2))
-        frame.lineWidth = lineWidth
-        frame.stroke()
+        // Haloed, not plain white: this frame sits on whatever was captured, and a white line on a
+        // white backdrop was invisible. See `ContrastChrome.strokeHaloedRect` for why the frame does
+        // not sample the backdrop the way the editing hairline does.
+        ContrastChrome.strokeHaloedRect(rect, lineWidth: lineWidth)
 
         let size = textCornerBadgeSize
         let c = textCornerBadgeCenters(in: rect)

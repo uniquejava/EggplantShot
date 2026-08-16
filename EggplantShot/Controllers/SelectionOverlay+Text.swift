@@ -112,7 +112,7 @@ extension SelectionOverlayController {
         tv.textContainer?.lineFragmentPadding = 0
         tv.textContainer?.containerSize = CGSize(width: 10_000, height: 10_000)
         tv.textContainerInset = NSSize(
-            width: ann.textStyle.textPadding,
+            width: ann.textStyle.textHorizontalPadding,
             height: ann.textStyle.textVerticalPadding
         )
         tv.delegate = TextEditingBridge.shared
@@ -245,11 +245,17 @@ extension SelectionOverlayController {
         if style.hasBackground {
             tv.drawsBackground = true
             tv.backgroundColor = ContrastChrome.textPlate(behind: style.color)
-            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textVerticalPadding)
+            tv.textContainerInset = NSSize(
+                width: style.textHorizontalPadding,
+                height: style.textVerticalPadding
+            )
         } else {
             tv.drawsBackground = false
             tv.backgroundColor = .clear
-            tv.textContainerInset = NSSize(width: style.textPadding, height: style.textVerticalPadding)
+            tv.textContainerInset = NSSize(
+                width: style.textHorizontalPadding,
+                height: style.textVerticalPadding
+            )
         }
         let sample: CGPoint
         if let chrome = textChromeView, let host = textEditorHost {
@@ -277,7 +283,7 @@ extension SelectionOverlayController {
         let maxW = max(40, host.screenFrame.width - chrome.frame.minX - 4)
         let minH = ceil(style.makeFont().boundingRectForFont.height) + style.textVerticalPadding * 2
         let size = tv.fittingSize(
-            padding: style.textPadding,
+            padding: style.textHorizontalPadding,
             verticalPadding: style.textVerticalPadding,
             caretWidth: style.caretWidth,
             emptyWidth: style.emptyBoxWidth,
@@ -303,7 +309,15 @@ extension SelectionOverlayController {
         chrome.frame = frame
         tv.frame = chrome.bounds
         tv.textContainer?.lineFragmentPadding = 0
-        tv.textContainer?.containerSize = CGSize(width: max(frame.width, maxW), height: 10_000)
+        // Container = the box's **inner** width, not `maxW`. TextKit gives every line fragment that
+        // ends in a newline a selection rect spanning the whole container width (only the last line
+        // hugs its glyphs), so an oversized container made ⌘A on multi-line text paint the first
+        // line's highlight out to the screen edge. Wrapping does not need the slack: `fittingSize`
+        // already measures at 10_000 to find the natural width and returns `maxWidth` when it has to
+        // wrap, so the box width it just produced *is* the wrap decision — laying out at that width
+        // reproduces it rather than second-guessing it.
+        let inner = max(1, frame.width - style.textHorizontalPadding * 2)
+        tv.textContainer?.containerSize = CGSize(width: inner, height: 10_000)
         tv.textContainer?.widthTracksTextView = false
         chrome.needsDisplay = true
     }

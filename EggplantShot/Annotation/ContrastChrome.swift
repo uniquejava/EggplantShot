@@ -52,6 +52,38 @@ enum ContrastChrome {
             : NSColor.white.withAlphaComponent(0.45)
     }
 
+    /// Companion ink for chrome that must stay visible on a *light* backdrop. Tunable: it is the only
+    /// visible part of the chrome on white, so it wants enough weight to read at one device pixel,
+    /// while staying quiet enough to disappear against dark content.
+    static let chromeHaloInk = NSColor.black.withAlphaComponent(0.7)
+
+    /// Stroke `rect` as chrome that must never disappear against arbitrary content: the light line
+    /// itself, plus a dark companion immediately **inside** it.
+    ///
+    /// Preferred over picking one colour by luminance (`hairline(onLuminance:)`) for anything
+    /// frame-shaped. Sampling needs a point, and a frame has no single backdrop — its edges cross
+    /// arbitrary pixels, and the obvious sample (the box centre) is often the mark's own text or
+    /// plate rather than what sits under the line. This needs no sample at all: on dark content the
+    /// halo vanishes and it reads as the plain light line it replaces; on light content the light
+    /// line vanishes and the halo reads as a dark hairline; in between you get a subtle double line.
+    ///
+    /// Inward so `rect` stays the chrome's outer bound — handles keep the size they are hit-tested
+    /// at, and nothing overdraws into a parent that might clip.
+    static func strokeHaloedRect(_ rect: CGRect, lineWidth w: CGFloat, color: NSColor = .white) {
+        guard rect.width > 0, rect.height > 0, w > 0 else { return }
+        // Bands abut exactly: the light line covers [edge, edge + w], the halo [edge + w, edge + 2w].
+        if rect.width > w * 3, rect.height > w * 3 {
+            chromeHaloInk.setStroke()
+            let halo = NSBezierPath(rect: rect.insetBy(dx: w * 1.5, dy: w * 1.5))
+            halo.lineWidth = w
+            halo.stroke()
+        }
+        color.setStroke()
+        let line = NSBezierPath(rect: rect.insetBy(dx: w / 2, dy: w / 2))
+        line.lineWidth = w
+        line.stroke()
+    }
+
     static func averageLuminance(of rep: NSBitmapImageRep) -> CGFloat? {
         var sum: CGFloat = 0
         var count: CGFloat = 0

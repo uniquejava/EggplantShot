@@ -267,7 +267,18 @@ final class AnnotationTextView: NSTextView {
             caretX = rect.minX  // line-fragment fallbacks are wide
         }
         let x = (caretX * scale).rounded() / scale
-        hairlineCaret.frame = NSRect(x: x, y: rect.minY, width: w, height: max(rect.height, 1))
+        // Never paint outside the frame. `TextStyle.textHorizontalPadding` reserves the room this
+        // needs, but a box can still end up narrower than the caret — clamped against a screen edge,
+        // or laid out from a style the box was not fitted for — and a caret over the border reads as
+        // a rendering bug. Correctness lives here; `caretWidthMax` is only about how it looks.
+        let border = textHairlineWidth(in: self)
+        let rightLimit = max(border, bounds.maxX - w - border)
+        hairlineCaret.frame = NSRect(
+            x: min(max(x, border), rightLimit),
+            y: rect.minY,
+            width: w,
+            height: max(rect.height, 1)
+        )
     }
 
     /// No committed text and no IME preedit — the caret-only state.

@@ -386,29 +386,6 @@ final class SelectionOverlayNSView: NSView {
         )
     }
 
-    /// 1px dashed hover frame; black on light / white on dark (matches edit chrome).
-    private func drawTextHoverOutline(in rect: CGRect, style: TextStyle) {
-        let scale = window?.backingScaleFactor ?? 2
-        let w = 1 / max(scale, 1)
-        let point = CGPoint(x: rect.midX, y: rect.midY)
-        let sampled = freezeImage.flatMap {
-            ContrastChrome.averageLuminance(in: $0, aroundPointInImageSpace: point)
-        } ?? 0.2
-        ContrastChrome.textHairline(
-            style: style,
-            freezeLuminance: ContrastChrome.adjustedLuminance(
-                sampled,
-                point: point,
-                selectionRect: selectionRect
-            )
-        ).setStroke()
-        let path = NSBezierPath(rect: rect.insetBy(dx: w / 2, dy: w / 2))
-        path.lineWidth = w
-        let dash: [CGFloat] = [3, 2]
-        path.setLineDash(dash, count: dash.count, phase: 0)
-        path.stroke()
-    }
-
     /// Snipaste step selection: dashed contrast square around the badge.
     private func drawStepSelectionOutline(in rect: CGRect) {
         let pad: CGFloat = 3

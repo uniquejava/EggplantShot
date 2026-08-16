@@ -17,15 +17,13 @@ extension AnnotationDrawing {
         ]
         for c in centers {
             let r = CGRect(x: c.x - size / 2, y: c.y - size / 2, width: size, height: size)
-            // Hollow white square — keep freeze visible under the handle.
-            NSColor.white.setStroke()
-            let stroke = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
-            stroke.lineWidth = 1
-            stroke.stroke()
+            // Hollow, so the freeze stays visible under the handle — haloed rather than plain white
+            // because a white square on light content had no edge at all.
+            ContrastChrome.strokeHaloedRect(r, lineWidth: 1)
         }
     }
 
-    /// Square endpoint handles (start / end); hollow white border so the freeze shows through.
+    /// Square endpoint handles (start / end); hollow haloed border so the freeze shows through.
     static func drawArrowEndpointHandles(
         start: CGPoint,
         end: CGPoint,
@@ -34,10 +32,7 @@ extension AnnotationDrawing {
         let half = size / 2
         for center in [start, end] {
             let r = CGRect(x: center.x - half, y: center.y - half, width: size, height: size)
-            NSColor.white.setStroke()
-            let stroke = NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5))
-            stroke.lineWidth = 1
-            stroke.stroke()
+            ContrastChrome.strokeHaloedRect(r, lineWidth: 1)
         }
     }
 

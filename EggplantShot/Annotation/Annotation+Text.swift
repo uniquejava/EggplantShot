@@ -65,7 +65,7 @@ extension Annotation {
         style: TextStyle,
         maxWidth: CGFloat = 10_000
     ) -> CGSize {
-        let pad = style.textPadding
+        let pad = style.textHorizontalPadding
         let vpad = style.textVerticalPadding
         let minH = ceil(style.makeFont().boundingRectForFont.height) + vpad * 2
         if string.isEmpty {
