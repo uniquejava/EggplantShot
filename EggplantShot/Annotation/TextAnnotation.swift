@@ -105,6 +105,61 @@ struct TextStyle: Equatable {
     }
 }
 
+/// The box-sizing arithmetic shared by the two places that must agree: `Annotation.fittingTextSize`,
+/// which sizes the **committed** mark, and `AnnotationTextView.fittingSize`, which sizes the **live**
+/// editor. They cannot share the *measurement* — the editor has to ask its own layout manager so IME
+/// preedit counts, while the model measures an `NSAttributedString` — but everything on either side of
+/// the measurement lives here, so a change to padding or wrapping lands in both instead of one.
+///
+/// The pair had already drifted: the model floored glyph width at nothing while the editor floored it
+/// at `caretWidth`, and each recomputed `minHeight` from the font independently.
+struct TextBoxMetrics {
+    /// Stand-in for "unbounded" when measuring. `.greatestFiniteMagnitude` is the honest value but
+    /// trips up layout arithmetic, so TextKit code conventionally uses a large finite number; this
+    /// names the one that used to be spelled `10_000` at ten sites across five files.
+    static let unboundedExtent: CGFloat = 10_000
+
+    let horizontalPadding: CGFloat
+    let verticalPadding: CGFloat
+    let caretWidth: CGFloat
+    let emptyWidth: CGFloat
+    /// Floor from the font's own bounding box, so a box never collapses below one line of type.
+    let minHeight: CGFloat
+    /// Width past which the box soft-wraps instead of growing (the trailing screen edge, normally).
+    let maxWidth: CGFloat
+
+    init(style: TextStyle, maxWidth: CGFloat = TextBoxMetrics.unboundedExtent) {
+        horizontalPadding = style.textHorizontalPadding
+        verticalPadding = style.textVerticalPadding
+        caretWidth = style.caretWidth
+        emptyWidth = style.emptyBoxWidth
+        minHeight = ceil(style.makeFont().boundingRectForFont.height) + style.textVerticalPadding * 2
+        self.maxWidth = maxWidth
+    }
+
+    /// Caret-only box: no glyphs to wrap around, just room for the caret to sit centred.
+    var emptySize: CGSize { CGSize(width: emptyWidth, height: minHeight) }
+
+    /// Width the glyphs may occupy before the box would exceed `maxWidth`.
+    var innerWidthAtMaxWidth: CGFloat { max(maxWidth - horizontalPadding * 2, 12) }
+
+    /// Box that shrink-wraps a measured glyph extent, before any wrap decision.
+    func size(glyphWidth: CGFloat, glyphHeight: CGFloat) -> CGSize {
+        CGSize(
+            width: max(ceil(glyphWidth), caretWidth) + horizontalPadding * 2,
+            height: max(ceil(glyphHeight) + verticalPadding * 2, minHeight)
+        )
+    }
+
+    /// Box for text that had to wrap: pinned to `maxWidth`, height from the re-measured extent.
+    func wrappedSize(glyphHeight: CGFloat) -> CGSize {
+        CGSize(width: maxWidth, height: max(ceil(glyphHeight) + verticalPadding * 2, minHeight))
+    }
+
+    /// Would a shrink-wrapped box of this size overrun the wrap width?
+    func needsWrap(_ size: CGSize) -> Bool { size.width > maxWidth }
+}
+
 /// Persisted last-used text annotate prefs (separate from stroke prefs).
 enum TextAnnotationPrefs {
     private static let colorKey = "annotate.text.palette"

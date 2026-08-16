@@ -45,7 +45,7 @@ extension Annotation {
         string: String,
         style: TextStyle,
         origin: CGPoint,
-        maxWidth: CGFloat = 10_000,
+        maxWidth: CGFloat = TextBoxMetrics.unboundedExtent,
         anchor: TextRectAnchor = .topLeft
     ) -> CGRect {
         let size = fittingTextSize(string: string, style: style, maxWidth: maxWidth)
@@ -59,36 +59,30 @@ extension Annotation {
         return CGRect(x: origin.x, y: y, width: size.width, height: size.height)
     }
 
-    /// Box size: glyphs + tiny padding only; empty box is caret-wide. Soft-wrap past `maxWidth`.
+    /// Box size: glyphs + padding; empty box is caret-wide. Soft-wrap past `maxWidth`.
+    /// The arithmetic lives in `TextBoxMetrics` so the live field editor computes the same box —
+    /// only the *measurement* differs (see `AnnotationTextView.fittingSize`).
     static func fittingTextSize(
         string: String,
         style: TextStyle,
-        maxWidth: CGFloat = 10_000
+        maxWidth: CGFloat = TextBoxMetrics.unboundedExtent
     ) -> CGSize {
-        let pad = style.textHorizontalPadding
-        let vpad = style.textVerticalPadding
-        let minH = ceil(style.makeFont().boundingRectForFont.height) + vpad * 2
+        let metrics = TextBoxMetrics(style: style, maxWidth: maxWidth)
         if string.isEmpty {
-            return CGSize(width: style.emptyBoxWidth, height: minH)
+            return metrics.emptySize
         }
         let attributed = NSAttributedString(string: string, attributes: style.attributes())
-        let natural = attributed.boundingRect(
-            with: CGSize(width: 10_000, height: 10_000),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        let naturalW = ceil(natural.width) + pad * 2
-        let naturalH = max(ceil(natural.height) + vpad * 2, minH)
-        if naturalW <= maxWidth {
-            return CGSize(width: naturalW, height: naturalH)
+        func extent(wrappingAt width: CGFloat) -> CGRect {
+            attributed.boundingRect(
+                with: CGSize(width: width, height: TextBoxMetrics.unboundedExtent),
+                options: [.usesLineFragmentOrigin, .usesFontLeading]
+            )
         }
-        let inner = max(maxWidth - pad * 2, 12)
-        let wrapped = attributed.boundingRect(
-            with: CGSize(width: inner, height: 10_000),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        )
-        return CGSize(
-            width: maxWidth,
-            height: max(ceil(wrapped.height) + vpad * 2, minH)
+        let natural = extent(wrappingAt: TextBoxMetrics.unboundedExtent)
+        let size = metrics.size(glyphWidth: natural.width, glyphHeight: natural.height)
+        guard metrics.needsWrap(size) else { return size }
+        return metrics.wrappedSize(
+            glyphHeight: extent(wrappingAt: metrics.innerWidthAtMaxWidth).height
         )
     }
 }

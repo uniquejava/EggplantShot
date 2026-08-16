@@ -96,25 +96,19 @@ extension SelectionOverlayController {
         tv.string = ann.string
         tv.isRichText = false
         tv.allowsUndo = true
-        tv.font = ann.textStyle.makeFont()
-        tv.textColor = ann.textStyle.color
-        tv.backgroundColor = .clear
-        tv.drawsBackground = false
-        // Only the explicit “background” style toggle fills behind glyphs.
-        if ann.textStyle.hasBackground {
-            tv.drawsBackground = true
-            tv.backgroundColor = ContrastChrome.textPlate(behind: ann.textStyle.color)
-        }
         tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = true
         tv.textContainer?.widthTracksTextView = false
         tv.textContainer?.heightTracksTextView = false
         tv.textContainer?.lineFragmentPadding = 0
-        tv.textContainer?.containerSize = CGSize(width: 10_000, height: 10_000)
-        tv.textContainerInset = NSSize(
-            width: ann.textStyle.textHorizontalPadding,
-            height: ann.textStyle.textVerticalPadding
+        tv.textContainer?.containerSize = CGSize(
+            width: TextBoxMetrics.unboundedExtent,
+            height: TextBoxMetrics.unboundedExtent
         )
+        // Style-dependent attributes go through the one shared path, never inline here — see
+        // `applyStyleAttributes`. `resizeTextEditorToFit` below replaces the container size above
+        // with the fitted box's inner width.
+        applyStyleAttributes(ann.textStyle, to: tv)
         tv.delegate = TextEditingBridge.shared
         TextEditingBridge.shared.owner = self
         tv.onNeedsFit = { [weak self] in
@@ -238,25 +232,28 @@ extension SelectionOverlayController {
         TextEditingBridge.shared.owner = nil
     }
 
-    func applyTextStyleToEditor(_ style: TextStyle) {
-        guard let tv = textEditor else { return }
+    /// The only place the field editor's **style-dependent** attributes are set. Both `startTextEditing`
+    /// and `applyTextStyleToEditor` route through here, because when each set them inline the two drifted:
+    /// the container inset was updated in one and not the other, and a value fed only from the restyle
+    /// path meant a freshly-opened editor drew a hairline caret until some later resize happened to run.
+    /// One-time wiring (delegate, resizability, first responder) stays in `startTextEditing`.
+    func applyStyleAttributes(_ style: TextStyle, to tv: AnnotationTextView) {
         tv.font = style.makeFont()
         tv.textColor = style.color
-        if style.hasBackground {
-            tv.drawsBackground = true
-            tv.backgroundColor = ContrastChrome.textPlate(behind: style.color)
-            tv.textContainerInset = NSSize(
-                width: style.textHorizontalPadding,
-                height: style.textVerticalPadding
-            )
-        } else {
-            tv.drawsBackground = false
-            tv.backgroundColor = .clear
-            tv.textContainerInset = NSSize(
-                width: style.textHorizontalPadding,
-                height: style.textVerticalPadding
-            )
-        }
+        // Only the explicit “background” style toggle fills behind glyphs.
+        tv.drawsBackground = style.hasBackground
+        tv.backgroundColor = style.hasBackground
+            ? ContrastChrome.textPlate(behind: style.color)
+            : .clear
+        tv.textContainerInset = NSSize(
+            width: style.textHorizontalPadding,
+            height: style.textVerticalPadding
+        )
+    }
+
+    func applyTextStyleToEditor(_ style: TextStyle) {
+        guard let tv = textEditor else { return }
+        applyStyleAttributes(style, to: tv)
         let sample: CGPoint
         if let chrome = textChromeView, let host = textEditorHost {
             sample = CGPoint(
@@ -281,15 +278,8 @@ extension SelectionOverlayController {
         }()
         // Grow with glyphs (including IME marked / preedit); wrap only near the trailing screen edge.
         let maxW = max(40, host.screenFrame.width - chrome.frame.minX - 4)
-        let minH = ceil(style.makeFont().boundingRectForFont.height) + style.textVerticalPadding * 2
-        let size = tv.fittingSize(
-            padding: style.textHorizontalPadding,
-            verticalPadding: style.textVerticalPadding,
-            caretWidth: style.caretWidth,
-            emptyWidth: style.emptyBoxWidth,
-            minHeight: minH,
-            maxWidth: maxW
-        )
+        let metrics = TextBoxMetrics(style: style, maxWidth: maxW)
+        let size = tv.fittingSize(metrics)
 
         var frame = chrome.frame
         let top = frame.maxY
@@ -313,11 +303,14 @@ extension SelectionOverlayController {
         // ends in a newline a selection rect spanning the whole container width (only the last line
         // hugs its glyphs), so an oversized container made ⌘A on multi-line text paint the first
         // line's highlight out to the screen edge. Wrapping does not need the slack: `fittingSize`
-        // already measures at 10_000 to find the natural width and returns `maxWidth` when it has to
-        // wrap, so the box width it just produced *is* the wrap decision — laying out at that width
-        // reproduces it rather than second-guessing it.
-        let inner = max(1, frame.width - style.textHorizontalPadding * 2)
-        tv.textContainer?.containerSize = CGSize(width: inner, height: 10_000)
+        // measures unbounded to find the natural width and returns `maxWidth` when it has to wrap, so
+        // the box width it just produced *is* the wrap decision — laying out at that width reproduces
+        // it rather than second-guessing it.
+        let inner = max(1, frame.width - metrics.horizontalPadding * 2)
+        tv.textContainer?.containerSize = CGSize(
+            width: inner,
+            height: TextBoxMetrics.unboundedExtent
+        )
         tv.textContainer?.widthTracksTextView = false
         chrome.needsDisplay = true
     }

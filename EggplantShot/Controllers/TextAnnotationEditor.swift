@@ -372,43 +372,39 @@ final class AnnotationTextView: NSTextView {
         onNeedsFit?()
     }
 
-    /// Size from laid-out glyphs (includes IME preedit). Width is glyphs + padding only.
-    func fittingSize(
-        padding: CGFloat,
-        verticalPadding: CGFloat,
-        caretWidth: CGFloat,
-        emptyWidth: CGFloat,
-        minHeight: CGFloat,
-        maxWidth: CGFloat
-    ) -> CGSize {
+    /// Size from laid-out glyphs — the live counterpart of `Annotation.fittingTextSize`. Only the
+    /// *measurement* differs between the two: this asks the layout manager, so IME preedit counts
+    /// before it is committed. Everything either side of it comes from the shared `TextBoxMetrics`,
+    /// so the box the editor shows and the box the mark is saved with cannot drift apart.
+    func fittingSize(_ metrics: TextBoxMetrics) -> CGSize {
         if isEmptyForCaret {
-            // Caret-only: `emptyWidth` already carries the caret's own padding either side, so the
-            // caret can sit centred (see `TextStyle.emptyBoxWidth`).
-            let floorWidth = padding * 2 + textHairlineWidth(in: self)
-            return CGSize(width: max(emptyWidth, floorWidth), height: minHeight)
+            // Caret-only: `emptySize` already carries the caret's own padding either side, so the
+            // caret can sit centred (see `TextStyle.emptyBoxWidth`). The extra floor is view-specific —
+            // the model has no backing scale to ask for a device pixel.
+            let floorWidth = metrics.horizontalPadding * 2 + textHairlineWidth(in: self)
+            return CGSize(
+                width: max(metrics.emptySize.width, floorWidth),
+                height: metrics.minHeight
+            )
         }
         guard let lm = layoutManager, let tc = textContainer else {
-            return CGSize(width: padding * 2 + caretWidth, height: minHeight)
+            return CGSize(
+                width: metrics.horizontalPadding * 2 + metrics.caretWidth,
+                height: metrics.minHeight
+            )
         }
         let saved = tc.containerSize
-        tc.containerSize = CGSize(width: 10_000, height: 10_000)
-        lm.ensureLayout(for: tc)
-        var used = lm.usedRect(for: tc)
-        let glyphW = max(ceil(used.maxX), caretWidth)
-        var width = glyphW + padding * 2
-        var height = ceil(used.height) + verticalPadding * 2
-        if width > maxWidth {
-            let inner = max(maxWidth - padding * 2, 12)
-            tc.containerSize = CGSize(width: inner, height: 10_000)
+        defer { tc.containerSize = saved }
+        func usedExtent(wrappingAt width: CGFloat) -> CGRect {
+            tc.containerSize = CGSize(width: width, height: TextBoxMetrics.unboundedExtent)
             lm.ensureLayout(for: tc)
-            used = lm.usedRect(for: tc)
-            width = maxWidth
-            height = ceil(used.height) + verticalPadding * 2
+            return lm.usedRect(for: tc)
         }
-        tc.containerSize = saved
-        return CGSize(
-            width: width,
-            height: max(height, minHeight)
+        let natural = usedExtent(wrappingAt: TextBoxMetrics.unboundedExtent)
+        let size = metrics.size(glyphWidth: natural.maxX, glyphHeight: natural.height)
+        guard metrics.needsWrap(size) else { return size }
+        return metrics.wrappedSize(
+            glyphHeight: usedExtent(wrappingAt: metrics.innerWidthAtMaxWidth).height
         )
     }
 }

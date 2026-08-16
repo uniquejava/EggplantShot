@@ -56,7 +56,7 @@ extension AnnotationDrawing {
         // the stored geometry instead.
         var textRect = rect.insetBy(dx: pad, dy: 0)
         let natural = attributed.boundingRect(
-            with: CGSize(width: textRect.width, height: 10_000),
+            with: CGSize(width: textRect.width, height: TextBoxMetrics.unboundedExtent),
             options: [.usesLineFragmentOrigin, .usesFontLeading]
         )
         let hslack = max(0, textRect.width - ceil(natural.width))
