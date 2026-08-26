@@ -16,7 +16,7 @@ Prebuilt DMGs (ad-hoc signed, not notarized) are on **[Releases](https://github.
 - **OCR** — recognize **QR codes or text** from the selection → clipboard
 - **Paste** — turn the clipboard into a floating pin (image, color swatch, or text sticky)
 - **Pins** — stay on top, drag, scroll to zoom, hide/show all
-- **Preferences** — launch at login, language (System / English / 简体中文), hotkeys, permissions
+- **Preferences** — launch at login, include mouse cursor, language (System / English / 简体中文), hotkeys, permissions
 
 ## Hotkeys (defaults)
 

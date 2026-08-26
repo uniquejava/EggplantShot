@@ -36,6 +36,12 @@ struct StatusMenuContent: View {
 
         Divider()
 
+        Button(appState.includesCursor
+               ? "✓ \(L10n.tr("Include mouse cursor"))"
+               : L10n.tr("Include mouse cursor")) {
+            appState.toggleIncludesCursor()
+        }
+
         Button(appState.hotkeySettings.hotkeysDisabled
                ? L10n.tr("Enable hotkeys")
                : L10n.tr("Disable hotkeys")) {

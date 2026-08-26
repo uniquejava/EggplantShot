@@ -5,10 +5,13 @@ import ScreenCaptureKit
 
 enum ScreenCapturer {
     /// Full-display snapshot in pixels (for freeze overlay). Call before showing overlay windows.
-    static func captureDisplay(_ screen: NSScreen) async -> CGImage? {
+    static func captureDisplay(
+        _ screen: NSScreen,
+        includesCursor: Bool = false
+    ) async -> CGImage? {
         do {
             let content = try await SCShareableContent.current
-            return try await captureDisplay(screen, content: content)
+            return try await captureDisplay(screen, content: content, includesCursor: includesCursor)
         } catch {
             return nil
         }
@@ -16,7 +19,10 @@ enum ScreenCapturer {
 
     /// Freeze every connected display. Fetches shareable content once, then captures in parallel.
     /// Includes this app’s pin panels and menu-bar icon so F1 can re-snip them (Snipaste parity).
-    static func captureAllDisplays() async -> [(screen: NSScreen, image: CGImage)] {
+    /// `includesCursor` bakes the pointer in at its hotkey-press position — see `CapturePrefs`.
+    static func captureAllDisplays(
+        includesCursor: Bool = false
+    ) async -> [(screen: NSScreen, image: CGImage)] {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return [] }
 
@@ -30,7 +36,11 @@ enum ScreenCapturer {
         return await withTaskGroup(of: (Int, CGImage)?.self) { group in
             for (index, screen) in screens.enumerated() {
                 group.addTask {
-                    guard let image = try? await captureDisplay(screen, content: content) else {
+                    guard let image = try? await captureDisplay(
+                        screen,
+                        content: content,
+                        includesCursor: includesCursor
+                    ) else {
                         return nil
                     }
                     return (index, image)
@@ -77,7 +87,10 @@ enum ScreenCapturer {
 
     /// Capture a rectangular region in Cocoa global coordinates (points, bottom-left origin).
     /// `rect` is in screen points; the returned image is pixel-backed at display scale.
-    static func capture(rectInScreenPoints rect: CGRect) async -> NSImage? {
+    static func capture(
+        rectInScreenPoints rect: CGRect,
+        includesCursor: Bool = false
+    ) async -> NSImage? {
         guard rect.width >= 1, rect.height >= 1 else { return nil }
 
         let center = CGPoint(x: rect.midX, y: rect.midY)
@@ -86,7 +99,7 @@ enum ScreenCapturer {
             ?? NSScreen.screens.first
         guard let screen else { return nil }
 
-        guard let full = await captureDisplay(screen) else { return nil }
+        guard let full = await captureDisplay(screen, includesCursor: includesCursor) else { return nil }
         return crop(full, rectInScreenPoints: rect, on: screen)
     }
 
@@ -94,7 +107,8 @@ enum ScreenCapturer {
 
     private static func captureDisplay(
         _ screen: NSScreen,
-        content: SCShareableContent
+        content: SCShareableContent,
+        includesCursor: Bool
     ) async throws -> CGImage {
         let displayID = screen.displayID
         guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
@@ -113,7 +127,7 @@ enum ScreenCapturer {
         let config = SCStreamConfiguration()
         config.width = Int((CGFloat(display.width) * scale).rounded(.toNearestOrAwayFromZero))
         config.height = Int((CGFloat(display.height) * scale).rounded(.toNearestOrAwayFromZero))
-        config.showsCursor = false
+        config.showsCursor = includesCursor
         config.scalesToFit = false
 
         return try await SCScreenshotManager.captureImage(

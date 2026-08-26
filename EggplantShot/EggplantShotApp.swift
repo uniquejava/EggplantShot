@@ -98,6 +98,11 @@ final class AppState: ObservableObject {
     @Published var accessibilityTrusted = false
     @Published var screenAccessGranted = false
 
+    /// Mirrors `CapturePrefs.includesCursor` so the status menu and Preferences never drift apart.
+    @Published var includesCursor = CapturePrefs.includesCursor {
+        didSet { CapturePrefs.includesCursor = includesCursor }
+    }
+
     private var accessibilityPollTimer: Timer?
     private var pinBoardCancellable: AnyCancellable?
 
@@ -157,6 +162,10 @@ final class AppState: ObservableObject {
 
     func toggleHotkeysDisabled() {
         setHotkeysDisabled(!hotkeySettings.hotkeysDisabled)
+    }
+
+    func toggleIncludesCursor() {
+        includesCursor.toggle()
     }
 
     func setHotkeysDisabled(_ disabled: Bool) {

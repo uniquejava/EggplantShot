@@ -46,7 +46,7 @@ Do **not** open the DerivedData path, and do **not** skip `-derivedDataPath buil
 EggplantShot/
   EggplantShotApp.swift
   Hotkey/HotkeyMonitor.swift + HotkeyShortcut.swift
-  Capture/ScreenPermissions.swift + ScreenCapturer.swift + WindowHitTester.swift + ImageFileSaver.swift + ClipboardPaster.swift
+  Capture/ScreenPermissions.swift + ScreenCapturer.swift + CapturePrefs.swift + WindowHitTester.swift + ImageFileSaver.swift + ClipboardPaster.swift
   Services/LaunchAtLogin.swift
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (mouse / draft / hit-test / style / text / geometry / history / toolbar / pin-edit)
@@ -83,6 +83,12 @@ EggplantShot/
 9. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
 10. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
 11. During an active **Capture** (refine), **`,`** / **`.`** step through prior capture records (older / newer).
+12. **Include mouse cursor** (`CapturePrefs.includesCursor`, off by default) sets `showsCursor` on the
+    freeze, so the pointer is baked in at its hotkey-press position and every downstream path — pin /
+    copy / save / OCR / history replay / mosaic sampling — inherits it from the one snapshot. Do not
+    re-render a cursor later in the pipeline: by the time the toolbar is reachable the real pointer has
+    moved off whatever the user wanted pictured. `AppState.includesCursor` mirrors the pref so the
+    status-menu item and Preferences → General cannot drift.
 
 ## Annotate extensibility (P4 — always)
 

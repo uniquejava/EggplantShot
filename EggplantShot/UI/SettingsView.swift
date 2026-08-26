@@ -6,7 +6,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            GeneralSettingsPane()
+            GeneralSettingsPane(appState: appState)
                 .tabItem {
                     Label(L10n.tr("General"), systemImage: "gearshape")
                 }
@@ -34,12 +34,30 @@ struct SettingsView: View {
 }
 
 private struct GeneralSettingsPane: View {
+    @ObservedObject var appState: AppState
+
     @State private var selectedLanguage = AppLanguage.preference
     @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
     @State private var launchAtLoginError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.tr("Capture"))
+                    .font(.headline)
+
+                Toggle(L10n.tr("Include mouse cursor"), isOn: Binding(
+                    get: { appState.includesCursor },
+                    set: { appState.includesCursor = $0 }
+                ))
+                .toggleStyle(.checkbox)
+
+                Text(L10n.tr("The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(L10n.tr("Startup"))
                     .font(.headline)

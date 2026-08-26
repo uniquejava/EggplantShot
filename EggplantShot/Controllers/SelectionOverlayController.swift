@@ -207,8 +207,12 @@ final class SelectionOverlayController {
 
         // Window list + freeze frames before our panels cover the displays.
         // Pin frames so hover / click-lock can target pinned images for re-snip.
+        // The pointer is baked in here or not at all — by the time the toolbar is reachable the
+        // cursor has moved off whatever the user wanted pictured.
         windowHitTester = WindowHitTester.snapshot(additionalFrames: pinFrames)
-        let captured = await ScreenCapturer.captureAllDisplays()
+        let captured = await ScreenCapturer.captureAllDisplays(
+            includesCursor: CapturePrefs.includesCursor
+        )
 
         return await withCheckedContinuation { continuation in
             self.continuation = continuation

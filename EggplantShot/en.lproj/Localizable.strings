@@ -14,6 +14,7 @@
 "Help" = "Help";
 "Check for updates..." = "Check for updates...";
 "Quit" = "Quit";
+"Include mouse cursor" = "Include mouse cursor";
 "Language" = "Language";
 "Follow System" = "Follow System";
 "English" = "English";
@@ -40,6 +41,7 @@
 "EggplantShot stays in the menu bar after login. Quitting the app does not turn this off." = "EggplantShot stays in the menu bar after login. Quitting the app does not turn this off.";
 "App language" = "App language";
 "Language changes take effect after EggplantShot restarts." = "Language changes take effect after EggplantShot restarts.";
+"The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu." = "The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu.";
 
 /* About */
 "Author · %@" = "Author · %@";
