@@ -347,6 +347,10 @@ final class SelectionOverlayController {
             if let view = panel.contentView {
                 panel.invalidateCursorRects(for: view)
             }
+            // Do not wait for AppKit's first cursorUpdate.  Immediately install
+            // the crosshair at F1 time; activation can otherwise leave the old
+            // application's arrow/I-beam visible until the pointer moves.
+            AnnotationCursors.whitePlus.set()
         }
 
         installMonitors()

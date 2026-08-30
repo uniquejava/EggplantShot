@@ -95,6 +95,13 @@ final class SelectionPanel: NSPanel {
     /// After AppKit’s activation cursor reset, reinstall our rects.
     @objc private func becameKey() {
         invalidateCursorRects(for: overlayView)
+        // AppKit resets the cursor while activating a newly-created panel.  Cursor
+        // rects are applied lazily (often only after the next mouse-moved event),
+        // so explicitly re-assert the selecting cursor when this panel becomes key.
+        if overlayView.cursorMode == .selectingPlus,
+           NSMouseInRect(NSEvent.mouseLocation, screenFrame, false) {
+            AnnotationCursors.whitePlus.set()
+        }
     }
 
     func setSelection(

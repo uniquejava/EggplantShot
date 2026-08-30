@@ -141,6 +141,11 @@ final class SelectionOverlayNSView: NSView {
     override func mouseEntered(with event: NSEvent) {
         // Multi-display: only the key window’s cursor rects apply.
         window?.makeKeyAndOrderFront(nil)
+        if cursorMode == .selectingPlus {
+            // Entering a secondary display can promote this panel to key after
+            // AppKit has already processed cursorUpdate; set it explicitly.
+            AnnotationCursors.whitePlus.set()
+        }
     }
 
     /// Pin-edit: only the bitmap (plus handle slop) and any live text editor are ours. Everything
