@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Rasterize master AppIcon into macOS AppIcon.appiconset sizes.
 
-macOS Dock/Finder expect a rounded-rect (“squircle”) silhouette with
-transparent corners. Classic asset-catalog PNGs are not reliably masked by
-the system the way iOS icons are — bake the continuous corner into the art.
-Corner radius ≈ 22.37% of edge (Big Sur+ icon grid).
+macOS wants a rounded-rect (“squircle”) silhouette with transparent corners and —
+unlike iOS, where the OS masks and insets for you — a transparent **optical margin**
+baked into the art. Filling the artboard edge-to-edge makes the Dock tile render
+~1.24x its system peers. Apple’s template ≈ 100px pad / 824px grid on 1024.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ CANDIDATES = [
     / ".cursor/projects/Users-cyper-code-eggplant-projects-EggplantShot/assets/EggplantShot-AppIcon-1024-raw.png",
 ]
 
-# Apple continuous-corner approximation used across Big Sur+ templates.
 CORNER_RADIUS_FRAC = 0.2237
+ICON_GRID_PX = 824
 
 SIZES: list[tuple[str, int, str, str]] = [
     ("icon_16.png", 16, "16x16", "1x"),
@@ -39,26 +39,51 @@ SIZES: list[tuple[str, int, str, str]] = [
 ]
 
 
-def apply_macos_icon_mask(im: Image.Image) -> Image.Image:
-    """Clip to rounded rect; corners become transparent."""
+def _center_top_pad_frac(im: Image.Image) -> float:
+    w, h = im.size
+    cx = w // 2
+    for y in range(h):
+        if im.getpixel((cx, y))[3] > 16:
+            return y / h
+    return 1.0
+
+
+def bake_macos_app_icon(im: Image.Image) -> Image.Image:
+    """Inset to Apple's icon grid, then clip to squircle (transparent outside)."""
     im = im.convert("RGBA")
     w, h = im.size
     if w != h:
         raise SystemExit(f"expected square image, got {w}x{h}")
-    # Already masked? (transparent near corner)
-    if im.getpixel((0, 0))[3] < 16 and im.getpixel((w - 1, 0))[3] < 16:
+    if im.size != (1024, 1024):
+        im = im.resize((1024, 1024), Image.Resampling.LANCZOS)
+
+    pad_frac = _center_top_pad_frac(im)
+    if 0.08 <= pad_frac <= 0.12 and im.getpixel((0, 0))[3] < 16:
         return im
-    radius = max(1, int(round(min(w, h) * CORNER_RADIUS_FRAC)))
-    mask = Image.new("L", (w, h), 0)
+
+    grid = ICON_GRID_PX
+    pad = (1024 - grid) // 2
+    inner = im.resize((grid, grid), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    canvas.paste(inner, (pad, pad), inner)
+
+    radius = max(1, int(round(grid * CORNER_RADIUS_FRAC)))
+    mask = Image.new("L", (1024, 1024), 0)
     draw = ImageDraw.Draw(mask)
-    draw.rounded_rectangle((0, 0, w - 1, h - 1), radius=radius, fill=255)
-    out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    out.paste(im, (0, 0), mask=mask)
+    draw.rounded_rectangle(
+        (pad, pad, pad + grid - 1, pad + grid - 1), radius=radius, fill=255
+    )
+    out = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    out.paste(canvas, (0, 0), mask=mask)
     return out
 
 
 def main() -> None:
-    src = next((p for p in CANDIDATES if p.exists()), None)
+    # Prefer raw full-bleed over an existing master so re-runs re-bake correctly.
+    ordered = [p for p in CANDIDATES[1:] if p.exists()] + (
+        [CANDIDATES[0]] if CANDIDATES[0].exists() else []
+    )
+    src = ordered[0] if ordered else None
     if src is None:
         raise SystemExit(f"missing master icon, tried: {CANDIDATES}")
 
@@ -69,7 +94,7 @@ def main() -> None:
     im = Image.open(src)
     if im.size != (1024, 1024):
         im = im.resize((1024, 1024), Image.Resampling.LANCZOS)
-    im = apply_macos_icon_mask(im)
+    im = bake_macos_app_icon(im)
 
     master = DEST / "AppIcon-1024-master.png"
     im.save(master, format="PNG")
@@ -88,6 +113,7 @@ def main() -> None:
         json.dumps(contents, indent=2) + "\n", encoding="utf-8"
     )
     print("updated Contents.json")
+    print("source:", src)
     print("master:", master)
 
 
