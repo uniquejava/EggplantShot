@@ -26,8 +26,22 @@ extension SelectionOverlayController {
                 resizeCursor(for: handle).set()
                 return
             }
+            if annotateTool == .none,
+               currentRect.contains(point),
+               isEmptyCropInterior(at: point) {
+                // Empty crop interior is a direct pan target; no Space modifier
+                // is required when no annotate tool is armed.
+                NSCursor.openHand.set()
+                return
+            }
             updateAnnotateCursor(at: point)
         }
+    }
+
+    private func isEmptyCropInterior(at point: CGPoint) -> Bool {
+        guard currentRect.contains(point) else { return false }
+        if case .outside = annotationPointerTarget(at: point) { return true }
+        return false
     }
 
     /// True while dragging the blue crop (Space pan may have been released mid-drag).

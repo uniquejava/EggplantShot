@@ -577,8 +577,16 @@ extension SelectionOverlayController {
 
     func handleRefineMouseDown(at point: CGPoint, clickCount: Int = 1) {
         endTextWheelResizeIfNeeded()
-        // Hold Space: drag the blue crop (temporary; ignores annotate hits).
-        if spaceHeldForCropMove {
+        // With no annotate tool armed, empty crop interior is always a canvas-move
+        // target. Space remains supported as a backwards-compatible modifier and
+        // still takes precedence over annotation hits.
+        let pointerTarget = annotationPointerTarget(at: point)
+        let emptyCropInterior: Bool = {
+            guard annotateTool == .none, currentRect.contains(point) else { return false }
+            if case .outside = pointerTarget { return true }
+            return false
+        }()
+        if spaceHeldForCropMove || emptyCropInterior {
             if editingTextID != nil {
                 endTextEditing(commit: true)
             }
