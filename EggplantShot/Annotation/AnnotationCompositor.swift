@@ -14,38 +14,59 @@ enum AnnotationCompositor {
         // Render marks at the base image's pixel density so the bake matches what was on screen.
         let pixels = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
         let scale = max(pixels.map { CGFloat($0.width) / size.width } ?? 2, 1)
-        return NSImage(size: size, flipped: false) { _ in
-            image.draw(
-                in: CGRect(origin: .zero, size: size),
-                from: .zero,
-                operation: .copy,
-                fraction: 1
+        // Marks (incl. eraser destinationOut) on a separate layer so base pixels stay intact.
+        let layer = AnnotationDrawing.renderMarksLayer(
+            annotations,
+            size: size,
+            origin: .zero,
+            scale: scale,
+            colorSpace: pixels?.colorSpace,
+            sample: sample,
+            // Match idle overlay: hide nested sources when ≥2 magnifiers (no hover on bake).
+            hiddenMagnifierSourceIDs: AnnotationDrawing.nestedMagnifierSourceIDsToHide(
+                in: annotations
             )
-            // Marks (incl. eraser destinationOut) on a separate layer so base pixels stay intact.
-            if let layer = AnnotationDrawing.renderMarksLayer(
-                annotations,
-                size: size,
-                origin: .zero,
-                scale: scale,
-                colorSpace: pixels?.colorSpace,
-                sample: sample,
-                // Match idle overlay: hide nested sources when ≥2 magnifiers (no hover on bake).
-                hiddenMagnifierSourceIDs: AnnotationDrawing.nestedMagnifierSourceIDsToHide(
-                    in: annotations
-                )
-            ) {
-                layer.draw(
-                    in: CGRect(origin: .zero, size: size),
-                    from: .zero,
-                    operation: .sourceOver,
-                    fraction: 1
-                )
+        )
+
+        // Bake into a bitmap sized at real pixel resolution (not a dynamic `NSImage(size:flipped:)`,
+        // which AppKit can later rasterize at 1x — e.g. via `tiffRepresentation` on save — silently
+        // halving the exported resolution).
+        return drawImage(size: size, scale: scale) { rect in
+            image.draw(in: rect, from: .zero, operation: .copy, fraction: 1)
+            if let layer {
+                layer.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1)
             } else {
                 for annotation in annotations {
                     AnnotationDrawing.draw(annotation, origin: .zero, sample: sample)
                 }
             }
-            return true
         }
+    }
+
+    private static func drawImage(size: CGSize, scale: CGFloat, body: (CGRect) -> Void) -> NSImage {
+        let pixels = NSSize(width: size.width * scale, height: size.height * scale)
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(pixels.width.rounded()),
+            pixelsHigh: Int(pixels.height.rounded()),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else {
+            return NSImage(size: size)
+        }
+        rep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        body(CGRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+
+        let result = NSImage(size: size)
+        result.addRepresentation(rep)
+        return result
     }
 }
