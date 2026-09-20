@@ -90,7 +90,7 @@ Press **V** (or the cursor toolbar icon) to enter move mode: click and drag any 
 
 **V** is also the way to grab a mark sitting right on the blue crop's edge: with no tool armed that edge belongs to the crop, but **V** never touches the crop.
 
-**Hold Space** and drag to move the **blue crop** (temporary hand cursor). Release Space to return to the current tool. Adjust crop size with handles or by expanding from outside.
+**Drag the empty interior** of the blue crop to move it (open-hand cursor) — with no annotate tool armed no modifier is needed. **Hold Space** does the same under any tool and also works mid-annotation (release Space to return to the current tool). Adjust crop size with handles or by expanding from outside.
 
 ### Paint tools — move vs draw
 
@@ -106,7 +106,8 @@ Under object tools (shape / arrow / text / …), paint-like marks still draw-thr
 
 | Context | Modifier | Effect |
 |---------|----------|--------|
-| Refine (any tool) | **Space** (hold) | Drag blue crop |
+| Refine (no tool armed) | — (drag empty interior) | Move blue crop |
+| Refine (any tool) | **Space** (hold) | Move blue crop |
 | Text mark (hover / selected / editing) | **Scroll wheel** | Resize font |
 | Shape / mosaic region | **Shift** | Square / circle |
 | Arrow / pencil / freehand mosaic | **Shift** | Straight line (arrow also 45° snap) |

@@ -13,7 +13,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - **Crop resize chrome stays** while any annotate tool is selected (8 handles on the blue export rect). Mark chrome wins on overlap; otherwise the **border strip** still resizes the crop. **Outside-edge expand is off** while a tool is armed (dimmed area is for annotate); it returns when the tool is toggled off / deselected. Interior of the crop still draws / places marks (does not move the selection). **Exception — no tool armed (`.none`):** there the crop's border band *and* the outside octants win **over** marks, so a mark drawn flush with a crop edge can never make that edge unresizable; grab such a mark with **V** instead, which never touches the crop.
 - **No tool armed is still an editing mode.** With `.none` you cannot create marks, but every existing mark stays selectable / movable / resizable and its option row still shows. Marks are never read-only just because no tool is armed.
 - Moving / resizing / expanding the blue crop **does not move marks on the freeze** — selection-local geometry is rebased by the origin delta (marks stay glued to image content; only the export rect changes).
-- **Hold Space** → temporary drag-move of the blue crop (open hand → closed hand while dragging; release Space to return to the current tool). Interior drag without Space does **not** move the crop.
+- **Crop move** → with no tool armed (`.none`), dragging the **empty interior** of the blue crop moves it directly (open hand → closed hand while dragging; no modifier). **Space** remains supported and wins over mark hits, so it also drag-moves the crop under any tool (release Space to return to the current tool).
 - Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
 - Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
 - Confirm composites marks onto the crop, then tears down the overlay.
@@ -31,7 +31,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 
 1. F1 / **Capture** → freeze each display → dim overlay → drag region (or click-lock window).
 2. Mouse-up (large enough) → **refine** (no export yet):
-   - Blue selection + **8 circular** handles; handles / border resize; size label `W × H`. Interior does **not** drag-move the crop unless **Space** is held (crop move is rare and not undoable). Outside click expands.
+   - Blue selection + **8 circular** handles; handles / border resize; size label `W × H`. Interior drag moves the crop when no tool is armed (empty interior, hand cursor) or **Space** is held (crop move is rare and not undoable). Outside click expands.
    - Toolbar: white rounded card (≈6pt), icon row + dividers, **right-aligned** under selection (≈4pt gap; flips above near bottom).
 3. Actions: **Cancel (✕)** / **Pin** / **Save** / **Copy** / **OCR** (+ Esc / Return for primary).
 
@@ -348,7 +348,7 @@ gated on `SelectionOverlayController.pinEdit`:
 | Host | one full-screen panel per display, freeze backdrop + dim | one transparent lid over the bitmap (+ ~200pt margin for the text editor), margins click-through |
 | Chrome | blue crop rect, 8 crop handles, size badge | none — marks and their own chrome only; ink clipped to the bitmap |
 | Effect sampling | freeze (with playback stamped in) | the pinned bitmap at `.zero` origin, same context `AnnotationCompositor` bakes with |
-| Crop | resize / move / Space-drag / outside-octant expand | all off (`refineResizeHandle` returns nil) |
+| Crop | resize / move (interior drag or Space) / outside-octant expand | all off (`refineResizeHandle` returns nil) |
 | `,` / `.` | history playback | inert (that controller has no `historyStore`) |
 | Zoom | n/a | pin snaps to 100%; the wheel belongs to the tools |
 | Confirm | Pin / Copy / Save create the artefact, Esc ladder ends in discard | ✓ / Esc **apply and keep the pin**; ✕ discards the session; Copy / Save / OCR bake and **close** the pin |
