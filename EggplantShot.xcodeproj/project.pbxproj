@@ -75,6 +75,7 @@
 		B10000000000000000000009 /* StatusMenuContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000009 /* StatusMenuContent.swift */; };
 		B1000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* SettingsView.swift */; };
 		B10000000000000000000012 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* AboutView.swift */; };
+		B1000000000000000000001E /* UpdateCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001E /* UpdateCheckView.swift */; };
 		B1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000B /* Assets.xcassets */; };
 		B1E00000000000000000000018 /* Annotation+Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000018 /* Annotation+Geometry.swift */; };
 		B1E00000000000000000000019 /* Annotation+Shape.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000019 /* Annotation+Shape.swift */; };
@@ -110,6 +111,8 @@
 		B1L00000000000000000000001 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1L00000000000000000000001 /* AppLanguage.swift */; };
 		B1L00000000000000000000002 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = C1L00000000000000000000002 /* Localizable.strings */; };
 		B1S00000000000000000000001 /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1S00000000000000000000001 /* LaunchAtLogin.swift */; };
+		B1S00000000000000000000002 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1S00000000000000000000002 /* UpdateChecker.swift */; };
+		B1S00000000000000000000003 /* NetworkPrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1S00000000000000000000003 /* NetworkPrefs.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -182,6 +185,7 @@
 		C10000000000000000000009 /* StatusMenuContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMenuContent.swift; sourceTree = "<group>"; };
 		C1000000000000000000000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C10000000000000000000012 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
+		C1000000000000000000001E /* UpdateCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckView.swift; sourceTree = "<group>"; };
 		C1000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C1000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C1000000000000000000000D /* EggplantShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = EggplantShot.entitlements; sourceTree = "<group>"; };
@@ -220,6 +224,8 @@
 		C1L00000000000000000000003 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		C1L00000000000000000000004 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		C1S00000000000000000000001 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
+		C1S00000000000000000000002 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
+		C1S00000000000000000000003 /* NetworkPrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkPrefs.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -266,6 +272,8 @@
 			isa = PBXGroup;
 			children = (
 				C1S00000000000000000000001 /* LaunchAtLogin.swift */,
+				C1S00000000000000000000002 /* UpdateChecker.swift */,
+				C1S00000000000000000000003 /* NetworkPrefs.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -421,6 +429,7 @@
 				C10000000000000000000009 /* StatusMenuContent.swift */,
 				C1000000000000000000000A /* SettingsView.swift */,
 				C10000000000000000000012 /* AboutView.swift */,
+				C1000000000000000000001E /* UpdateCheckView.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -603,8 +612,11 @@
 				B10000000000000000000009 /* StatusMenuContent.swift in Sources */,
 				B1000000000000000000000A /* SettingsView.swift in Sources */,
 				B10000000000000000000012 /* AboutView.swift in Sources */,
+				B1000000000000000000001E /* UpdateCheckView.swift in Sources */,
 				B1L00000000000000000000001 /* AppLanguage.swift in Sources */,
 				B1S00000000000000000000001 /* LaunchAtLogin.swift in Sources */,
+				B1S00000000000000000000002 /* UpdateChecker.swift in Sources */,
+				B1S00000000000000000000003 /* NetworkPrefs.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

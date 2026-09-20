@@ -90,14 +90,14 @@ struct StatusMenuContent: View {
         })
 
         Button(L10n.tr("Help")) {
-            // Stub
+            if let url = URL(string: "https://github.com/uniquejava/EggplantShot/issues") {
+                NSWorkspace.shared.open(url)
+            }
         }
-        .disabled(true)
 
         Button(L10n.tr("Check for updates...")) {
-            // Stub
+            appState.checkForUpdates()
         }
-        .disabled(true)
 
         Divider()
 

@@ -42,6 +42,12 @@
 "App language" = "App language";
 "Language changes take effect after EggplantShot restarts." = "Language changes take effect after EggplantShot restarts.";
 "The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu." = "The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu.";
+"Network" = "Network";
+"HTTP proxy" = "HTTP proxy";
+"Route update checks through a proxy" = "Route update checks through a proxy";
+"Host" = "Host";
+"Port" = "Port";
+"Turn this on only if EggplantShot can't reach GitHub directly. The proxy is used for update checks only — your screenshots never leave this Mac." = "Turn this on only if EggplantShot can't reach GitHub directly. The proxy is used for update checks only — your screenshots never leave this Mac.";
 
 /* About */
 "Author · %@" = "Author · %@";
@@ -56,6 +62,16 @@
 "screen_alert_body_short" = "EggplantShot needs Screen Recording permission to capture your screen.";
 "Open System Settings" = "Open System Settings";
 "Later" = "Later";
+"OK" = "OK";
+"You're Up to Date" = "You're Up to Date";
+"EggplantShot %@ is the latest version." = "EggplantShot %@ is the latest version.";
+"Update Available" = "Update Available";
+"EggplantShot %1$@ is available. You're on %2$@." = "EggplantShot %1$@ is available. You're on %2$@.";
+"View on GitHub" = "View on GitHub";
+"Couldn't Check for Updates" = "Couldn't Check for Updates";
+"Please check your internet connection and try again." = "Please check your internet connection and try again.";
+"Checking for updates…" = "Checking for updates…";
+"Retry" = "Retry";
 
 /* Save / pin */
 "Save Screenshot" = "Save Screenshot";

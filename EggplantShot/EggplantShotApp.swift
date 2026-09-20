@@ -18,6 +18,7 @@ struct EggplantShotApp: App {
             Image(systemName: "scissors")
                 .symbolRenderingMode(.hierarchical)
                 .background(PreferencesEnvironmentBridge())
+                .background(UpdateCheckWindowBridge())
         }
 
         Settings {
@@ -30,7 +31,23 @@ struct EggplantShotApp: App {
                     NSApp.setActivationPolicy(.accessory)
                 }
         }
+
+        Window(L10n.tr("Check for Updates"), id: WindowID.checkForUpdates) {
+            UpdateCheckView(appState: appState)
+                .onAppear {
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+                .onDisappear {
+                    NSApp.setActivationPolicy(.accessory)
+                }
+        }
+        .windowResizability(.contentSize)
     }
+}
+
+enum WindowID {
+    static let checkForUpdates = "checkForUpdates"
 }
 
 /// Bridges AppKit status menus → SwiftUI `openSettings`.
@@ -56,6 +73,30 @@ private struct PreferencesEnvironmentBridge: View {
 
 @MainActor
 enum OpenSettingsGateway {
+    static let shared = Gateway()
+    final class Gateway {
+        var open: (() -> Void)?
+    }
+}
+
+/// Bridges the AppKit status menu → SwiftUI `openWindow` for the update-check window.
+private struct UpdateCheckWindowBridge: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+            .onAppear {
+                OpenUpdateCheckWindowGateway.shared.open = { [openWindow] in
+                    openWindow(id: WindowID.checkForUpdates)
+                }
+            }
+    }
+}
+
+@MainActor
+enum OpenUpdateCheckWindowGateway {
     static let shared = Gateway()
     final class Gateway {
         var open: (() -> Void)?
@@ -102,6 +143,8 @@ final class AppState: ObservableObject {
     @Published var includesCursor = CapturePrefs.includesCursor {
         didSet { CapturePrefs.includesCursor = includesCursor }
     }
+
+    @Published var updateCheckState: UpdateCheckState = .checking
 
     private var accessibilityPollTimer: Timer?
     private var pinBoardCancellable: AnyCancellable?
@@ -238,6 +281,26 @@ final class AppState: ObservableObject {
 
     func quit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    func checkForUpdates() {
+        updateCheckState = .checking
+        OpenUpdateCheckWindowGateway.shared.open?()
+        NSApp.activate(ignoringOtherApps: true)
+
+        Task {
+            do {
+                let result = try await UpdateChecker.checkForUpdates()
+                switch result {
+                case .upToDate:
+                    updateCheckState = .upToDate
+                case .updateAvailable(let release):
+                    updateCheckState = .updateAvailable(release)
+                }
+            } catch {
+                updateCheckState = .failed
+            }
+        }
     }
 
     private func handleHotkey(_ action: HotkeyAction) {

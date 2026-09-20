@@ -42,6 +42,12 @@
 "App language" = "应用语言";
 "Language changes take effect after EggplantShot restarts." = "更改语言后需重启 EggplantShot 才会生效。";
 "The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu." = "指针会定格在按下快捷键那一刻所在的位置，所以请先把鼠标移到位再按。菜单栏菜单里也可切换。";
+"Network" = "网络";
+"HTTP proxy" = "HTTP 代理";
+"Route update checks through a proxy" = "通过代理检查更新";
+"Host" = "主机";
+"Port" = "端口";
+"Turn this on only if EggplantShot can't reach GitHub directly. The proxy is used for update checks only — your screenshots never leave this Mac." = "只有在无法直连 GitHub 时才需要开启。代理仅用于检查更新——截图始终只保存在本机。";
 
 /* About */
 "Author · %@" = "作者 · %@";
@@ -56,6 +62,16 @@
 "screen_alert_body_short" = "EggplantShot 需要「屏幕录制」权限才能截取屏幕。";
 "Open System Settings" = "打开系统设置";
 "Later" = "稍后";
+"OK" = "好";
+"You're Up to Date" = "已是最新版本";
+"EggplantShot %@ is the latest version." = "EggplantShot %@ 已是最新版本。";
+"Update Available" = "有新版本";
+"EggplantShot %1$@ is available. You're on %2$@." = "EggplantShot %1$@ 已发布，当前版本为 %2$@。";
+"View on GitHub" = "前往 GitHub 查看";
+"Couldn't Check for Updates" = "检查更新失败";
+"Please check your internet connection and try again." = "请检查网络连接后重试。";
+"Checking for updates…" = "正在检查更新…";
+"Retry" = "重试";
 
 /* Save / pin */
 "Save Screenshot" = "保存截图";

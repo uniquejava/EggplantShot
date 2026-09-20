@@ -21,6 +21,11 @@ struct SettingsView: View {
                     Label(L10n.tr("Hotkeys"), systemImage: "keyboard")
                 }
 
+            NetworkSettingsPane()
+                .tabItem {
+                    Label(L10n.tr("Network"), systemImage: "network")
+                }
+
             AboutView()
                 .tabItem {
                     Label(L10n.tr("About"), systemImage: "info.circle")
@@ -176,6 +181,60 @@ private struct PermissionsSettingsPane: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+private struct NetworkSettingsPane: View {
+    @State private var proxyEnabled = NetworkPrefs.proxyEnabled
+    @State private var host = NetworkPrefs.proxyHost
+    @State private var port = String(NetworkPrefs.proxyPort)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(L10n.tr("HTTP proxy"))
+                .font(.headline)
+
+            Toggle(L10n.tr("Route update checks through a proxy"), isOn: $proxyEnabled)
+                .toggleStyle(.checkbox)
+                .onChange(of: proxyEnabled) { _, newValue in
+                    NetworkPrefs.proxyEnabled = newValue
+                }
+
+            HStack(spacing: 8) {
+                Text(L10n.tr("Host"))
+                TextField(NetworkPrefs.defaultHost, text: $host)
+                    .frame(width: 160)
+                    .onChange(of: host) { _, newValue in
+                        NetworkPrefs.proxyHost = newValue
+                    }
+
+                Text(L10n.tr("Port"))
+                    .padding(.leading, 8)
+                TextField(String(NetworkPrefs.defaultPort), text: $port)
+                    .frame(width: 70)
+                    .onChange(of: port) { _, newValue in
+                        let digits = String(newValue.filter(\.isNumber).prefix(5))
+                        if digits != newValue {
+                            port = digits
+                            return
+                        }
+                        NetworkPrefs.proxyPort = Int(digits) ?? NetworkPrefs.defaultPort
+                    }
+            }
+            .disabled(!proxyEnabled)
+            .padding(.top, 4)
+
+            Text(L10n.tr("Turn this on only if EggplantShot can't reach GitHub directly. The proxy is used for update checks only — your screenshots never leave this Mac."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
+
+            Spacer(minLength: 0)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
