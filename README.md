@@ -1,44 +1,53 @@
 # EggplantShot
 
-Native **macOS 15+** screenshot tool in the menu bar — Snipaste-style capture, annotate, pin, and paste.
+原生 **macOS 15+** 菜单栏截图工具 — Snipaste 风格：框选、标注、钉图、贴图。
 
-[简体中文](./README_zh.md)
+比 Snipaste好用的地方：
+1. 按v可以进入移动(move)模式, 该模式下可以在画布上移动任何标注(比如pencil笔迹)
+2. 按逗号调出历史截屏后, 所有标注仍可进行重编辑.
+3. Esc误触保护, 在有标注的情况下, 按两次Esc才会退出.
 
-Prebuilt DMGs (ad-hoc signed, not notarized) are on **[Releases](https://github.com/uniquejava/EggplantShot/releases)** — push a `v*` tag to build one.
+最难发现的功能(切换模糊/马赛克)
+![blur/mosaic](./docs/hidden.png)
 
-![EggplantShot refine toolbar with annotations](./docs/screenshot.png)
 
-## Features
+[English](./README_en.md)
 
-- **Capture** — freeze the screen, click a window or drag a region, refine, annotate, then pin / copy / save
-- **Capture and copy** — select and copy immediately (no toolbar)
-- **Annotate** — shape, arrow, pencil, marker, mosaic, text, step numbers, magnifier, eraser; undo / redo
-- **OCR** — recognize **QR codes or text** from the selection → clipboard
-- **Paste** — turn the clipboard into a floating pin (image, color swatch, or text sticky)
-- **Pins** — stay on top, drag, scroll to zoom, hide/show all
-- **Preferences** — launch at login, include mouse cursor, language (System / English / 简体中文), hotkeys, permissions
+预编译 DMG（ad-hoc 签名、**未**公证）见 **[Releases](https://github.com/uniquejava/EggplantShot/releases)** — 推送 `v*` 标签即可自动构建。
 
-## Hotkeys (defaults)
+![EggplantShot 精修工具栏与标注示意](./docs/screenshot.png)
 
-| Action | Shortcut |
+## 功能
+
+- **截取** — 冻结画面，单击窗口或拖拽框选，精修与标注后钉住 / 复制 / 保存
+- **截取并复制** — 选区锁定后立刻复制到剪贴板（无工具栏）
+- **标注** — 形状、箭头、铅笔、马克笔、马赛克、文字、步骤序号、放大镜、橡皮；支持撤销 / 重做
+- **OCR** — 从选区识别**二维码或文字** → 写入剪贴板
+- **粘贴（贴图）** — 把剪贴板变成浮动钉图（图片、色卡或文字便签）
+- **钉图** — 置顶、拖动、滚轮缩放、一键隐藏 / 显示全部
+- **偏好设置** — 登录时启动、界面语言（系统 / 英语 / 简体中文）、快捷键、权限
+
+## 快捷键（默认）
+
+| 操作 | 快捷键 |
 |--------|----------|
-| Capture | `F1` |
-| Capture and copy | `⌘F1` |
-| Paste (clipboard → pin) | `F3` |
-| Hide / show all pins | `⇧F3` |
+| 截取 | `F1` |
+| 截取并复制 | `⌘F1` |
+| 粘贴（剪贴板 → 钉图） | `F3` |
+| 隐藏 / 显示全部钉图 | `⇧F3` |
 
-Hotkeys can be changed in Preferences. Menu bar → **Disable hotkeys** pauses them globally.
+可在偏好设置里改快捷键。菜单栏 → **Disable hotkeys** 可全局暂停。
 
-## Permissions
+## 权限
 
-| Permission | Why |
+| 权限 | 用途 |
 |------------|-----|
-| **Accessibility** | Global hotkeys |
-| **Screen Recording** | Capture |
+| **辅助功能（Accessibility）** | 全局快捷键 |
+| **屏幕录制（Screen Recording）** | 截取画面 |
 
-## Build & run
+## 编译运行
 
-Requires macOS 15+ and Xcode 16+.
+需要 macOS 15+ 与 Xcode 16+。
 
 ```bash
 killall EggplantShot 2>/dev/null
@@ -47,11 +56,11 @@ xcodebuild -project EggplantShot.xcodeproj -scheme EggplantShot \
 open build/Build/Products/Debug/EggplantShot.app
 ```
 
-Or: `open EggplantShot.xcodeproj`
+或：`open EggplantShot.xcodeproj`
 
-Always use `-derivedDataPath build` and kill the running app first — otherwise you may launch a stale binary.
+务必使用 `-derivedDataPath build`，并先结束已在运行的实例，否则可能打开旧二进制。
 
-## Docs
+## 文档
 
-- [User guide](./docs/user-guide.md)
-- [AGENTS.md](./AGENTS.md) — architecture notes for contributors / agents
+- [使用指南](./docs/user-guide_zh.md)
+- [AGENTS.md](./AGENTS.md) — 架构与贡献 / Agent 说明（英文）
