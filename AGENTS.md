@@ -124,3 +124,31 @@ Same pattern as EggplantFred. DMGs are **ad-hoc signed, not notarized**.
 
 - Identity: `uniquejava` / `uniquejava@gmail.com`
 - Commit only when the user asks
+
+## Tickets and session titles
+
+Mirrored from the machine-wide `~/.agents/AGENTS.md`; canonical wording lives in
+`EggplantRead/AGENTS.md` ("Task and session titles"). Keep this section consistent with it.
+
+- Every project should have Matt Pocock's ticket skills available (`/to-tickets`, `/implement`;
+  `/setup-matt-pocock-skills` configures the tracker — the skills live in `~/.agents/skills`).
+  If a project has no tracker configured, say so instead of inventing one.
+- Every session should be tied to a Ticket. If the work described has no ticket yet, open one
+  (or ask) before implementing — trivial polish excepted.
+- **Session/task titles start with the ticket number:** `#NN 简短中文主题`, e.g.
+  `#20 沉浸式阅读与页码状态栏`. Multiple tickets: join with `、` or an en dash —
+  `#06、08、12–15 创建、阅读与准备流程`. Keep project-prefixed ids such as `#SW-010` as-is.
+- Rename the task as soon as its scope is clear, not after the work is done. Never leave a
+  generic title like "处理 Ticket" or "继续开发".
+- This applies to every agent surface — a Codex task, a Claude Code session, anything named.
+
+## Global network proxy
+
+Mirrored from the machine-wide `~/.agents/AGENTS.md`.
+
+- Route all network access through the local proxy on port `7897`; do not silently bypass it.
+- For host-side commands, set `HTTP_PROXY=http://127.0.0.1:7897`, `HTTPS_PROXY=http://127.0.0.1:7897`,
+  and the lowercase equivalents. Use `ALL_PROXY=socks5h://127.0.0.1:7897` when the client supports SOCKS.
+- For commands inside Docker containers, use `host.docker.internal:7897` instead of container-local `127.0.0.1`.
+- If the proxy is unavailable or a tool cannot honor it, report that blocker instead of switching to a
+  direct connection unless the user explicitly asks.
