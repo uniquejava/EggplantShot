@@ -26,6 +26,7 @@ Prebuilt DMGs (ad-hoc signed, not notarized) are on **[Releases](https://github.
 | Capture and copy | `⌘F1` |
 | Paste (clipboard → pin) | `F3` |
 | Hide / show all pins | `⇧F3` |
+| Include mouse cursor (toggle) | `F4` |
 
 Hotkeys can be changed in Preferences. Menu bar → **Disable hotkeys** pauses them globally.
 

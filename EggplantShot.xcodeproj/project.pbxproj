@@ -76,6 +76,7 @@
 		B1000000000000000000000A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000A /* SettingsView.swift */; };
 		B10000000000000000000012 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000012 /* AboutView.swift */; };
 		B1000000000000000000001E /* UpdateCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001E /* UpdateCheckView.swift */; };
+		B1000000000000000000001F /* StatusHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001F /* StatusHUD.swift */; };
 		B1000000000000000000000B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000B /* Assets.xcassets */; };
 		B1E00000000000000000000018 /* Annotation+Geometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000018 /* Annotation+Geometry.swift */; };
 		B1E00000000000000000000019 /* Annotation+Shape.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E00000000000000000000019 /* Annotation+Shape.swift */; };
@@ -186,6 +187,7 @@
 		C1000000000000000000000A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C10000000000000000000012 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		C1000000000000000000001E /* UpdateCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheckView.swift; sourceTree = "<group>"; };
+		C1000000000000000000001F /* StatusHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusHUD.swift; sourceTree = "<group>"; };
 		C1000000000000000000000B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C1000000000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C1000000000000000000000D /* EggplantShot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = EggplantShot.entitlements; sourceTree = "<group>"; };
@@ -430,6 +432,7 @@
 				C1000000000000000000000A /* SettingsView.swift */,
 				C10000000000000000000012 /* AboutView.swift */,
 				C1000000000000000000001E /* UpdateCheckView.swift */,
+				C1000000000000000000001F /* StatusHUD.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -613,6 +616,7 @@
 				B1000000000000000000000A /* SettingsView.swift in Sources */,
 				B10000000000000000000012 /* AboutView.swift in Sources */,
 				B1000000000000000000001E /* UpdateCheckView.swift in Sources */,
+				B1000000000000000000001F /* StatusHUD.swift in Sources */,
 				B1L00000000000000000000001 /* AppLanguage.swift in Sources */,
 				B1S00000000000000000000001 /* LaunchAtLogin.swift in Sources */,
 				B1S00000000000000000000002 /* UpdateChecker.swift in Sources */,

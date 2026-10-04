@@ -67,6 +67,7 @@ struct HotkeyBinding: Equatable, Hashable, Codable {
     /// HIToolbox virtual key codes.
     static let f1: UInt16 = 122
     static let f3: UInt16 = 99
+    static let f4: UInt16 = 118
 
     private static let keyMap: [UInt16: String] = [
         0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
@@ -83,6 +84,7 @@ enum HotkeyAction: String, CaseIterable, Codable {
     case snipAndCopy
     case paste
     case hideShowImages
+    case toggleIncludesCursor
 
     var settingsTitle: String {
         switch self {
@@ -90,6 +92,7 @@ enum HotkeyAction: String, CaseIterable, Codable {
         case .snipAndCopy: return L10n.tr("Capture and copy")
         case .paste: return L10n.tr("Paste")
         case .hideShowImages: return L10n.tr("Hide/Show images")
+        case .toggleIncludesCursor: return L10n.tr("Include mouse cursor")
         }
     }
 }
@@ -107,6 +110,7 @@ final class HotkeySettings: ObservableObject {
     @Published private(set) var snipAndCopy: HotkeyBinding
     @Published private(set) var paste: HotkeyBinding
     @Published private(set) var hideShowImages: HotkeyBinding
+    @Published private(set) var toggleIncludesCursor: HotkeyBinding
 
     static let defaultSnip = HotkeyBinding(keyCode: HotkeyBinding.f1, modifiers: 0)
     static let defaultSnipAndCopy = HotkeyBinding(
@@ -118,6 +122,7 @@ final class HotkeySettings: ObservableObject {
         keyCode: HotkeyBinding.f3,
         modifiers: NSEvent.ModifierFlags.shift.rawValue
     )
+    static let defaultToggleIncludesCursor = HotkeyBinding(keyCode: HotkeyBinding.f4, modifiers: 0)
 
     init() {
         hotkeysDisabled = UserDefaults.standard.bool(forKey: Self.disabledKey)
@@ -128,11 +133,13 @@ final class HotkeySettings: ObservableObject {
             snipAndCopy = decoded.snipAndCopy
             paste = decoded.paste ?? Self.defaultPaste
             hideShowImages = decoded.hideShowImages
+            toggleIncludesCursor = decoded.toggleIncludesCursor ?? Self.defaultToggleIncludesCursor
         } else {
             snip = Self.defaultSnip
             snipAndCopy = Self.defaultSnipAndCopy
             paste = Self.defaultPaste
             hideShowImages = Self.defaultHideShowImages
+            toggleIncludesCursor = Self.defaultToggleIncludesCursor
         }
     }
 
@@ -142,6 +149,7 @@ final class HotkeySettings: ObservableObject {
         case .snipAndCopy: return snipAndCopy
         case .paste: return paste
         case .hideShowImages: return hideShowImages
+        case .toggleIncludesCursor: return toggleIncludesCursor
         }
     }
 
@@ -166,6 +174,7 @@ final class HotkeySettings: ObservableObject {
         snipAndCopy = Self.defaultSnipAndCopy
         paste = Self.defaultPaste
         hideShowImages = Self.defaultHideShowImages
+        toggleIncludesCursor = Self.defaultToggleIncludesCursor
         persistBindings()
     }
 
@@ -175,6 +184,7 @@ final class HotkeySettings: ObservableObject {
             .snipAndCopy: snipAndCopy,
             .paste: paste,
             .hideShowImages: hideShowImages,
+            .toggleIncludesCursor: toggleIncludesCursor,
         ]
     }
 
@@ -184,6 +194,7 @@ final class HotkeySettings: ObservableObject {
         case .snipAndCopy: snipAndCopy = binding
         case .paste: paste = binding
         case .hideShowImages: hideShowImages = binding
+        case .toggleIncludesCursor: toggleIncludesCursor = binding
         }
     }
 
@@ -192,7 +203,8 @@ final class HotkeySettings: ObservableObject {
             snip: snip,
             snipAndCopy: snipAndCopy,
             paste: paste,
-            hideShowImages: hideShowImages
+            hideShowImages: hideShowImages,
+            toggleIncludesCursor: toggleIncludesCursor
         )
         if let data = try? JSONEncoder().encode(stored) {
             UserDefaults.standard.set(data, forKey: Self.bindingsKey)
@@ -204,5 +216,6 @@ final class HotkeySettings: ObservableObject {
         var snipAndCopy: HotkeyBinding
         var paste: HotkeyBinding?
         var hideShowImages: HotkeyBinding
+        var toggleIncludesCursor: HotkeyBinding?
     }
 }

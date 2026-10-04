@@ -22,7 +22,7 @@ Without Accessibility, hotkeys do nothing. Without Screen Recording, capture fai
 
 **Capture and copy:** Same freeze + hover/drag select; as soon as you lock a window or finish a drag, the crop is copied to the clipboard (no toolbar / annotate). **Esc** cancels while selecting.
 
-**Include mouse cursor** (menu bar menu, or Preferences → General) puts the pointer in the shot. It freezes at the spot it sat when the hotkey fired — so park the mouse where you want it pictured *before* pressing F1, then select around it. Off by default.
+**Include mouse cursor** (`F4`, menu bar menu, or Preferences → General) puts the pointer in the shot. A brief centered toast says **Pointer on** / **Pointer off**. It freezes at the spot it sat when the capture hotkey fired — so park the mouse where you want it pictured *before* pressing F1, then select around it. Off by default.
 
 Menu bar → **Disable hotkeys** pauses global shortcuts (persisted).
 

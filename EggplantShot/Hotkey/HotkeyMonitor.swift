@@ -106,10 +106,13 @@ final class HotkeyMonitor: @unchecked Sendable {
         let currentMods = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue))
             .intersection([.command, .option, .control, .shift])
 
+        let isRepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         for (action, binding) in current {
             guard pressedCode == binding.keyCode else { continue }
             if currentMods == binding.nsModifiers {
-                fire(action)
+                if !isRepeat {
+                    fire(action)
+                }
                 // Swallow F-keys so macOS doesn't also trigger system actions when possible.
                 return nil
             }

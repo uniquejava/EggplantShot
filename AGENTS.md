@@ -56,7 +56,7 @@ EggplantShot/
   Controllers/PinBoardController.swift + PinPanel.swift
   Annotation/  # Annotation(+Tool/Geometry) + Drawing(+Tool) + Coding(+Tool) + Document/Compositor + MarksCanvas + ContrastChrome
   History/SnipRecord.swift + SnipHistoryStore.swift
-  UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift
+  UI/StatusMenuContent.swift + SettingsView.swift + AboutView.swift + StatusHUD.swift
   Assets.xcassets/
   Info.plist                 # LSUIElement = true
   EggplantShot.entitlements  # App Sandbox OFF
@@ -83,12 +83,13 @@ EggplantShot/
 9. Preferences via `SettingsLink` / `openSettings` (not `showSettingsWindow:`).
 10. Without Accessibility, global hotkeys do nothing. Without Screen Recording, capture fails with a prompt.
 11. During an active **Capture** (refine), **`,`** / **`.`** step through prior capture records (older / newer).
-12. **Include mouse cursor** (`CapturePrefs.includesCursor`, off by default) sets `showsCursor` on the
-    freeze, so the pointer is baked in at its hotkey-press position and every downstream path — pin /
-    copy / save / OCR / history replay / mosaic sampling — inherits it from the one snapshot. Do not
-    re-render a cursor later in the pipeline: by the time the toolbar is reachable the real pointer has
-    moved off whatever the user wanted pictured. `AppState.includesCursor` mirrors the pref so the
-    status-menu item and Preferences → General cannot drift.
+12. **Include mouse cursor** (`CapturePrefs.includesCursor`, off by default; **F4** toggles) sets
+    `showsCursor` on the freeze, so the pointer is baked in at its hotkey-press position and every
+    downstream path — pin / copy / save / OCR / history replay / mosaic sampling — inherits it from
+    the one snapshot. Do not re-render a cursor later in the pipeline: by the time the toolbar is
+    reachable the real pointer has moved off whatever the user wanted pictured.
+    `AppState.includesCursor` mirrors the pref so the status-menu item and Preferences → General
+    cannot drift. F4 shows a centered HUD (`指针已开启` / `指针已关闭`); the menu toggle does not.
 
 ## Annotate extensibility (P4 — always)
 

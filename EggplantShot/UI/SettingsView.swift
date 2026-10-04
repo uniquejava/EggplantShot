@@ -57,7 +57,7 @@ private struct GeneralSettingsPane: View {
                 ))
                 .toggleStyle(.checkbox)
 
-                Text(L10n.tr("The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu."))
+                Text(L10n.tr("The pointer is frozen where it sits when the hotkey fires, so aim it before you press. Also on the menu bar menu. Default shortcut: F4."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

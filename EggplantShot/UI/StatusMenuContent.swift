@@ -41,6 +41,7 @@ struct StatusMenuContent: View {
                : L10n.tr("Include mouse cursor")) {
             appState.toggleIncludesCursor()
         }
+        .keyboardShortcut(.f4, modifiers: [])
 
         Button(appState.hotkeySettings.hotkeysDisabled
                ? L10n.tr("Enable hotkeys")
@@ -111,4 +112,5 @@ struct StatusMenuContent: View {
 private extension KeyEquivalent {
     static let f1 = KeyEquivalent(Character(UnicodeScalar(NSF1FunctionKey)!))
     static let f3 = KeyEquivalent(Character(UnicodeScalar(NSF3FunctionKey)!))
+    static let f4 = KeyEquivalent(Character(UnicodeScalar(NSF4FunctionKey)!))
 }

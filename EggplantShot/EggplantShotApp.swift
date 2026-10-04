@@ -207,8 +207,13 @@ final class AppState: ObservableObject {
         setHotkeysDisabled(!hotkeySettings.hotkeysDisabled)
     }
 
-    func toggleIncludesCursor() {
+    func toggleIncludesCursor(announce: Bool = false) {
         includesCursor.toggle()
+        if announce {
+            StatusHUD.show(
+                includesCursor ? L10n.tr("Pointer on") : L10n.tr("Pointer off")
+            )
+        }
     }
 
     func setHotkeysDisabled(_ disabled: Bool) {
@@ -313,6 +318,8 @@ final class AppState: ObservableObject {
             pasteFromClipboard()
         case .hideShowImages:
             toggleHideShowImages()
+        case .toggleIncludesCursor:
+            toggleIncludesCursor(announce: true)
         }
     }
 
