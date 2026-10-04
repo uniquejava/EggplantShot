@@ -125,3 +125,19 @@ Same pattern as EggplantFred. DMGs are **ad-hoc signed, not notarized**.
 
 - Identity: `uniquejava` / `uniquejava@gmail.com`
 - Commit only when the user asks
+
+## Agent skills
+
+Matt Pocock engineering skills (`/to-spec`, `/to-tickets`, `/implement`, `/wayfinder`, `/grill-with-docs`, `/tdd`, `/code-review`, …) are installed globally; this repo is configured for them as follows.
+
+### Issue tracker
+
+Local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default role strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
