@@ -113,6 +113,8 @@ Annotate surface is complete for the current tool set (shape + arrow + pencil + 
 - Push / PR → `.github/workflows/ci.yml` (Release build, ad-hoc sign)
 - Tag `v*` (or workflow_dispatch) → `.github/workflows/release.yml` (archive → DMG → GitHub Release)
 
+Before tagging a release, write its notes in `docs/releases/<tag>.md` (for example `v0.5.1.md`); the release workflow publishes that file as the release body.
+
 Same pattern as EggplantFred. DMGs are **ad-hoc signed, not notarized**.
 
 

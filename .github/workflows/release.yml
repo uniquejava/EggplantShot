@@ -73,4 +73,5 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: EggplantShot ${{ env.RELEASE_TAG }}
           files: ${{ runner.temp }}/EggplantShot-release/EggplantShot-${{ env.RELEASE_TAG }}.dmg
-          generate_release_notes: true
+          body_path: docs/releases/${{ env.RELEASE_TAG }}.md
+          generate_release_notes: false

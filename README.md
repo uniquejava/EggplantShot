@@ -2,6 +2,8 @@
 
 原生 **macOS 15+** 菜单栏截图工具 — Snipaste 风格：框选、标注、钉图、贴图。
 
+![EggplantShot 状态栏菜单](./docs/EggplantShotMenu.png)
+
 比 Snipaste好用的地方：
 1. 按v可以进入移动(move)模式, 该模式下可以在画布上移动任何标注(比如pencil笔迹)
 2. 按逗号调出历史截屏后, 所有标注仍可进行重编辑.
@@ -46,6 +48,19 @@
 |------------|-----|
 | **辅助功能（Accessibility）** | 全局快捷键 |
 | **屏幕录制（Screen Recording）** | 截取画面 |
+
+### 重新安装后的权限
+
+重新安装通常不需要重新授权。如果快捷键或截屏失效，即使系统设置里已经勾选，也可以先退出应用，用 `tccutil` 重置茄子截图的两项权限：
+
+```bash
+killall EggplantShot 2>/dev/null
+tccutil reset Accessibility click.yinsb.EggplantShot
+tccutil reset ScreenCapture click.yinsb.EggplantShot
+open /Applications/EggplantShot.app
+```
+
+随后在「系统设置 → 隐私与安全性」里重新开启**辅助功能**和**屏幕录制**，并按系统提示重启应用。这些命令只重置茄子截图，不影响其他 App。
 
 ## 编译运行
 

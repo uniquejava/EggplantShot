@@ -38,6 +38,19 @@ Hotkeys can be changed in Preferences. Menu bar → **Disable hotkeys** pauses t
 | **Accessibility** | Global hotkeys |
 | **Screen Recording** | Capture |
 
+### Permissions after reinstalling
+
+Reinstalling usually preserves permissions. If hotkeys or capture stop working, even with the app enabled in System Settings, quit the app and reset its two permissions with `tccutil`:
+
+```bash
+killall EggplantShot 2>/dev/null
+tccutil reset Accessibility click.yinsb.EggplantShot
+tccutil reset ScreenCapture click.yinsb.EggplantShot
+open /Applications/EggplantShot.app
+```
+
+Then enable **Accessibility** and **Screen Recording** again in **System Settings → Privacy & Security**, and restart the app if prompted. These commands affect only EggplantShot.
+
 ## Build & run
 
 Requires macOS 15+ and Xcode 16+.
