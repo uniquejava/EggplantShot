@@ -11,6 +11,7 @@ Prebuilt DMGs (ad-hoc signed, not notarized) are on **[Releases](https://github.
 ## Features
 
 - **Capture** — freeze the screen, click a window or drag a region, refine, annotate, then pin / copy / save
+- **Transparent window corners** — click-lock a window and save as PNG to keep transparent corners; JPEG uses a white background ([details](./docs/user-guide.md#capture))
 - **Capture and copy** — select and copy immediately (no toolbar)
 - **Annotate** — shape, arrow, pencil, marker, mosaic, text, step numbers, magnifier, eraser; undo / redo
 - **OCR** — recognize **QR codes or text** from the selection → clipboard

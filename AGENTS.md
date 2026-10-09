@@ -46,7 +46,7 @@ Do **not** open the DerivedData path, and do **not** skip `-derivedDataPath buil
 EggplantShot/
   EggplantShotApp.swift
   Hotkey/HotkeyMonitor.swift + HotkeyShortcut.swift
-  Capture/ScreenPermissions.swift + ScreenCapturer.swift + CapturePrefs.swift + WindowHitTester.swift + ImageFileSaver.swift + ClipboardPaster.swift
+  Capture/ScreenPermissions.swift + ScreenCapturer.swift + CapturePrefs.swift + WindowHitTester.swift + WindowCornerTransparency.swift + ImageFileSaver.swift + ScreenshotImageEncoder.swift + ClipboardPaster.swift
   Services/LaunchAtLogin.swift
   Controllers/SnipController.swift
   Controllers/SelectionOverlayController.swift + SelectionOverlay+*.swift (mouse / draft / hit-test / style / text / geometry / history / toolbar / pin-edit)
@@ -66,7 +66,7 @@ EggplantShot/
 
 1. **Capture (F1)** → freeze displays (full-screen snapshot as overlay backdrop) → hover highlights the window under the cursor → click to lock (or drag to free-select) → refine (blue rect, circular handles, Snipaste-style icon toolbar) → Pin/Copy → floating pin with soft glow (blue when key, gray when not; drag; scroll wheel ±10% zoom with brief top-left % badge; Esc / double-click closes).
 2. **Capture and copy (⌘F1)** → same freeze + hover/drag select; on window lock or drag mouse-up, crop + copy to clipboard immediately (no refine toolbar / annotate).
-3. Confirm / Return uses the freeze crop (or history playback base); then overlay tears down. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
+3. Confirm / Return captures the freeze crop (or history playback base) and document, tears down the overlay, then resolves window-corner alpha before export. Successful Pin/Copy/Save also archives an editable `SnipRecord`.
 4. **Esc** during drag/refine: abort gesture → deselect mark → disarm tool; with marks, first Esc / Cancel shows a tip and second confirms discard. Esc on a pin closes that pin only. Deselect precedes disarm so the first press unwinds visible state (handles), and disarming no longer clears the selection.
 5. Pins use `.statusBar` level (above ordinary windows; below capture overlay). A pin keeps its
    **unannotated base + `AnnotationDocument`** and shows the composite — marks on a pin stay data,
@@ -90,6 +90,7 @@ EggplantShot/
     reachable the real pointer has moved off whatever the user wanted pictured.
     `AppState.includesCursor` mirrors the pref so the status-menu item and Preferences → General
     cannot drift. F4 shows a centered HUD (`指针已开启` / `指针已关闭`); the menu toggle does not.
+13. **Window corners**: an unchanged click-locked app window gets transparent corners on Pin / Copy / Save; RGB content and cursor stay from the freeze. Changing the crop restores rectangular capture. Keep base alpha through pins/history and PNG; JPEG uses white. When changing window capture or export, read [window-corner rules and checks](docs/snip-document-architecture.md#window-corner-transparency).
 
 ## Annotate extensibility (P4 — always)
 

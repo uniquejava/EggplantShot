@@ -54,7 +54,14 @@ final class SelectionOverlayController {
     var continuation: CheckedContinuation<Outcome, Never>?
     var phase: Phase = .idle
     var dragKind: DragKind?
-    var currentRect: CGRect = .null
+    var currentRect: CGRect = .null {
+        didSet {
+            if currentRect != oldValue { lockedWindow = nil }
+        }
+    }
+    /// Only click-locking an actual window enables transparent corners; changing the crop clears it.
+    var lockedWindow: WindowHitTester.Target?
+    var confirmationTask: Task<Void, Never>?
     var primaryAction: ConfirmAction = .pin
     /// When true (Capture and copy): lock / drag-complete copies immediately — no refine toolbar.
     var skipsRefine = false
@@ -91,7 +98,7 @@ final class SelectionOverlayController {
         let cgImage: CGImage
     }
     /// On mouse-down over a window: wait to see if this is a click-lock or a free drag.
-    var pendingWindowPick: (start: CGPoint, frame: CGRect)?
+    var pendingWindowPick: (start: CGPoint, target: WindowHitTester.Target)?
 
     // MARK: Annotation state
 
@@ -222,6 +229,8 @@ final class SelectionOverlayController {
     }
 
     func cancel() {
+        confirmationTask?.cancel()
+        confirmationTask = nil
         tearDownOverlays()
         finish(.cancelled)
     }
@@ -234,6 +243,7 @@ final class SelectionOverlayController {
     }
 
     func confirm(_ action: ConfirmAction) {
+        guard confirmationTask == nil else { return }
         // A pin already exists: Apply keeps it with the marks on it, Copy / Save bake and close it.
         if pinEdit != nil {
             confirmPinEdit(action)
@@ -263,8 +273,21 @@ final class SelectionOverlayController {
             finish(.cancelled)
             return
         }
+        // A window crossing display boundaries is already clipped by the existing freeze crop;
+        // its full-window outline would not align with that partial bitmap.
+        let target = playbackBaseImage == nil && freezeFrames.contains(where: { $0.screen.frame.contains(rect) })
+            ? lockedWindow : nil
         tearDownOverlays()
-        finish(.confirmed(rect, image: image, action: action, document: document))
+        guard let target, target.windowID != nil else {
+            finish(.confirmed(rect, image: image, action: action, document: document))
+            return
+        }
+        confirmationTask = Task { [weak self] in
+            let transparent = await WindowCornerTransparency.apply(to: image, target: target)
+            guard !Task.isCancelled else { return }
+            self?.confirmationTask = nil
+            self?.finish(.confirmed(rect, image: transparent, action: action, document: document))
+        }
     }
 
     /// Crop selection → dismiss overlay → QR / OCR → hand text to `SnipController` (clipboard + sound).
@@ -369,6 +392,7 @@ final class SelectionOverlayController {
         freezeFrames = []
         dragKind = nil
         currentRect = .null
+        lockedWindow = nil
         hoveredWindowRect = nil
         pendingWindowPick = nil
         suppressEscapeUntilKeyUp = false

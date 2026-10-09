@@ -4,8 +4,14 @@ import Foundation
 
 /// Front-to-back hit testing of on-screen app windows (Snipaste-style pick under cursor).
 struct WindowHitTester {
+    struct Target {
+        let frame: CGRect
+        let windowID: CGWindowID?
+        let quartzFrame: CGRect?
+    }
+
     /// Window frames in Cocoa global coordinates (points, bottom-left origin), front → back.
-    private let frames: [CGRect]
+    private let targets: [Target]
 
     /// Snapshot visible windows, excluding our process, Dock, menu bar, and desktop chrome.
     /// `additionalFrames` (e.g. pin images) are prepended front → back so they win over windows underneath.
@@ -15,13 +21,14 @@ struct WindowHitTester {
     ) -> WindowHitTester {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let infoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
-            return WindowHitTester(frames: additionalFrames)
+            return WindowHitTester(targets: additionalFrames.map {
+                Target(frame: $0, windowID: nil, quartzFrame: nil)
+            })
         }
 
         let dockLevel = CGWindowLevelForKey(.dockWindow)
-        var frames: [CGRect] = []
-        frames.reserveCapacity(additionalFrames.count + infoList.count)
-        frames.append(contentsOf: additionalFrames)
+        var targets = additionalFrames.map { Target(frame: $0, windowID: nil, quartzFrame: nil) }
+        targets.reserveCapacity(additionalFrames.count + infoList.count)
 
         for info in infoList {
             if let ownerPID = info[kCGWindowOwnerPID as String] as? pid_t, ownerPID == pid {
@@ -37,14 +44,34 @@ struct WindowHitTester {
             guard quartz.width >= 2, quartz.height >= 2 else { continue }
 
             let cocoa = quartzRectToCocoa(quartz)
-            frames.append(cocoa)
+            targets.append(Target(
+                frame: cocoa,
+                windowID: (info[kCGWindowNumber as String] as? NSNumber)?.uint32Value,
+                quartzFrame: quartz
+            ))
         }
 
-        return WindowHitTester(frames: frames)
+        return WindowHitTester(targets: targets)
     }
 
     func windowFrame(at point: CGPoint) -> CGRect? {
-        frames.first { $0.contains(point) }
+        window(at: point)?.frame
+    }
+
+    func window(at point: CGPoint) -> Target? {
+        targets.first { $0.frame.contains(point) }
+    }
+
+    /// A live outline must still belong to the window frozen at capture time.
+    static func isCurrent(_ target: Target) -> Bool {
+        guard let id = target.windowID, let expected = target.quartzFrame,
+              let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]],
+              let info = list.first,
+              (info[kCGWindowIsOnscreen as String] as? Bool) == true,
+              let bounds = info[kCGWindowBounds as String] as? [String: Any],
+              let frame = cgRect(fromWindowBounds: bounds)
+        else { return false }
+        return frame == expected
     }
 
     private static func cgRect(fromWindowBounds dict: [String: Any]) -> CGRect? {

@@ -522,10 +522,11 @@ extension SelectionOverlayController {
         updateHighlight(showHandles: false)
     }
 
-    func lockWindowSelection(_ frame: CGRect) {
+    func lockWindowSelection(_ target: WindowHitTester.Target) {
         pendingWindowPick = nil
         hoveredWindowRect = nil
-        currentRect = frame
+        currentRect = target.frame
+        lockedWindow = target
         enterRefineOrAutoConfirm()
     }
 
@@ -543,6 +544,7 @@ extension SelectionOverlayController {
     }
 
     func beginFreeDraw(from start: CGPoint) {
+        lockedWindow = nil
         pendingWindowPick = nil
         hoveredWindowRect = nil
         phase = .drawing
@@ -556,10 +558,10 @@ extension SelectionOverlayController {
         clearEscapeDiscardHint()
         switch phase {
         case .idle:
-            if let frame = hoveredWindowRect ?? windowHitTester.windowFrame(at: point) {
+            if let target = windowHitTester.window(at: point) {
                 // Defer lock until mouse-up so a drag can still start free selection.
-                pendingWindowPick = (start: point, frame: frame)
-                currentRect = frame
+                pendingWindowPick = (start: point, target: target)
+                currentRect = target.frame
                 updateHighlight(showHandles: false)
             } else {
                 beginFreeDraw(from: point)
@@ -950,7 +952,7 @@ extension SelectionOverlayController {
         }
 
         if let pending = pendingWindowPick, phase == .idle {
-            lockWindowSelection(pending.frame)
+            lockWindowSelection(pending.target)
             return
         }
 

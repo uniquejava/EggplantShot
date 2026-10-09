@@ -16,7 +16,7 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 - **Crop move** → with no tool armed (`.none`), dragging the **empty interior** of the blue crop moves it directly (open hand → closed hand while dragging; no modifier). **Space** remains supported and wins over mark hits, so it also drag-moves the crop under any tool (release Space to return to the current tool).
 - Pin / Copy / Save **do not expand** the crop: outside marks are **clipped** from the baked image.
 - Outside marks stay in `AnnotationDocument` so `,` / `.` can still show and drag them back into the rect.
-- Confirm composites marks onto the crop, then tears down the overlay.
+- Confirm captures the freeze crop and document, tears down the overlay, resolves window-corner transparency, then hands the base and document to `SnipController` for export and history.
 - Esc ladder (not editing text): abort in-progress drag → deselect mark → disarm tool → with marks, first Esc / Cancel shows “Press again to discard”, second Esc / Cancel discards. Deselect comes **before** disarm so the first press unwinds the most local *visible* state (the handles) rather than a tool tint; disarming no longer clears the selection, and the disarm rung stays as a buffer before the discard confirm.
 - Delete removes the selected mark. Undo / redo: toolbar + ⌘Z / ⇧⌘Z.
 - Refine tool / action hotkeys (armed after selection; ignored while editing text or mid-drag):
@@ -41,6 +41,16 @@ When a tool’s section grows past ~40–50 lines or a new tool lands, spin it o
 |-------|-----------------------------------|--------|
 | **Capture** / F1 | Refine + toolbar; Return → Pin | Annotate / resize before Pin/Copy/Save |
 | **Capture and copy** / ⌘F1 | Crop + copy immediately | No toolbar, no annotate; Esc still cancels while selecting |
+
+### Window corners
+
+- Click-locking an app window keeps its ID and original frame. An unchanged selection wholly inside one display receives transparent corners on Pin / Copy / Save. The refine preview remains the rectangular frozen screen crop.
+- Moving, resizing or expanding the crop clears the window association, including when the crop is later moved back. Free drag, re-snipping pins and history playback use their existing base/crop path.
+- Confirm removes only the corner-connected background indicated by the window's actual alpha outline. Window content and the optional cursor still come from the initial freeze; internal transparency and occluding windows remain as captured.
+- A moved, closed or unshareable window, a selection crossing displays, or an outline with mismatched pixel dimensions falls back to the rectangular freeze crop.
+- PNG preserves base alpha and pixel density; JPEG composites onto white. Pins and history keep the transparent base with editable marks. Marks may paint on transparent pixels; transparency is part of the base, not a clip applied to all annotations.
+
+Implementation and focused checks: [Window corner transparency](snip-document-architecture.md#window-corner-transparency).
 
 ## Toolbar layout (Snipaste parity)
 

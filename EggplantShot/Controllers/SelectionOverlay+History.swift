@@ -31,6 +31,7 @@ extension SelectionOverlayController {
     }
 
     func restoreRecord(_ record: SnipRecord) {
+        lockedWindow = nil
         endTextEditing(commit: false)
         endTextWheelResizeIfNeeded()
         dragKind = nil

@@ -181,6 +181,8 @@ struct SnipRecord: Identifiable {
 
 `selection.size` must match `baseImage.size` in points (1× logical; backing scale stored implicitly via PNG pixel size / `NSImage` representations as needed — see Disk format).
 
+`baseImage` can contain alpha, including the transparent corners of a click-locked window. Preserve that alpha and the bitmap's pixel dimensions through archive, playback, pin editing and export; no new document payload or disk schema version is needed.
+
 ### `SnipHistoryStore`
 
 Ordered list of records (newest at end or a documented cursor — pick **newest last**, browse with an index).
@@ -264,13 +266,27 @@ Keep current product behaviour: starting a new rough selection **clears** annota
 
 ### Confirm (Pin / Copy / Save)
 
-1. Crop unannotated base from freeze (or use playback base if already a record image).
-2. Read `document` from history.
-3. `AnnotationCompositor.composite(document.marks, onto: base)`.
-4. Tear down overlay; perform pin / clipboard / save with baked image.
-5. `store.append(SnipRecord(baseImage: base, selection: rect, document: document))`.
+1. Crop unannotated base from freeze (or use playback base if already a record image), and read `document` from history.
+2. Keep any eligible locked-window target locally, then tear down the overlay.
+3. For an unchanged window selection wholly inside one display, resolve the transparent corner outline asynchronously; otherwise keep the rectangular crop. Cancellation stops the pending confirmation task.
+4. Return the base + document in the overlay outcome. `SnipController` calls `AnnotationCompositor.composite(document.marks, onto: base)` for export and appends `SnipRecord(baseImage: base, selection: rect, document: document)`.
+5. Pin receives the base + document; clipboard and file save receive the baked image.
 
 Esc / cancel: no append.
+
+### Window corner transparency
+
+Implemented for [Ticket #02](../.scratch/window-corner-transparency/issues/02-window-corner-transparency.md).
+
+`WindowHitTester.Target` carries the Cocoa frame, Quartz frame and window ID from before the overlay appears. Synthetic pin targets have no window ID. Click-locking stores the target in `SelectionOverlayController.lockedWindow`; any actual change to `currentRect` clears it. Free selection and history restore also clear it.
+
+`WindowCornerTransparency.apply` checks that the live window still matches the frozen frame before and after reading its outline. It uses ScreenCaptureKit's independent-window filter, with a clear background, no cursor, `ignoreShadowsSingleWindow = true` and `shouldBeOpaque = false`. Only the alpha outline is used; the new window capture supplies no RGB content to the screenshot.
+
+`applyingOutline` floods fully transparent pixels from each of the four corners, restricted to that corner's quarter of the bitmap, and includes the adjacent antialiased boundary. It multiplies the frozen crop's premultiplied RGBA by the resulting opacity. Square corners remain unchanged, and interior translucency or holes do not fade the frozen content. A failed capture, changed window, cross-display crop or mismatched outline dimensions keeps the original rectangular crop.
+
+The resulting alpha belongs to the unannotated base, so pins and `base.png` retain it without extra metadata. Annotation compositing can deliberately draw over transparent pixels. `ScreenshotImageEncoder` preserves alpha for PNG and composites onto white for JPEG, keeping the original pixel dimensions in both formats.
+
+Run the focused image checks with `bash scripts/test-window-transparency.sh` from the repository root. They cover different corner shapes, square corners, outline alignment, antialiasing, unchanged freeze pixels, Retina PNG/JPEG, annotation baking and disk-history reload.
 
 ### History playback (`,` / `.`)
 

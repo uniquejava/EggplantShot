@@ -22,6 +22,10 @@ Without Accessibility, hotkeys do nothing. Without Screen Recording, capture fai
 
 **Capture and copy:** Same freeze + hover/drag select; as soon as you lock a window or finish a drag, the crop is copied to the clipboard (no toolbar / annotate). **Esc** cancels while selecting.
 
+**Transparent window corners:** Click-lock a window and keep its original selection to make the background outside its rounded corners transparent in Pin, Copy and Save. Square windows keep square corners. Choose **PNG** to preserve transparency; **JPEG** uses a white background. Pins and history retain the transparent base for later annotation and saving.
+
+Free selections and window selections that you move, resize or expand use a rectangular crop. The crop also stays rectangular if the window moves or closes after the freeze, the selection crosses displays, or its outline cannot be captured.
+
 **Include mouse cursor** (`F4`, menu bar menu, or Preferences → General) puts the pointer in the shot. A brief centered toast says **Pointer on** / **Pointer off**. It freezes at the spot it sat when the capture hotkey fired — so park the mouse where you want it pictured *before* pressing F1, then select around it. Off by default.
 
 Menu bar → **Disable hotkeys** pauses global shortcuts (persisted).

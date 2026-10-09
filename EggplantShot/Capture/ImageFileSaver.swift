@@ -62,25 +62,9 @@ enum ImageFileSaver {
     }
 
     static func write(_ image: NSImage, to url: URL) throws {
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff)
-        else {
-            throw SaveError.encodeFailed
-        }
-
         let ext = url.pathExtension.lowercased()
-        let fileType: NSBitmapImageRep.FileType
-        let props: [NSBitmapImageRep.PropertyKey: Any]
-        switch ext {
-        case "jpg", "jpeg":
-            fileType = .jpeg
-            props = [.compressionFactor: 0.9]
-        default:
-            fileType = .png
-            props = [:]
-        }
-
-        guard let data = rep.representation(using: fileType, properties: props) else {
+        let format: NSBitmapImageRep.FileType = (ext == "jpg" || ext == "jpeg") ? .jpeg : .png
+        guard let data = ScreenshotImageEncoder.data(from: image, format: format) else {
             throw SaveError.encodeFailed
         }
         try data.write(to: url, options: .atomic)

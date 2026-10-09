@@ -54,6 +54,8 @@
 		B10000000000000000000004 /* ScreenPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000004 /* ScreenPermissions.swift */; };
 		B10000000000000000000005 /* ScreenCapturer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10000000000000000000005 /* ScreenCapturer.swift */; };
 		B1000000000000000000000E /* WindowHitTester.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000E /* WindowHitTester.swift */; };
+		B10200000000000000000002 /* WindowCornerTransparency.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10200000000000000000002 /* WindowCornerTransparency.swift */; };
+		B10200000000000000000003 /* ScreenshotImageEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10200000000000000000003 /* ScreenshotImageEncoder.swift */; };
 		B1000000000000000000000F /* ImageFileSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000000F /* ImageFileSaver.swift */; };
 		B1F000000000000000000010 /* CapturePrefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000010 /* CapturePrefs.swift */; };
 		B1000000000000000000001A /* TextRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1000000000000000000001A /* TextRecognizer.swift */; };
@@ -165,6 +167,8 @@
 		C10000000000000000000004 /* ScreenPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenPermissions.swift; sourceTree = "<group>"; };
 		C10000000000000000000005 /* ScreenCapturer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenCapturer.swift; sourceTree = "<group>"; };
 		C1000000000000000000000E /* WindowHitTester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowHitTester.swift; sourceTree = "<group>"; };
+		C10200000000000000000002 /* WindowCornerTransparency.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCornerTransparency.swift; sourceTree = "<group>"; };
+		C10200000000000000000003 /* ScreenshotImageEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotImageEncoder.swift; sourceTree = "<group>"; };
 		C1000000000000000000000F /* ImageFileSaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageFileSaver.swift; sourceTree = "<group>"; };
 		C1F000000000000000000010 /* CapturePrefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePrefs.swift; sourceTree = "<group>"; };
 		C1000000000000000000001A /* TextRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextRecognizer.swift; sourceTree = "<group>"; };
@@ -311,6 +315,8 @@
 				C10000000000000000000004 /* ScreenPermissions.swift */,
 				C10000000000000000000005 /* ScreenCapturer.swift */,
 				C1000000000000000000000E /* WindowHitTester.swift */,
+				C10200000000000000000002 /* WindowCornerTransparency.swift */,
+				C10200000000000000000003 /* ScreenshotImageEncoder.swift */,
 				C1000000000000000000000F /* ImageFileSaver.swift */,
 				C1000000000000000000001A /* TextRecognizer.swift */,
 				C1000000000000000000001B /* FeedbackSound.swift */,
@@ -596,6 +602,8 @@
 				B10000000000000000000005 /* ScreenCapturer.swift in Sources */,
 				B1F000000000000000000010 /* CapturePrefs.swift in Sources */,
 				B1000000000000000000000E /* WindowHitTester.swift in Sources */,
+				B10200000000000000000002 /* WindowCornerTransparency.swift in Sources */,
+				B10200000000000000000003 /* ScreenshotImageEncoder.swift in Sources */,
 				B1000000000000000000000F /* ImageFileSaver.swift in Sources */,
 				B1000000000000000000001A /* TextRecognizer.swift in Sources */,
 				B1000000000000000000001B /* FeedbackSound.swift in Sources */,
